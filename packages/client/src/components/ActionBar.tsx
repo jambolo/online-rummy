@@ -1,4 +1,7 @@
+import type { Suit } from "@online-rummy/shared";
 import { useAppStore } from "../store";
+
+const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
 
 const PHASE_LABEL: Record<string, string> = {
   draw: "Draw a card",
@@ -76,7 +79,7 @@ export default function ActionBar() {
           {publicState.discardTop && (
             <button onClick={() => send({ t: "draw", from: "discard" })}>
               Draw {publicState.discardTop.rank}
-              {publicState.discardTop.suit} from discard
+              {SUIT_SYMBOL[publicState.discardTop.suit]} from discard
             </button>
           )}
         </>

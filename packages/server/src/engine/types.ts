@@ -29,6 +29,8 @@ export type GameState = {
   // rules.md A.1.7: going-rummy — player must not have melded/laid-off before going out
   hasMeldedEver: Map<PlayerId, boolean>;
   scoreSheet: ScoreSheet;
+  // Id of the player who went first this hand — used for clockwise rotation on re-deal.
+  firstPlayerId: PlayerId;
 };
 
 export interface VariantEngine {

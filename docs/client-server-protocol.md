@@ -164,7 +164,11 @@ Creates a new room and places the sender in it as the host. `name` is the player
 { "t": "start" }
 ```
 
-Only the host may send this. The room must be in lobby state and have at least the minimum number of players for the variant.
+Only the host may send this. The room must be in `lobby` or `ended` state.
+
+**First start (`lobby` state):** creates a fresh game. First player is chosen randomly.
+
+**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. The starting player rotates one seat clockwise from the previous hand's first player.
 
 Player count requirements by variant:
 
@@ -184,9 +188,9 @@ Player count requirements by variant:
 | Code | Condition |
 | --- | --- |
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
-| `ERR_WRONG_STATE` | Room is not in lobby state |
+| `ERR_WRONG_STATE` | Room is not in `lobby` or `ended` state (e.g. game is currently in progress) |
 | `ERR_NOT_HOST` | Sender is not the host |
-| `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players |
+| `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players (checked after removing disconnected players on re-deal) |
 | `ERR_NOT_IMPLEMENTED` | Variant is not `basic` (gin and rum500 are not yet implemented) |
 
 ---

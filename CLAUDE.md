@@ -94,6 +94,8 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state (populated by server) — no client-side cache needed for opponent melds. |
 | `src/components/ActionBar.tsx` | Phase-aware action buttons. Shows current phase name and whose turn it is. |
 | `src/components/Chat.tsx` | Chat message list + send form. |
+| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. Basic content complete; Gin/500 Rum stubbed for M5/M6. |
+| `src/content/howToPlay/basic.tsx` | Static Basic Rummy rules fragment — objective, turn flow, melds, scoring, locked house rules. |
 
 **Selector rule:** never pass an object literal to `useAppStore` — it creates a new ref every render and causes an infinite loop with React 18's `useSyncExternalStore`. Use one hook call per value.
 
@@ -115,6 +117,8 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 - All rule citations in code use `// rules.md A.x.y` section IDs.
 - Engine errors are thrown as `Error` with `ERR_*` prefixed messages (e.g. `ERR_NOT_YOUR_TURN`, `ERR_WRONG_PHASE`). The WS layer (M2) will translate these to `{ t: 'error', code, msg }`.
 - `GameState.hasMeldedEver` and `drewFromDiscardId` enforce two locked house rules: going-rummy bonus (score×2) and no re-discard of drawn discard card.
+- `GameState.firstPlayerId` records who went first each hand; re-deal path in `ws.ts` uses it to rotate the starting player clockwise.
+- `createBasicGame` takes optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.
 
 ## Milestones
 
@@ -124,7 +128,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | M2 | Done | WS server, room create/join, lobby, in-memory registry |
 | M3 | Done | Wire engine to WS; 2-browser basic rummy |
 | M4 | Done | React client: hand fan, drag-drop, discard, meld zone, chat, score overlay |
-| M4.5 | Not started | Re-deal (multi-hand game within same room) |
+| M4.5 | Done | Re-deal, first-player rotation, How to Play modal (Basic), bug fixes |
 | M5 | Not started | Gin variant |
 | M6 | Not started | 500 Rum variant |
 | M7 | Not started | Deploy, structured logs, metrics |

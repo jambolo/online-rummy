@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { Card, Rank } from "@online-rummy/shared";
+import { RANK_INDEX } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "../components/Card";
 import Hand from "../components/Hand";
@@ -6,6 +8,7 @@ import Table from "../components/Table";
 import MeldZone from "../components/MeldZone";
 import ActionBar from "../components/ActionBar";
 import Chat from "../components/Chat";
+import HowToPlayModal from "../components/HowToPlayModal";
 
 // Compact opponent info strip shown above the table
 function OpponentStrip() {
@@ -52,7 +55,7 @@ function OpponentStrip() {
 }
 
 // Lobby waiting room
-function Lobby() {
+function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   const roomCode = useAppStore((s) => s.roomCode);
   const variant = useAppStore((s) => s.variant);
   const lobbyPlayers = useAppStore((s) => s.lobbyPlayers);
@@ -133,6 +136,23 @@ function Lobby() {
             Waiting for host to start…
           </div>
         )}
+
+        <button
+          onClick={onShowHelp}
+          style={{
+            width: "100%",
+            marginTop: 12,
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.2)",
+            color: "rgba(255,255,255,0.6)",
+            fontSize: 13,
+            padding: "8px 0",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
+          How to Play
+        </button>
       </div>
     </div>
   );
@@ -149,6 +169,19 @@ function cardPts(c: Card): number { return RANK_PTS[c.rank]; }
 function handPts(cards: Card[]): number {
   return cards.reduce((s, c) => s + cardPts(c), 0);
 }
+const SUIT_ORDER: Record<string, number> = { S: 3, H: 2, D: 1, C: 0 };
+// pointsFor: variant-specific scoring value (e.g. Ace=1 basic, Ace=15 500rum)
+// RANK_INDEX: positional sequence A=0..K=12, always fixed — used only as tiebreaker
+//             when two cards share the same scoring value (e.g. K/Q/J/10 all = 10pts)
+function sortCardsDesc(cards: Card[], pointsFor: (c: Card) => number): Card[] {
+  return [...cards].sort((a, b) => {
+    const pts = pointsFor(b) - pointsFor(a);
+    if (pts !== 0) return pts;
+    const rank = RANK_INDEX[b.rank] - RANK_INDEX[a.rank];
+    if (rank !== 0) return rank;
+    return (SUIT_ORDER[b.suit] ?? 0) - (SUIT_ORDER[a.suit] ?? 0);
+  });
+}
 
 function ScoreOverlay() {
   const publicState = useAppStore((s) => s.publicState);
@@ -156,6 +189,7 @@ function ScoreOverlay() {
   const hostId = useAppStore((s) => s.hostId);
   const prevScores = useAppStore((s) => s.prevScores);
   const finalHands = useAppStore((s) => s.finalHands);
+  const isGameOver = useAppStore((s) => s.isGameOver);
   const send = useAppStore((s) => s.send);
 
   if (!publicState || publicState.phase !== "ended") return null;
@@ -184,7 +218,9 @@ function ScoreOverlay() {
           width: 340,
         }}
       >
-        <h2 style={{ textAlign: "center", marginBottom: 4 }}>Hand Over</h2>
+        <h2 style={{ textAlign: "center", marginBottom: 4 }}>
+          {isGameOver ? "Game Over!" : "Hand Over"}
+        </h2>
         <div
           style={{
             textAlign: "center",
@@ -193,14 +229,14 @@ function ScoreOverlay() {
             marginBottom: 20,
           }}
         >
-          Game target: 100 pts
+          {isGameOver ? "A player reached 100 pts" : "Game target: 100 pts"}
         </div>
 
         {sorted.map((p, i) => {
           const prev = prevScores[p.id] ?? 0;
           const delta = p.score - prev;
           const isWinner = i === 0;
-          const playerCards = finalHands[p.id] ?? [];
+          const playerCards = sortCardsDesc(finalHands[p.id] ?? [], cardPts);
           const playerCardPts = handPts(playerCards);
 
           return (
@@ -301,7 +337,7 @@ function ScoreOverlay() {
             onClick={() => send({ t: "start" })}
             style={{ width: "100%", marginTop: 20 }}
           >
-            New Hand
+            {isGameOver ? "Play Again" : "New Hand"}
           </button>
         ) : (
           <div
@@ -322,11 +358,22 @@ function ScoreOverlay() {
 
 export default function Room() {
   const publicState = useAppStore((s) => s.publicState);
+  const variant = useAppStore((s) => s.variant);
   const lastError = useAppStore((s) => s.lastError);
   const dismissError = useAppStore((s) => s.dismissError);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const helpVariant = publicState?.variant ?? variant;
 
   // No publicState yet → still in lobby
-  if (!publicState) return <Lobby />;
+  if (!publicState) return (
+    <>
+      <Lobby onShowHelp={() => setShowHelp(true)} />
+      {showHelp && helpVariant && (
+        <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
+      )}
+    </>
+  );
 
   return (
     <div
@@ -339,6 +386,9 @@ export default function Room() {
         overflow: "hidden",
       }}
     >
+      {showHelp && helpVariant && (
+        <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
+      )}
       <ScoreOverlay />
 
       {/* Error banner */}
@@ -365,8 +415,27 @@ export default function Room() {
         </div>
       )}
 
-      {/* Opponents */}
-      <OpponentStrip />
+      {/* Header row: opponents + How to Play */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <OpponentStrip />
+        </div>
+        <button
+          onClick={() => setShowHelp(true)}
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.2)",
+            color: "rgba(255,255,255,0.6)",
+            fontSize: 12,
+            padding: "4px 10px",
+            borderRadius: 5,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          How to Play
+        </button>
+      </div>
 
       {/* Main area */}
       <div style={{ flex: 1, display: "flex", gap: 10, minHeight: 0 }}>

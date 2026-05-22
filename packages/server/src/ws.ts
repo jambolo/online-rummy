@@ -270,25 +270,64 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
     case 'start': {
       const { player, room } = ctx;
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
-      if (room.status !== 'lobby') { sendError(ws, 'ERR_WRONG_STATE', 'Room not in lobby'); return; }
       if (room.hostId !== player.id) { sendError(ws, 'ERR_NOT_HOST', 'Only the host can start'); return; }
-      const { min } = variantLimits(room.variant);
-      if (room.players.length < min) {
-        sendError(ws, 'ERR_NOT_ENOUGH_PLAYERS', `Need at least ${min} players`);
-        return;
-      }
       if (room.variant !== 'basic') {
         sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Only basic variant implemented');
         return;
       }
-      room.status = 'playing';
-      room.gameState = createBasicGame(
-        room.code,
-        room.players.map(p => ({ id: p.id, name: p.name })),
-        cryptoRNG,
-      );
-      broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
-      broadcastStateAll(room, room.gameState);
+
+      if (room.status === 'lobby') {
+        const { min } = variantLimits(room.variant);
+        if (room.players.length < min) {
+          sendError(ws, 'ERR_NOT_ENOUGH_PLAYERS', `Need at least ${min} players`);
+          return;
+        }
+        room.status = 'playing';
+        room.gameState = createBasicGame(
+          room.code,
+          room.players.map(p => ({ id: p.id, name: p.name })),
+          cryptoRNG,
+        );
+        broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
+        broadcastStateAll(room, room.gameState);
+
+      } else if (room.status === 'ended') {
+        const oldState = room.gameState;
+        // Drop players who disconnected during the previous hand.
+        for (const p of [...room.players]) {
+          if (p.socket === null) removePlayer(room, p.id);
+        }
+        // Reset survivors to active for the new hand.
+        for (const p of room.players) p.status = 'active';
+        const { min } = variantLimits(room.variant);
+        if (room.players.length < min) {
+          sendError(ws, 'ERR_NOT_ENOUGH_PLAYERS', `Need at least ${min} players`);
+          return;
+        }
+        // Rotate first player clockwise from whoever went first last hand.
+        const newPlayers = room.players.map(p => ({ id: p.id, name: p.name }));
+        let nextFirstIndex = 0;
+        if (oldState !== null) {
+          const prevIdx = newPlayers.findIndex(p => p.id === oldState.firstPlayerId);
+          if (prevIdx !== -1) nextFirstIndex = (prevIdx + 1) % newPlayers.length;
+        }
+        room.status = 'playing';
+        const newState = createBasicGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
+        // Carry forward cumulative scores and score history.
+        for (const gp of newState.players) {
+          const prev = oldState?.players.find(op => op.id === gp.id);
+          if (prev !== undefined) {
+            gp.score = prev.score;
+            newState.scoreSheet.set(gp.id, oldState?.scoreSheet.get(gp.id) ?? []);
+          }
+        }
+        room.gameState = newState;
+        broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
+        broadcastStateAll(room, newState);
+
+      } else {
+        sendError(ws, 'ERR_WRONG_STATE', 'Room not in lobby or ended state');
+      }
       break;
     }
 

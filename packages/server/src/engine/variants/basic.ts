@@ -98,6 +98,8 @@ export function createBasicGame(
   roomId: string,
   players: Array<{ id: string; name: string }>,
   rng: RNG,
+  // When omitted, first player is chosen randomly. Pass an explicit index for re-deals.
+  firstPlayerIndex?: number,
 ): GameState {
   const { hands, stock, discard } = basicVariant.deal(players.length, rng);
 
@@ -106,6 +108,9 @@ export function createBasicGame(
   hands.forEach(registerAll);
   registerAll(stock);
   registerAll(discard);
+
+  const startIdx = firstPlayerIndex ?? rng(0, players.length);
+  const firstPlayer = players[startIdx]!;
 
   return {
     roomId,
@@ -118,7 +123,8 @@ export function createBasicGame(
       score: 0,
       status: 'active',
     })),
-    turnPlayerId: players[0]!.id,
+    turnPlayerId: firstPlayer.id,
+    firstPlayerId: firstPlayer.id,
     phase: 'draw',
     stock,
     discardPile: discard,
@@ -195,7 +201,12 @@ export function applyMeld(
   if (!basicVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
 
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
-  player.melds.push({ id: randomUUID(), kind: detectMeldKind(cards), cardIds, ownerId: playerId });
+  const meld = { id: randomUUID(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
+  // Sort runs by rank so display order always matches card sequence.
+  if (meld.kind === 'run') {
+    meld.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
+  }
+  player.melds.push(meld);
 
   state.meldedThisTurn = true;
   state.hasMeldedEver.set(playerId, true);

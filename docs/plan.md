@@ -57,7 +57,8 @@ online-rummy/
       src/
         main.tsx
         routes/{Home,Room}.tsx
-        components/{Card,Hand,Table,MeldZone,Chat,ActionBar}.tsx
+        components/{Card,Hand,Table,MeldZone,Chat,ActionBar,HowToPlayModal}.tsx
+        content/howToPlay/{basic,gin,rum500}.tsx  # static rules fragments
         net/ws.ts         # connect, dispatch, reconnect (lobby only)
         store.ts          # Zustand
   package.json            # root scripts only (pnpm -r test/build)
@@ -286,8 +287,9 @@ Gin FSM diverges: `knock` action allowed before discard when deadwood ≤10.
 | M2 | WS server, room create/join, lobby, in-memory registry, no engine yet | 2-3d |
 | M3 | Wire engine to WS; play basic rummy hand 2 browsers | 3-5d |
 | M4 | Client polish: hand fan, drag-drop, discard, meld zone, chat | 4-6d |
-| M5 | Gin variant | 2-3d |
-| M6 | 500 Rum variant (pile dive UX) | 3-4d |
+| M4.5 | Re-deal (multi-hand game); How to Play modal for Basic Rummy | 1-2d |
+| M5 | Gin variant; How to Play modal for Gin | 2-3d |
+| M6 | 500 Rum variant (pile dive UX); How to Play modal for 500 Rum | 3-4d |
 | M7 | Deploy + structured logs + room/player counters | 1-2d |
 | M8 | PixiJS card layer | 1-2w |
 
@@ -299,7 +301,21 @@ v1 = M1-M7. M8 after.
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
 - Hosting decision needed before M7.
 - 500 Rum ace high/low declaration UX: when player first melds an ace, prompt high or low for the hand. Lock for rest of hand. Design at M6.
-- Re-deal (multi-hand game) not yet implemented. The "New Hand" button in the score overlay sends `{ t: 'start' }` but the server rejects it with `ERR_WRONG_STATE` because `room.status` is `'ended'`, not `'lobby'`. The `start` handler needs a second code path that resets the engine while preserving cumulative scores. Scope: M4.5 (before M5).
+- How to Play modal for Gin (M5) and 500 Rum (M6) not yet implemented — content stubs present in the modal, full content deferred to respective milestones.
+
+## How to Play implementation notes
+
+- **Component:** `src/components/HowToPlayModal.tsx` — takes `variant: Variant` prop, renders variant-specific sections. One modal component; content is data-driven per variant.
+- **Trigger:** "How to Play" button in `Room.tsx` header, visible in both lobby and game phases. Button always shows regardless of turn or phase.
+- **Content shape per variant:**
+  - Objective — win condition (go out / knock / reach score target)
+  - Turn flow — draw → meld/layoff (optional) → discard; note variant deviations
+  - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rum: pile dive
+  - Scoring — point values per card, how hand score is computed, game target
+  - Active house rules — list only the locked picks from plan.md (e.g. ace low, ≤1 meld/turn, going-rummy ×2)
+- **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rum) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
+- **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
+- **No protocol change needed** — variant is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
 
 ## M3 implementation notes
 
@@ -324,6 +340,17 @@ v1 = M1-M7. M8 after.
 - **Score overlay client-side point computation.** Basic rummy card values (A=1, 2–9=pip, 10/J/Q/K=10) are duplicated in the client to render per-card point badges and totals. Deliberately not shared — client display logic, not authoritative scoring.
 - **`myPlayerId` detection.** The server never sends "you are player X" directly. Client identifies itself by matching `pendingName` (stored when `create`/`join` is sent) against `lobby.players[].name` on first lobby message. Names are not guaranteed unique but work in practice for ≤6-player games.
 
+## M4.5 implementation notes
+
+- **Re-deal dual-path in `start` handler.** `room.status === 'lobby'` → fresh game (existing path). `room.status === 'ended'` → re-deal: drops players with `socket === null`, resets survivors to `active`, calls `createBasicGame`, then copies `score` and `scoreSheet` from `oldState` onto the new `GamePlayer` entries. If fewer than `variant.minPlayers` survive, returns `ERR_NOT_ENOUGH_PLAYERS`.
+- **`GameState.firstPlayerId`.** Records who went first each hand. Re-deal finds that player in the new player list, takes `(prevIdx + 1) % newPlayers.length`. If not found (they disconnected), defaults to index 0.
+- **`createBasicGame` optional `firstPlayerIndex`.** When `undefined`, calls `rng(0, players.length)` (hi exclusive) to pick randomly. When provided explicitly, skips the RNG call — so the deck shuffle uses the same RNG sequence as before the parameter was added. All engine tests pass `0` explicitly to preserve pre-existing deck order.
+- **`isGameOver` in client store.** Set on `gameOver` event, cleared on `gameStarted`. `ScoreOverlay` reads it to show "Game Over!" vs "Hand Over" heading and "Play Again" vs "New Hand" button label.
+- **`finalHands` cleared on phase transition, not on `gameStarted`.** Clearing on `gameStarted` would wipe the card breakdown while the overlay is still visible (it disappears only when the subsequent `state` message sets `phase → draw`). The store clears `finalHands` when it detects `phase === 'ended' → phase !== 'ended'`.
+- **`sortCardsDesc` takes `pointsFor` parameter.** ScoreOverlay card sort: primary = scoring value desc (`pointsFor`), secondary = `RANK_INDEX` desc (tiebreaker within same-value group, e.g. K > Q > J > 10), tertiary = suit order (S > H > D > C). Keeping `pointsFor` as a caller-supplied function prevents conflating rank position with scoring value — critical for 500 Rum where Ace = 15 pts but `RANK_INDEX.A = 0`.
+- **Suit symbols in `ActionBar`.** The draw-from-discard button was rendering raw `'C'`/`'D'`/`'H'`/`'S'` from `discardTop.suit`. Fixed with `SUIT_SYMBOL` map (♣♦♥♠). All other runtime suit display was already using symbols via `Card.tsx`.
+- **Run meld display order.** `applyMeld` now sorts `cardIds` by `RANK_INDEX` after creating the meld (same fix that `applyLayoff` already had). Fixes melds displayed out of sequence when the player selects cards in non-ascending order.
+
 ## Status
 
 - [x] Plan finalized
@@ -331,9 +358,9 @@ v1 = M1-M7. M8 after.
 - [x] M2 complete
 - [x] M3 complete
 - [x] M4 complete
-- [ ] M4.5 re-deal not started
+- [x] M4.5 complete
 - [ ] M5-M8 not started
 
 ## Next action
 
-Implement M4.5 re-deal: extend the `start` handler to accept `room.status === 'ended'` and re-initialize the engine (`createBasicGame`) while preserving cumulative `score` and `scoreSheet` on each `GamePlayer`. Then start M5: Gin variant (`packages/server/src/engine/variants/gin.ts`).
+Start M5: Gin variant (`packages/server/src/engine/variants/gin.ts`). See Rule mapping table above for Gin constraints.

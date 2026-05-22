@@ -69,6 +69,8 @@ interface AppState {
   prevScores: Record<string, number>;
   // All players' final hands at hand end, keyed by playerId (from wonHand event).
   finalHands: Record<string, Card[]>;
+  // True from gameOver event until the next gameStarted event.
+  isGameOver: boolean;
 
   setConnected(v: boolean): void;
   send(msg: C2S): void;
@@ -98,6 +100,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   cardCache: {},
   prevScores: {},
   finalHands: {},
+  isGameOver: false,
 
   setConnected: (v) => set({ connected: v }),
 
@@ -143,8 +146,13 @@ export const useAppStore = create<AppState>()((set, _get) => ({
               )
             : s.prevScores;
 
+          // Clear finalHands when a new hand starts (overlay disappears).
+          const handJustStarted =
+            s.publicState?.phase === "ended" && msg.public.phase !== "ended";
+          const finalHands = handJustStarted ? {} : s.finalHands;
+
           if (msg.private === undefined) {
-            return { publicState: msg.public, prevScores };
+            return { publicState: msg.public, prevScores, finalHands };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
@@ -164,6 +172,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             selectedCardIds: s.selectedCardIds.filter((id) => newIds.has(id)),
             cardCache,
             prevScores,
+            finalHands,
           };
         });
         break;
@@ -198,6 +207,10 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           if (d.finalHands !== undefined) {
             set({ finalHands: d.finalHands });
           }
+        } else if (msg.kind === "gameOver") {
+          set({ isGameOver: true });
+        } else if (msg.kind === "gameStarted") {
+          set({ isGameOver: false });
         }
         break;
     }

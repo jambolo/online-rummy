@@ -20,6 +20,7 @@ describe('runScript', () => {
       'room1',
       [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
       makeSeededRNG(1),
+      0,
     );
     const { results } = runScript(state, [{ t: 'draw', from: 'stock' }]);
     expect(results[0]?.ok).toBe(true);
@@ -31,6 +32,7 @@ describe('runScript', () => {
       'room1',
       [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
       makeSeededRNG(1),
+      0,
     );
     // Try to discard before drawing
     const { results } = runScript(state, [{ t: 'discard', cardId: state.players[0]!.hand[0]!.id }]);
@@ -43,6 +45,7 @@ describe('runScript', () => {
       'room1',
       [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
       makeSeededRNG(1),
+      0,
     );
     const { results } = runScript(state, [
       { t: 'discard', cardId: 'nonexistent' }, // error
@@ -57,6 +60,7 @@ describe('runScript', () => {
       'room1',
       [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
       makeSeededRNG(42),
+      0,
     );
 
     // Inject known set + extra cards into p1 hand
