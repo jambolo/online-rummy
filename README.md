@@ -24,8 +24,8 @@ Browser-based multiplayer rummy supporting three variants: **Basic Rummy**, **Gi
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 20 LTS or newer
-- [pnpm](https://pnpm.io/) 9 or newer
+- [Node.js](https://nodejs.org/) 22.13 or newer
+- [pnpm](https://pnpm.io/) 11 or newer
 
 ### Environment variables
 
