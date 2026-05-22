@@ -34,20 +34,25 @@ online-rummy/
   packages/
     shared/
       src/
-        cards.ts          # Suit, Rank, Card, ids
-        protocol.ts       # C2S, S2C message unions
-        variants/{basic,gin,rum500}.ts  # rule constants
+        cards.ts          # Suit, Rank, Card, Meld, Phase, PublicState, PrivateState, RANKS, RANK_INDEX
+        protocol.ts       # C2S, S2C message unions, PileSlice
+        index.ts          # barrel re-export
     server/
       src/
-        index.ts
-        ws.ts             # handshake + routing
-        room.ts           # Room, Player, lifecycle, registry
-        rng.ts            # crypto.randomInt Fisher-Yates
+        index.ts          # HTTP server, env validation, startup
+        ws.ts             # WS upgrade, origin check, rate limiting, message routing, disconnect
+        room.ts           # Room/Player types, Crockford room codes, in-memory registry
+        session.ts        # makeSessionId, signSessionId, verifySessionId (HMAC-SHA256)
+        rng.ts            # cryptoRNG (node:crypto) + makeSeededRNG (seeded PRNG, tests only)
         engine/
-          deck.ts
-          meld.ts         # set/run validation
-          turn.ts         # draw -> meld* -> layoff* -> discard FSM
-          variants/{basic,gin,rum500}.ts
+          types.ts        # GameState, GamePlayer, VariantEngine interface, ScoreSheet (server-only)
+          deck.ts         # buildDeck, buildShuffledDeck, shuffle, dealN
+          meld.ts         # validateMeld(cards, opts), cardPoints
+          scripted-player.ts  # runScript(state, C2S[]) → ActionResult[] (engine-level, no WS)
+          variants/
+            basic.ts      # basicVariant, createBasicGame, applyDraw/Meld/Layoff/Discard
+            gin.ts        # M5
+            rum500.ts     # M6
     client/
       src/
         main.tsx
@@ -55,7 +60,8 @@ online-rummy/
         components/{Card,Hand,Table,MeldZone,Chat,ActionBar}.tsx
         net/ws.ts         # connect, dispatch, reconnect (lobby only)
         store.ts          # Zustand
-  package.json            # pnpm workspaces root
+  package.json            # root scripts only (pnpm -r test/build)
+  pnpm-workspace.yaml     # workspace package globs
   tsconfig.base.json
   rules.md
   plan.md
@@ -105,13 +111,18 @@ type C2S =
   | { t: 'knock' }                          // gin only
   | { t: 'chat'; text: string };
 
+type LobbyPlayer = { id: string; name: string };
+
 type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
-  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'forfeit'|'gameOver';
+  | { t: 'lobby'; roomCode: string; variant: Variant; hostId: string; players: LobbyPlayer[]; sessionId: string }
+  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'forfeit'|'gameOver'|'gameStarted';
       playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
 ```
+
+`{ t: 'lobby' }` is broadcast on every lobby state change (create, join, reconnect). Each player receives their own signed `sessionId` so they can use it in a future `join` reconnect message. Session delivered via WS message — NOT via HTTP `Set-Cookie` (adding custom headers to the WS 101 response is non-trivial with the `ws` library's `noServer` mode).
 
 Server validates every action. Pessimistic UI v1 (wait for server `state` before showing change). Server broadcasts new `PublicState` to all + `PrivateState` to acting player on success.
 
@@ -292,9 +303,10 @@ v1 = M1-M7. M8 after.
 ## Status
 
 - [x] Plan finalized
-- [ ] M1 in progress
-- [ ] M2-M8 not started
+- [x] M1 complete
+- [x] M2 complete
+- [ ] M3-M8 not started
 
 ## Next action
 
-Start M1: `packages/shared/cards.ts` + `engine/deck.ts` + `engine/meld.ts` + `variants/basic.ts` + Vitest harness + `scripted-player` helper. No network, no UI. Pure logic.
+Start M3: wire `basicVariant` engine into WS message handlers. In `ws.ts`, replace `ERR_NOT_IMPLEMENTED` stubs with calls to `createBasicGame` (on `start`), `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` (on game actions). Broadcast `PublicState` to all + `PrivateState` to acting player after each action. Verify with two browser tabs.

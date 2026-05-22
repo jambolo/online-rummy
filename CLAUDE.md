@@ -60,6 +60,10 @@ Node.js 20 + native `ws`. No ORM, no DB — all state in memory.
 | `engine/variants/basic.ts` | `basicVariant: VariantEngine`, `createBasicGame`, `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` |
 | `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences for tests |
 | `rng.ts` | `RNG` type alias; wraps `node:crypto` `randomInt` |
+| `session.ts` | `makeSessionId`, `signSessionId`, `verifySessionId` — HMAC-SHA256 session tokens |
+| `room.ts` | `Room`/`Player` types, Crockford base32 room codes, in-memory registry, `variantLimits` |
+| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/disconnect handlers |
+| `index.ts` | HTTP server, `SESSION_SECRET`/`ALLOWED_ORIGINS`/`PORT` env validation, startup |
 
 **`GameState` is mutated in place** by all `apply*` functions. Clone before passing to `runScript` if you need snapshot comparison.
 
@@ -67,7 +71,7 @@ The `VariantEngine` interface is the extension point for Gin and 500 Rum. Each v
 
 `vitest.config.ts` aliases `@online-rummy/shared` → `../shared/src/index.ts` so tests run without building shared first.
 
-**M2+ stubs** (`src/index.ts`, `src/ws.ts`, `src/room.ts`) are not yet implemented.
+**Session delivery:** signed `sessionId` is sent in every `{ t: 'lobby' }` broadcast (not via HTTP cookie). Client stores it and passes in `join.sessionId` for lobby reconnect. Game actions (`draw`, `meld`, etc.) return `ERR_NOT_IMPLEMENTED` until M3.
 
 ### `packages/client`
 
@@ -87,7 +91,7 @@ React 18 + Vite + Zustand + dnd-kit. Not yet implemented (M4+).
 | # | Status | Scope |
 | --- | --- | --- |
 | M1 | Done | shared types, engine (deck/meld/basic variant), scripted-player, tests |
-| M2 | Not started | WS server, room create/join, lobby, in-memory registry |
+| M2 | Done | WS server, room create/join, lobby, in-memory registry |
 | M3 | Not started | Wire engine to WS; 2-browser basic rummy |
 | M4 | Not started | Client: hand fan, drag-drop, discard, meld zone, chat |
 | M5 | Not started | Gin variant |

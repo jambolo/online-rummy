@@ -1,4 +1,6 @@
-import type { Card, PrivateState, PublicState, Variant } from './cards.js';
+import type { Card, PlayerId, PrivateState, PublicState, Variant } from './cards.js';
+
+export type LobbyPlayer = { id: PlayerId; name: string };
 
 export type C2S =
   | { t: 'create'; variant: Variant; name: string }
@@ -19,10 +21,12 @@ export type EventKind =
   | 'discarded'
   | 'wonHand'
   | 'forfeit'
-  | 'gameOver';
+  | 'gameOver'
+  | 'gameStarted';
 
 export type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
+  | { t: 'lobby'; roomCode: string; variant: Variant; hostId: PlayerId; players: LobbyPlayer[]; sessionId: string }
   | { t: 'event'; kind: EventKind; playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
