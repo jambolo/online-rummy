@@ -1,5 +1,8 @@
 # Online Rummy
 
+[![CI](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml/badge.svg)](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jambolo/online-rummy/graph/badge.svg)](https://codecov.io/gh/jambolo/online-rummy)
+
 Browser-based multiplayer rummy supporting three variants: **Basic Rummy**, **Gin Rummy**, and **500 Rum**. No accounts — pick a nickname, create a room, share the code, play.
 
 ---

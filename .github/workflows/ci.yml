@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - "release/**"
+  pull_request:
+    branches:
+      - master
+      - develop
+      - "release/**"
+
+jobs:
+  ci:
+    name: Type-check, Build, Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # reads packageManager field from package.json — no version: needed
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # cache handled by pnpm/action-setup; do NOT set cache: 'pnpm' here for monorepos
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check (shared)
+        run: pnpm --filter @online-rummy/shared run typecheck
+
+      - name: Build (shared)
+        run: pnpm --filter @online-rummy/shared run build
+
+      - name: Type-check (server)
+        run: pnpm --filter @online-rummy/server run typecheck
+
+      - name: Build
+        run: pnpm --filter "!@online-rummy/client" -r build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Coverage
+        run: pnpm --filter @online-rummy/server exec vitest run --coverage
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: packages/server/coverage/lcov.info
+          fail_ci_if_error: false

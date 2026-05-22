@@ -22,6 +22,7 @@ function twoPlayerGame(seed = 1) {
       { id: 'p2', name: 'Bob' },
     ],
     makeSeededRNG(seed),
+    0, // p1 always goes first in unit tests
   );
 }
 

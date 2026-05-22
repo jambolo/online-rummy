@@ -1,0 +1,644 @@
+# Client–Server Protocol
+
+This document describes the WebSocket protocol between the game server and any client. No assumptions are made about the client platform beyond the ability to open a WebSocket connection and exchange JSON messages.
+
+---
+
+## Transport
+
+Connect via WebSocket to the server's HTTP/WS port. The server checks the `Origin` header of the upgrade request against a configured allowlist. If the origin is not on the list, the server responds with HTTP 403 and closes the connection before a WebSocket is established.
+
+Once connected, all communication is JSON over WebSocket frames. Every message — in both directions — is a JSON object with a `t` field that identifies the message type (the discriminator tag). All strings are UTF-8.
+
+**Server-enforced limits:**
+
+- Max 10 simultaneous WebSocket connections per IP address. A new connection that would exceed this limit receives `ERR_TOO_MANY_CONNECTIONS` and is immediately closed.
+- Max 20 messages per second per socket. Messages beyond this rate receive `ERR_RATE_LIMIT`; the connection stays open.
+- Rooms where no player has an active socket are deleted after 10 minutes of inactivity.
+
+---
+
+## Malformed and Invalid Messages
+
+If the server cannot parse a message, or the message is structurally wrong, it sends an `error` response and keeps the connection open. The client does not need to reconnect after an error.
+
+| Condition | Error code |
+| --- | --- |
+| Message is not valid JSON | `ERR_INVALID_JSON` |
+| JSON is valid but the object has no `t` field | `ERR_INVALID_MSG` |
+| Message rate exceeds 20/second | `ERR_RATE_LIMIT` |
+
+If the `t` field is present but the action is not permitted in the current state (wrong phase, wrong player, room full, etc.), the server sends a more specific `ERR_*` code documented under each action below.
+
+In all error cases the connection remains open and the game state is unchanged.
+
+---
+
+## Data Types
+
+These types appear in multiple messages.
+
+### `Card`
+
+```json
+{ "id": "string", "suit": "C"|"D"|"H"|"S", "rank": "A"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"J"|"Q"|"K" }
+```
+
+`id` is a server-assigned UUID, stable for the lifetime of the game. All card references in action messages use `id`, not rank or suit.
+
+### `Meld`
+
+```json
+{
+  "id": "string",
+  "kind": "set"|"run",
+  "cardIds": ["string", ...],
+  "ownerId": "string",
+  "cards": [Card, ...]
+}
+```
+
+`id` is a server-assigned UUID for the meld. `ownerId` is the player ID of whoever placed the meld. `cardIds` contains the card IDs that make up the meld; this list grows when other players lay off cards onto it. For runs, `cardIds` is always sorted in ascending rank order.
+
+`cards` contains the full `Card` objects corresponding to `cardIds` in the same order. This allows clients to render meld cards without maintaining a private card cache. `cards` is always present in melds sent within `PublicState`.
+
+### `PublicPlayer`
+
+```json
+{
+  "id": "string",
+  "name": "string",
+  "handCount": 7,
+  "melds": [Meld, ...],
+  "score": 0,
+  "status": "active"|"forfeited"
+}
+```
+
+`handCount` is the number of cards in the player's hand. You do not see the actual cards unless it is your own hand (see `PrivateState`).
+
+### `PublicState`
+
+The state visible to all players.
+
+```json
+{
+  "roomId": "string",
+  "variant": "basic"|"gin"|"rum500",
+  "players": [PublicPlayer, ...],
+  "turnPlayerId": "string",
+  "phase": "draw"|"meld"|"discard"|"ended",
+  "discardTop": Card | null,
+  "discardPileSize": 3,
+  "stockSize": 24
+}
+```
+
+The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
+
+### `PrivateState`
+
+The contents of your own hand. Sent only to the player who owns the hand.
+
+```json
+{ "hand": [Card, ...] }
+```
+
+---
+
+## Client → Server Messages (C2S)
+
+---
+
+### `create` — Create a room
+
+```json
+{ "t": "create", "variant": "basic"|"gin"|"rum500", "name": "string" }
+```
+
+Creates a new room and places the sender in it as the host. `name` is the player's display name and is trimmed to 20 characters server-side.
+
+**Response:** A [`lobby`](#lobby--lobby-state) message is sent to the creating player.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_ALREADY_IN_ROOM` | This socket is already associated with a room |
+| `ERR_INVALID_VARIANT` | `variant` is not one of the three accepted values |
+| `ERR_INVALID_NAME` | `name` is empty after trimming |
+
+---
+
+### `join` — Join a room or reconnect
+
+```json
+{ "t": "join", "roomCode": "string", "name": "string", "sessionId": "string (optional)" }
+```
+
+`roomCode` is a 5-character Crockford base32 string (case-insensitive). `name` is the player's display name, trimmed to 20 characters.
+
+**Normal join:** Omit `sessionId`. The player is added to the lobby as a new participant.
+
+**Reconnect:** Include the `sessionId` that was previously received in a `lobby` message. The server verifies the token and re-associates this socket with the player's existing slot. The `name` field is ignored during reconnect. Reconnect is only available while the room is still in lobby state.
+
+**Response:** A [`lobby`](#lobby--lobby-state) message is broadcast to all players in the room.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_ALREADY_IN_ROOM` | This socket is already associated with a room |
+| `ERR_ROOM_NOT_FOUND` | No room exists with that code |
+| `ERR_GAME_IN_PROGRESS` | Room is not in lobby state (normal join); or room is not in lobby state (reconnect) |
+| `ERR_ROOM_FULL` | Room has reached the variant's maximum player count |
+| `ERR_INVALID_NAME` | `name` is empty after trimming (normal join only) |
+| `ERR_INVALID_SESSION` | `sessionId` failed signature verification |
+| `ERR_SESSION_NOT_FOUND` | `sessionId` is valid but the player or room is not found |
+
+---
+
+### `start` — Start the game
+
+```json
+{ "t": "start" }
+```
+
+Only the host may send this. The room must be in `lobby` or `ended` state.
+
+**First start (`lobby` state):** creates a fresh game. First player is chosen randomly.
+
+**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. The starting player rotates one seat clockwise from the previous hand's first player.
+
+Player count requirements by variant:
+
+| Variant | Minimum | Maximum |
+| --- | --- | --- |
+| `basic` | 2 | 6 |
+| `gin` | 2 | 2 |
+| `rum500` | 2 | 8 |
+
+**Response:** Two messages are sent to all connected players in sequence:
+
+1. An [`event`](#event--game-event) with `kind: "gameStarted"`
+2. A [`state`](#state--game-state) containing both `public` and each player's own `private` hand
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Room is not in `lobby` or `ended` state (e.g. game is currently in progress) |
+| `ERR_NOT_HOST` | Sender is not the host |
+| `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players (checked after removing disconnected players on re-deal) |
+| `ERR_NOT_IMPLEMENTED` | Variant is not `basic` (gin and rum500 are not yet implemented) |
+
+---
+
+### `draw` — Draw a card
+
+```json
+{ "t": "draw", "from": "stock"|"discard" }
+```
+
+Draws the top card from either the stock pile or the discard pile. Valid only on your turn when `phase` is `"draw"`.
+
+After a successful draw, `phase` advances to `"meld"`.
+
+**House rule:** If you draw from the discard pile, you cannot discard that same card on the same turn.
+
+**Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
+| `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile |
+| `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
+
+---
+
+### `meld` — Place a meld from hand
+
+```json
+{ "t": "meld", "cardIds": ["string", ...] }
+```
+
+Places a new meld on the table using cards from your hand. Valid only on your turn when `phase` is `"meld"` or `"discard"`.
+
+A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive cards of the same suit (ace is low; round-the-corner is disabled). Minimum 3 cards in either case.
+
+Only one meld may be placed per turn. After placing a meld, `phase` advances to `"discard"`.
+
+**Response:** A [`state`](#state--game-state) message. The acting player receives `public` and `private`. All other players receive `public` only.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
+| `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn |
+| `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
+| `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
+| `ERR_INVALID_MELD` | The cards do not form a valid set or run |
+
+---
+
+### `layoff` — Lay off a card onto an existing meld
+
+```json
+{ "t": "layoff", "meldId": "string", "cardId": "string" }
+```
+
+Adds one card from your hand onto any meld already on the table (your own or another player's). Valid only on your turn when `phase` is `"meld"` or `"discard"`.
+
+You must have placed at least one of your own melds in any previous turn before you can lay off. The card must extend the target meld while keeping it valid.
+
+Multiple layoffs are allowed per turn; they are independent of the one-meld-per-turn restriction.
+
+**Response:** A [`state`](#state--game-state) message. The acting player receives `public` and `private`. All other players receive `public` only.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
+| `ERR_NO_OWN_MELD` | This player has never placed a meld |
+| `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
+| `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
+| `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
+| `ERR_INVALID_LAYOFF` | Adding the card would make the target meld invalid. `msg` contains a specific reason (e.g. wrong suit, rank out of range, set full) |
+
+---
+
+### `discard` — Discard a card and end your turn
+
+```json
+{ "t": "discard", "cardId": "string" }
+```
+
+Places one card from your hand onto the discard pile and ends your turn. Valid only on your turn when `phase` is `"meld"` or `"discard"`. You may discard without having melded or laid off.
+
+**House rule:** You cannot discard the card you drew from the discard pile on the same turn.
+
+If discarding empties your hand, the hand ends immediately.
+
+**Normal response (hand continues):** A [`state`](#state--game-state) message is sent. The acting player receives `public` and `private`. All other players receive `public` only. Turn advances to the next active player with `phase` reset to `"draw"`.
+
+**Hand-end response (hand emptied):** Three messages are sent to all connected players:
+
+1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner; `data.finalHands` contains every player's remaining cards
+2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
+3. A [`state`](#state--game-state) with both `public` and each player's own `private` hand
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
+| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from discard this turn |
+| `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
+| `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
+
+---
+
+### `chat` — Send a chat message
+
+```json
+{ "t": "chat", "text": "string" }
+```
+
+Sends a chat message to all players in the room. The server trims `text` to 200 characters and silently drops empty messages.
+
+**Response:** A [`chat`](#chat--chat-message) message broadcast to all players in the room, including the sender.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+
+---
+
+### `drawFromPile` / `knock` — Not yet implemented
+
+These message types are defined in the protocol and are accepted by the server, but always return `ERR_NOT_IMPLEMENTED`. They are reserved for the 500 Rum (`drawFromPile`) and Gin (`knock`) variants.
+
+---
+
+## Server → Client Messages (S2C)
+
+---
+
+### `lobby` — Lobby state
+
+```json
+{
+  "t": "lobby",
+  "roomCode": "string",
+  "variant": "basic"|"gin"|"rum500",
+  "hostId": "string",
+  "players": [{ "id": "string", "name": "string" }, ...],
+  "sessionId": "string"
+}
+```
+
+Sent to all players in the room whenever the lobby changes: when a player creates, joins, or reconnects, and when a player's lobby reconnect window expires and they are removed.
+
+`hostId` identifies which player is the host. The host can change — if the host disconnects, the server promotes the next connected player.
+
+`sessionId` is a **signed token that is unique to the receiving player**. It is different for each player in the room. Save it persistently. It is required to reconnect if the socket drops.
+
+---
+
+### `state` — Game state
+
+```json
+{
+  "t": "state",
+  "public": PublicState,
+  "private": PrivateState
+}
+```
+
+Sent after every game action and on game start, hand end, and forfeit. `private` is present only when the message is addressed specifically to you:
+
+- **On game start, hand end, or forfeit:** every connected player receives a `state` message that includes both `public` and their own `private` hand.
+- **On draw, meld, layoff, or discard:** only the acting player receives a `state` with `private`. All other players receive `state` with `public` only.
+
+When you receive a `state` message without `private`, your hand has not changed. Do not clear it from local state.
+
+---
+
+### `event` — Game event
+
+```json
+{ "t": "event", "kind": "string", "playerId": "string", "data": any }
+```
+
+Broadcast to all players when a notable game event occurs. `playerId` identifies who triggered the event. `data` is optional; its shape depends on `kind` and is described below.
+
+| `kind` | Sent when | `data` |
+| --- | --- | --- |
+| `gameStarted` | The host triggered game start | absent |
+| `wonHand` | A player emptied their hand and won the hand | `{ "finalHands": { "<playerId>": [Card, ...], ... } }` |
+| `forfeit` | A player disconnected during play | absent |
+| `gameOver` | The game-ending score threshold has been reached | absent |
+| `drew` | Reserved — defined but not yet emitted | — |
+| `melded` | Reserved — defined but not yet emitted | — |
+| `laidOff` | Reserved — defined but not yet emitted | — |
+| `discarded` | Reserved — defined but not yet emitted | — |
+
+#### `wonHand` data
+
+`finalHands` maps every player ID to that player's remaining unmelded cards at the moment the hand ended. The winner's entry is an empty array. Clients use this to display the per-player score breakdown (sum of unmelded card point values) in the hand-end overlay.
+
+---
+
+### `error` — Error response
+
+```json
+{ "t": "error", "code": "string", "msg": "string" }
+```
+
+Sent to the client that caused the error. `code` is a machine-readable `ERR_*` identifier. `msg` is a human-readable description of the problem.
+
+The connection stays open after an error. The game state is unchanged.
+
+Global error codes (not tied to a specific action):
+
+| Code | Condition |
+| --- | --- |
+| `ERR_INVALID_JSON` | Message is not valid JSON |
+| `ERR_INVALID_MSG` | JSON is valid but has no `t` field |
+| `ERR_RATE_LIMIT` | Exceeded 20 messages/second |
+| `ERR_TOO_MANY_CONNECTIONS` | IP already has 10 open connections (connection is closed after this) |
+
+---
+
+### `chat` — Chat message
+
+```json
+{ "t": "chat", "from": "string", "text": "string" }
+```
+
+Broadcast to all players in the room when any player sends a chat. `from` is the sender's display name.
+
+---
+
+## Session Management
+
+When you connect and send `create` or `join`, the server assigns you a player ID and a session. The session is delivered as a `sessionId` field inside the `lobby` message — not via an HTTP cookie. You must save this value yourself (e.g., in `localStorage`).
+
+If your WebSocket connection drops while the room is still in lobby state, you have a 60-second window to reconnect and resume your seat.
+
+### Example: Creating a Room
+
+**Client sends:**
+
+```json
+{ "t": "create", "variant": "basic", "name": "Alice" }
+```
+
+**Server responds (to Alice only):**
+
+```json
+{
+  "t": "lobby",
+  "roomCode": "A7K3M",
+  "variant": "basic",
+  "hostId": "player-uuid-alice",
+  "players": [{ "id": "player-uuid-alice", "name": "Alice" }],
+  "sessionId": "signed.token.alice"
+}
+```
+
+Alice stores `"signed.token.alice"` and `"A7K3M"`.
+
+### Example: Joining a Room
+
+**Client (Bob) sends:**
+
+```json
+{ "t": "join", "roomCode": "A7K3M", "name": "Bob" }
+```
+
+**Server sends to Alice:**
+
+```json
+{
+  "t": "lobby",
+  "roomCode": "A7K3M",
+  "variant": "basic",
+  "hostId": "player-uuid-alice",
+  "players": [
+    { "id": "player-uuid-alice", "name": "Alice" },
+    { "id": "player-uuid-bob",   "name": "Bob"   }
+  ],
+  "sessionId": "signed.token.alice"
+}
+```
+
+**Server sends to Bob:**
+
+```json
+{
+  "t": "lobby",
+  "roomCode": "A7K3M",
+  "variant": "basic",
+  "hostId": "player-uuid-alice",
+  "players": [
+    { "id": "player-uuid-alice", "name": "Alice" },
+    { "id": "player-uuid-bob",   "name": "Bob"   }
+  ],
+  "sessionId": "signed.token.bob"
+}
+```
+
+Alice and Bob receive the same `lobby` message except for the `sessionId` field, which is unique per player.
+
+### Example: Reconnecting After Disconnect
+
+Bob's connection drops. Within 60 seconds, Bob reconnects and sends:
+
+```json
+{ "t": "join", "roomCode": "A7K3M", "name": "ignored", "sessionId": "signed.token.bob" }
+```
+
+The server broadcasts a `lobby` message to Alice and Bob as normal. Bob's seat is restored.
+
+If more than 60 seconds pass before Bob reconnects, his seat is removed and `lobby` is broadcast to the remaining players with Bob absent. Bob would need to join as a new player (send `join` without `sessionId`).
+
+Mid-game reconnect is not currently supported. If the game has already started when Bob attempts to reconnect, the server returns:
+
+```json
+{ "t": "error", "code": "ERR_GAME_IN_PROGRESS", "msg": "Cannot reconnect mid-game" }
+```
+
+---
+
+## Turn Flow
+
+### Phase Sequence
+
+A player's turn follows this phase sequence:
+
+```text
+"draw"  →  "meld"  →  "discard"  →  (next player's turn, phase resets to "draw")
+```
+
+The current phase is always reflected in `PublicState.phase`. After drawing, the player may optionally meld once and/or lay off cards any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely.
+
+### Example: A Full Turn with Meld and Layoff
+
+The current state has `turnPlayerId: "player-uuid-alice"` and `phase: "draw"`.
+
+**Step 1 — Alice draws from the stock:**
+
+Alice sends:
+
+```json
+{ "t": "draw", "from": "stock" }
+```
+
+Alice receives (phase is now `"meld"`, her hand has the new card):
+
+```json
+{
+  "t": "state",
+  "public": { "...": "...", "phase": "meld", "stockSize": 23 },
+  "private": { "hand": ["...her 11 cards..."] }
+}
+```
+
+Bob receives (no `private` — his hand has not changed):
+
+```json
+{
+  "t": "state",
+  "public": { "...": "...", "phase": "meld", "stockSize": 23 }
+}
+```
+
+**Step 2 — Alice places a meld:**
+
+Alice sends:
+
+```json
+{ "t": "meld", "cardIds": ["card-id-7H", "card-id-7D", "card-id-7S"] }
+```
+
+Alice receives `state` with `phase: "discard"` and her updated hand (three cards removed). Bob receives `state` with `public` only and can see Alice's new meld in `players[].melds`.
+
+**Step 3 — Alice lays off a card onto Bob's existing run:**
+
+Alice sends:
+
+```json
+{ "t": "layoff", "meldId": "meld-uuid-bobs-run", "cardId": "card-id-8H" }
+```
+
+Alice receives `state` with her updated hand. Bob receives `state` with `public` only, and can see his meld's `cardIds` now includes `"card-id-8H"`.
+
+**Step 4 — Alice discards to end her turn:**
+
+Alice sends:
+
+```json
+{ "t": "discard", "cardId": "card-id-KD" }
+```
+
+Alice receives `state` with `phase: "draw"` and `turnPlayerId: "player-uuid-bob"`. Bob receives `state` with `public` only (his turn begins).
+
+### Example: Discarding Without Melding
+
+A player may skip straight to discard after drawing. There is no requirement to meld.
+
+Alice sends:
+
+```json
+{ "t": "draw", "from": "stock" }
+```
+
+Phase becomes `"meld"`. Alice then immediately sends:
+
+```json
+{ "t": "discard", "cardId": "card-id-2C" }
+```
+
+Phase becomes `"draw"` and the turn advances to the next player.
+
+---
+
+## Disconnect Behavior
+
+### Disconnect in Lobby
+
+When a player's socket closes during the lobby phase, their seat is held for 60 seconds to allow reconnect. If they reconnect within that window, a `lobby` broadcast goes out as normal. After 60 seconds without reconnect, the player is removed and `lobby` is broadcast to the remaining players. If the departing player was the host, the next connected player in the list becomes the new host.
+
+### Disconnect During Play
+
+When a player's socket closes during the game, the server immediately:
+
+1. Sets the player's status to `"forfeited"` in both the room and the engine
+2. Removes that player's hand and melds from play (they are not returned to the stock or discard pile)
+3. If it was the forfeiting player's turn, advances to the next active player with `phase` reset to `"draw"`
+4. Broadcasts an [`event`](#event--game-event) with `kind: "forfeit"` to all remaining players
+5. Broadcasts a [`state`](#state--game-state) with both `public` and each remaining player's own `private` hand
+
+If only one active player remains after the forfeit, that player wins and the server additionally broadcasts `kind: "gameOver"` before the final `state`.
+
+There is no reconnect window during play.

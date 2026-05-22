@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
+import { RANK_INDEX, RANKS } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
 import { cardPoints, validateMeld as coreMeldCheck } from '../meld.js';
@@ -97,6 +98,8 @@ export function createBasicGame(
   roomId: string,
   players: Array<{ id: string; name: string }>,
   rng: RNG,
+  // When omitted, first player is chosen randomly. Pass an explicit index for re-deals.
+  firstPlayerIndex?: number,
 ): GameState {
   const { hands, stock, discard } = basicVariant.deal(players.length, rng);
 
@@ -105,6 +108,9 @@ export function createBasicGame(
   hands.forEach(registerAll);
   registerAll(stock);
   registerAll(discard);
+
+  const startIdx = firstPlayerIndex ?? rng(0, players.length);
+  const firstPlayer = players[startIdx]!;
 
   return {
     roomId,
@@ -117,7 +123,8 @@ export function createBasicGame(
       score: 0,
       status: 'active',
     })),
-    turnPlayerId: players[0]!.id,
+    turnPlayerId: firstPlayer.id,
+    firstPlayerId: firstPlayer.id,
     phase: 'draw',
     stock,
     discardPile: discard,
@@ -194,7 +201,12 @@ export function applyMeld(
   if (!basicVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
 
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
-  player.melds.push({ id: randomUUID(), kind: detectMeldKind(cards), cardIds, ownerId: playerId });
+  const meld = { id: randomUUID(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
+  // Sort runs by rank so display order always matches card sequence.
+  if (meld.kind === 'run') {
+    meld.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
+  }
+  player.melds.push(meld);
 
   state.meldedThisTurn = true;
   state.hasMeldedEver.set(playerId, true);
@@ -225,12 +237,46 @@ export function applyLayoff(
   }
   if (!targetMeld) throw new Error('ERR_MELD_NOT_FOUND');
 
-  // Validate extended meld
+  // Validate extended meld — build a descriptive message when invalid
   const existingCards = targetMeld.cardIds.map((id) => lookupCard(state, id));
-  if (!basicVariant.validateMeld([...existingCards, card])) throw new Error('ERR_INVALID_LAYOFF');
+  if (!basicVariant.validateMeld([...existingCards, card])) {
+    const suit = (s: string) => ({ C: '♣', D: '♦', H: '♥', S: '♠' })[s] ?? s;
+    if (targetMeld.kind === 'set') {
+      const setRank = existingCards[0]?.rank ?? '?';
+      if (card.rank !== setRank) {
+        throw new Error(`ERR_INVALID_LAYOFF: Set contains ${setRank}s — ${card.rank} doesn't match`);
+      }
+      throw new Error(`ERR_INVALID_LAYOFF: Set is already full (4 cards)`);
+    } else {
+      const runSuit = existingCards[0]?.suit ?? '?';
+      if (card.suit !== runSuit) {
+        throw new Error(
+          `ERR_INVALID_LAYOFF: Card suit (${suit(card.suit)}) doesn't match run suit (${suit(runSuit)})`,
+        );
+      }
+      const indices = existingCards.map((c) => RANK_INDEX[c.rank]);
+      const lo = Math.min(...indices);
+      const hi = Math.max(...indices);
+      const loRank = RANKS[lo] ?? '?';
+      const hiRank = RANKS[hi] ?? '?';
+      throw new Error(
+        `ERR_INVALID_LAYOFF: Run is ${suit(runSuit)}${loRank}–${hiRank}; ` +
+        `${card.rank} must go at ${loRank === 'A' ? 'the high end' : 'the low end'} or ` +
+        `${hiRank === 'K' ? 'the low end' : 'the high end'}`,
+      );
+    }
+  }
 
   player.hand = player.hand.filter((c) => c.id !== cardId);
   targetMeld.cardIds.push(cardId);
+  // Sort runs by rank so the display order matches card sequence.
+  if (targetMeld.kind === 'run') {
+    targetMeld.cardIds.sort((a, b) => {
+      const ca = lookupCard(state, a);
+      const cb = lookupCard(state, b);
+      return RANK_INDEX[ca.rank] - RANK_INDEX[cb.rank];
+    });
+  }
   state.hasMeldedEver.set(playerId, true);
 }
 

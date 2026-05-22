@@ -3,7 +3,7 @@ export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 
 export type Card = { id: string; suit: Suit; rank: Rank };
 
 export type MeldKind = 'set' | 'run';
-export type Meld = { id: string; kind: MeldKind; cardIds: string[]; ownerId: string };
+export type Meld = { id: string; kind: MeldKind; cardIds: string[]; ownerId: string; cards?: Card[] };
 
 export type Phase = 'draw' | 'meld' | 'discard' | 'ended';
 
