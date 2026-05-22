@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online Rummy</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #1a6b1a;
+        color: #fff;
+        min-height: 100vh;
+      }
+      button {
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14px;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 14px;
+        background: #2a7a2a;
+        color: #fff;
+        transition: background 0.15s;
+      }
+      button:hover:not(:disabled) { background: #3a9a3a; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      button.primary { background: #1a7aae; }
+      button.primary:hover:not(:disabled) { background: #2a8abe; }
+      button.danger { background: #ae2a1a; }
+      button.danger:hover:not(:disabled) { background: #c03a2a; }
+      input, select {
+        font-family: inherit;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 6px 10px;
+        outline: none;
+      }
+      input:focus, select:focus { border-color: #4a9eff; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

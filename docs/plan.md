@@ -299,7 +299,7 @@ v1 = M1-M7. M8 after.
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
 - Hosting decision needed before M7.
 - 500 Rum ace high/low declaration UX: when player first melds an ace, prompt high or low for the hand. Lock for rest of hand. Design at M6.
-- Re-deal (multi-hand game) not yet implemented. After a hand ends (game not over), `room.status` becomes `'ended'`. A future message type or re-use of `start` must reset the engine for the next hand while preserving cumulative scores. Scope: M3.5 or early M4.
+- Re-deal (multi-hand game) not yet implemented. The "New Hand" button in the score overlay sends `{ t: 'start' }` but the server rejects it with `ERR_WRONG_STATE` because `room.status` is `'ended'`, not `'lobby'`. The `start` handler needs a second code path that resets the engine while preserving cumulative scores. Scope: M4.5 (before M5).
 
 ## M3 implementation notes
 
@@ -310,14 +310,30 @@ v1 = M1-M7. M8 after.
 - Engine errors use `ERR_X:detail` format; WS layer splits on `:` to extract the code prefix.
 - Browser verification of M3 deferred to M4 (no client yet).
 
+## M4 implementation notes
+
+- **Zustand selectors must be scalar.** Object selectors — `useStore(s => ({ a: s.a, b: s.b }))` — return a new object every render, breaking React 18's `useSyncExternalStore` and causing an infinite re-render loop. Use one `useStore` call per value.
+- **React StrictMode double-mounts.** Effects fire twice in dev; the first socket's `onclose` fires after the second socket connects, nulling the module-level socket reference and calling `setConnected(false)`. Fixed with an epoch counter in `net/ws.ts` — each socket knows its epoch and ignores events from previous epochs.
+- **Stale sessionStorage triggers spurious reconnects.** On every connect the client tries to rejoin using stored sessionId/roomCode. This floods server logs and can land in error state. Fixed by: (1) clearing sessionStorage on `ERR_SESSION_NOT_FOUND` / `ERR_INVALID_SESSION`, (2) skipping the reconnect attempt entirely if `publicState !== null` (mid-game Vite HMR remount).
+- **Vite proxy at `/` breaks page load.** Proxying all requests to the game server causes the initial HTML load to return 404. Client connects directly to `ws://localhost:8080`; Vite proxy is not needed because `ALLOWED_ORIGINS` covers `http://localhost:5173`.
+- **Meld cards require protocol extension.** `PublicState` melds only carry `cardIds`. Opponents have never seen those cards so their client cache is empty — all meld cards render as face-down placeholders. Fix: server populates `cards: Card[]` in each meld via `cardRegistry` lookups in `buildPublicState`. Field added to shared `Meld` type as optional.
+- **`wonHand` event carries final hands.** All players' remaining unmelded cards at hand end are sent in `data.finalHands` so every client can show the full score breakdown, not just the acting player.
+- **Run layoff order.** `targetMeld.cardIds.push(cardId)` appended to end. Runs now sort `cardIds` by `RANK_INDEX` after every layoff. `ERR_INVALID_LAYOFF` throws a descriptive message (wrong suit, out of range, set full) instead of a bare code.
+- **Card text-align inheritance.** Table wrappers use `textAlign: "center"` for centering the pile labels. This cascades into card corner text. Card outer div now sets `textAlign: "left"` explicitly.
+- **Compact card prop.** Meld zone uses small cards (40×56). Full-size font sizes (13 px corners, 22 px center symbol) don't scale down proportionally. Added `compact` boolean to `Card` that hides the center symbol and bottom corner, showing only the top-left rank/suit at whatever fontSize the caller sets.
+- **Score overlay client-side point computation.** Basic rummy card values (A=1, 2–9=pip, 10/J/Q/K=10) are duplicated in the client to render per-card point badges and totals. Deliberately not shared — client display logic, not authoritative scoring.
+- **`myPlayerId` detection.** The server never sends "you are player X" directly. Client identifies itself by matching `pendingName` (stored when `create`/`join` is sent) against `lobby.players[].name` on first lobby message. Names are not guaranteed unique but work in practice for ≤6-player games.
+
 ## Status
 
 - [x] Plan finalized
 - [x] M1 complete
 - [x] M2 complete
-- [x] M3 complete (server side; browser verification at M4)
-- [ ] M4-M8 not started
+- [x] M3 complete
+- [x] M4 complete
+- [ ] M4.5 re-deal not started
+- [ ] M5-M8 not started
 
 ## Next action
 
-Start M4: build the React client. Scaffold `packages/client/src/` with `main.tsx`, `routes/Home.tsx` (create/join form), `routes/Room.tsx` (lobby + game shell), `store.ts` (Zustand — holds sessionId, publicState, privateState, roomCode), `net/ws.ts` (connect, send, reconnect). Render hand as a list of cards, discard pile top card, and a draw button. Wire all WS messages to the store. Goal: play one complete basic rummy hand across two browser tabs.
+Implement M4.5 re-deal: extend the `start` handler to accept `room.status === 'ended'` and re-initialize the engine (`createBasicGame`) while preserving cumulative `score` and `scoreSheet` on each `GamePlayer`. Then start M5: Gin variant (`packages/server/src/engine/variants/gin.ts`).

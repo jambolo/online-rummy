@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
-import type { C2S, S2C, Variant, PublicState } from '@online-rummy/shared';
+import type { C2S, Card, S2C, Variant, PublicState } from '@online-rummy/shared';
 import {
   createRoom, getRoom, getRoomBySession, deleteRoom,
   addPlayer, removePlayer, getPlayerBySession,
@@ -36,6 +36,7 @@ function send(ws: WebSocket, msg: S2C): void {
 }
 
 function sendError(ws: WebSocket, code: string, msg: string): void {
+  console.log(`[ws] error → client  code=${code}  msg=${msg}`);
   send(ws, { t: 'error', code, msg });
 }
 
@@ -80,7 +81,10 @@ function buildPublicState(room: Room, state: GameState): PublicState {
       id: p.id,
       name: p.name,
       handCount: p.hand.length,
-      melds: p.melds,
+      melds: p.melds.map(m => ({
+        ...m,
+        cards: m.cardIds.map(id => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined),
+      })),
       score: p.score,
       status: p.status,
     })),
@@ -141,7 +145,10 @@ function handleHandEnd(room: Room, state: GameState): void {
 
   const winner = state.players.find(p => p.hand.length === 0 && p.status === 'active');
   if (winner !== undefined) {
-    broadcast(room, { t: 'event', kind: 'wonHand', playerId: winner.id });
+    // Include all players' final hands so clients can show full score breakdown.
+    const finalHands: Record<string, Card[]> = {};
+    for (const p of state.players) finalHands[p.id] = p.hand;
+    broadcast(room, { t: 'event', kind: 'wonHand', playerId: winner.id, data: { finalHands } });
   }
 
   if (basicVariant.isGameOver(state.scoreSheet)) {
@@ -437,10 +444,12 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
   httpServer.on('upgrade', (req, socket, head) => {
     const origin = req.headers.origin ?? '';
     if (!allowedOrigins.has(origin)) {
+      console.log(`[ws] upgrade rejected  origin="${origin}"  url=${req.url ?? '/'}`);
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
+    console.log(`[ws] upgrade accepted  origin="${origin}"`);
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
@@ -488,10 +497,14 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
         sendError(ws, 'ERR_INVALID_JSON', 'Invalid JSON');
         return;
       }
+      const who = ctx.player ? `${ctx.player.name}(${ctx.room?.code ?? '?'})` : `anon`;
+      console.log(`[ws] recv  ${who}  t=${msg.t}`);
       handleMessage(ws, ctx, msg);
     });
 
     ws.on('close', () => {
+      const who = ctx.player ? `${ctx.player.name}(${ctx.room?.code ?? '?'})` : `anon`;
+      console.log(`[ws] close  ${who}`);
       clearInterval(rateLimiter);
       const set = ipConnections.get(ip);
       if (set !== undefined) {

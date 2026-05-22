@@ -26,13 +26,16 @@ pnpm --filter @online-rummy/server exec vitest run --coverage
 
 # Type-check without emitting
 pnpm --filter @online-rummy/server exec tsc --noEmit
+pnpm --filter @online-rummy/client exec tsc --noEmit
 
 # Start server (after build)
 cd packages/server && node dist/index.js
 # Required env vars: SESSION_SECRET (≥32 chars), ALLOWED_ORIGINS (comma-separated)
+# Example (dev): SESSION_SECRET="dev-secret-32-chars-minimum-here" ALLOWED_ORIGINS="http://localhost:5173" node packages/server/dist/index.js
 
-# Client dev server
+# Client dev server (connects directly to server on :8080)
 pnpm --filter @online-rummy/client dev
+# Optional: VITE_WS_URL=ws://localhost:8080 (default when env var absent)
 ```
 
 ## Architecture
@@ -77,7 +80,32 @@ The `VariantEngine` interface is the extension point for Gin and 500 Rum. Each v
 
 ### `packages/client`
 
-React 18 + Vite + Zustand + dnd-kit. Not yet implemented (M4+).
+React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
+
+| File / dir | Purpose |
+| --- | --- |
+| `src/net/ws.ts` | `connect(url, callbacks)`, `send(msg)`, `disconnect()`. Epoch counter prevents stale socket events from React StrictMode double-mount. |
+| `src/store.ts` | Zustand store — all app state. `handleMessage(S2C)` is the single entry point for server messages. `cardCache` holds Card objects by id so melded cards (removed from hand) can still be rendered. |
+| `src/routes/Home.tsx` | Create/join forms. Shows error banner for pre-join errors. |
+| `src/routes/Room.tsx` | Lobby view (while `publicState === null`) or game view. Contains `ScoreOverlay` (hand-end modal with per-player card breakdown). |
+| `src/components/Card.tsx` | Playing card. `compact` prop hides center symbol and bottom corner for small meld-zone cards. Always sets `textAlign: left` to override inherited centering from Table wrappers. |
+| `src/components/Hand.tsx` | dnd-kit sortable hand. `PointerSensor` with `distance: 6` activation so taps toggle selection without triggering drag. |
+| `src/components/Table.tsx` | Stock pile + discard top. Clickable on draw phase. |
+| `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state (populated by server) — no client-side cache needed for opponent melds. |
+| `src/components/ActionBar.tsx` | Phase-aware action buttons. Shows current phase name and whose turn it is. |
+| `src/components/Chat.tsx` | Chat message list + send form. |
+
+**Selector rule:** never pass an object literal to `useAppStore` — it creates a new ref every render and causes an infinite loop with React 18's `useSyncExternalStore`. Use one hook call per value.
+
+**WS URL:** defaults to `ws://${hostname}:8080`. Override with `VITE_WS_URL` env var. No Vite proxy — client connects directly to the server port; `ALLOWED_ORIGINS` on the server permits the Vite dev origin.
+
+## Docs
+
+| File | Purpose |
+| --- | --- |
+| `docs/rules.md` | Canonical game rules for all variants, with section IDs used in code comments |
+| `docs/plan.md` | Architecture decisions, house rule picks, milestone scope, open items |
+| `docs/client-server-protocol.md` | Complete WS protocol reference for client developers — all C2S/S2C messages, error codes, session management, turn flow examples |
 
 ## Key constraints
 
@@ -94,8 +122,9 @@ React 18 + Vite + Zustand + dnd-kit. Not yet implemented (M4+).
 | --- | --- | --- |
 | M1 | Done | shared types, engine (deck/meld/basic variant), scripted-player, tests |
 | M2 | Done | WS server, room create/join, lobby, in-memory registry |
-| M3 | Done (server) | Wire engine to WS; 2-browser basic rummy |
-| M4 | Not started | Client: hand fan, drag-drop, discard, meld zone, chat |
+| M3 | Done | Wire engine to WS; 2-browser basic rummy |
+| M4 | Done | React client: hand fan, drag-drop, discard, meld zone, chat, score overlay |
+| M4.5 | Not started | Re-deal (multi-hand game within same room) |
 | M5 | Not started | Gin variant |
 | M6 | Not started | 500 Rum variant |
 | M7 | Not started | Deploy, structured logs, metrics |

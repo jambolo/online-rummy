@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { codecovVitePlugin } from "@codecov/vite-plugin";
+import path from "node:path";
 
 export default defineConfig({
   plugins: [
@@ -11,4 +12,10 @@ export default defineConfig({
       uploadToken: process.env.CODECOV_TOKEN,
     }),
   ],
+  resolve: {
+    alias: {
+      // Point directly to source so shared changes don't require a rebuild.
+      "@online-rummy/shared": path.resolve(__dirname, "../shared/src/index.ts"),
+    },
+  },
 });

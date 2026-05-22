@@ -53,11 +53,14 @@ These types appear in multiple messages.
   "id": "string",
   "kind": "set"|"run",
   "cardIds": ["string", ...],
-  "ownerId": "string"
+  "ownerId": "string",
+  "cards": [Card, ...]
 }
 ```
 
-`id` is a server-assigned UUID for the meld. `ownerId` is the player ID of whoever placed the meld. `cardIds` contains the card IDs that make up the meld; this list grows when other players lay off cards onto it.
+`id` is a server-assigned UUID for the meld. `ownerId` is the player ID of whoever placed the meld. `cardIds` contains the card IDs that make up the meld; this list grows when other players lay off cards onto it. For runs, `cardIds` is always sorted in ascending rank order.
+
+`cards` contains the full `Card` objects corresponding to `cardIds` in the same order. This allows clients to render meld cards without maintaining a private card cache. `cards` is always present in melds sent within `PublicState`.
 
 ### `PublicPlayer`
 
@@ -270,7 +273,7 @@ Multiple layoffs are allowed per turn; they are independent of the one-meld-per-
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 | `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
-| `ERR_INVALID_LAYOFF` | Adding the card would make the target meld invalid |
+| `ERR_INVALID_LAYOFF` | Adding the card would make the target meld invalid. `msg` contains a specific reason (e.g. wrong suit, rank out of range, set full) |
 
 ---
 
@@ -290,7 +293,7 @@ If discarding empties your hand, the hand ends immediately.
 
 **Hand-end response (hand emptied):** Three messages are sent to all connected players:
 
-1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner
+1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner; `data.finalHands` contains every player's remaining cards
 2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
 3. A [`state`](#state--game-state) with both `public` and each player's own `private` hand
 
@@ -382,18 +385,22 @@ When you receive a `state` message without `private`, your hand has not changed.
 { "t": "event", "kind": "string", "playerId": "string", "data": any }
 ```
 
-Broadcast to all players when a notable game event occurs. `playerId` identifies who triggered the event. `data` is optional and currently unused for all events.
+Broadcast to all players when a notable game event occurs. `playerId` identifies who triggered the event. `data` is optional; its shape depends on `kind` and is described below.
 
-| `kind` | Sent when |
-| --- | --- |
-| `gameStarted` | The host triggered game start |
-| `wonHand` | A player emptied their hand and won the hand |
-| `forfeit` | A player disconnected during play |
-| `gameOver` | The game-ending score threshold has been reached |
-| `drew` | Reserved — defined but not yet emitted |
-| `melded` | Reserved — defined but not yet emitted |
-| `laidOff` | Reserved — defined but not yet emitted |
-| `discarded` | Reserved — defined but not yet emitted |
+| `kind` | Sent when | `data` |
+| --- | --- | --- |
+| `gameStarted` | The host triggered game start | absent |
+| `wonHand` | A player emptied their hand and won the hand | `{ "finalHands": { "<playerId>": [Card, ...], ... } }` |
+| `forfeit` | A player disconnected during play | absent |
+| `gameOver` | The game-ending score threshold has been reached | absent |
+| `drew` | Reserved — defined but not yet emitted | — |
+| `melded` | Reserved — defined but not yet emitted | — |
+| `laidOff` | Reserved — defined but not yet emitted | — |
+| `discarded` | Reserved — defined but not yet emitted | — |
+
+#### `wonHand` data
+
+`finalHands` maps every player ID to that player's remaining unmelded cards at the moment the hand ended. The winner's entry is an empty array. Clients use this to display the per-player score breakdown (sum of unmelded card point values) in the hand-end overlay.
 
 ---
 
