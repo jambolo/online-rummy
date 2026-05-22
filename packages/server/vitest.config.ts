@@ -9,9 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/engine/**', 'src/rng.ts'],
+      reporter: ['text', 'lcov'],
       thresholds: { lines: 90, functions: 90, branches: 85 },
     },
   },
