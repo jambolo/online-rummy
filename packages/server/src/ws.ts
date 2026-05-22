@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
-import type { C2S, S2C, Variant } from '@online-rummy/shared';
+import type { C2S, S2C, Variant, PublicState } from '@online-rummy/shared';
 import {
   createRoom, getRoom, getRoomBySession, deleteRoom,
   addPlayer, removePlayer, getPlayerBySession,
@@ -9,6 +9,9 @@ import {
   type Player, type Room,
 } from './room.js';
 import { makeSessionId, signSessionId, verifySessionId } from './session.js';
+import { cryptoRNG } from './rng.js';
+import { basicVariant, createBasicGame, applyDraw, applyMeld, applyLayoff, applyDiscard } from './engine/variants/basic.js';
+import type { GameState, GamePlayer } from './engine/types.js';
 
 // --- Module-level state (single-process singleton) ---
 let _secret = '';
@@ -57,6 +60,104 @@ function broadcastLobby(room: Room): void {
       });
     }
   }
+}
+
+// --- Engine helpers ---
+
+function engineError(err: unknown): { code: string; msg: string } {
+  if (err instanceof Error) {
+    const code = err.message.split(':')[0] ?? 'ERR_UNKNOWN';
+    return { code, msg: err.message };
+  }
+  return { code: 'ERR_UNKNOWN', msg: 'Unknown error' };
+}
+
+function buildPublicState(room: Room, state: GameState): PublicState {
+  return {
+    roomId: room.code,
+    variant: state.variant,
+    players: state.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      handCount: p.hand.length,
+      melds: p.melds,
+      score: p.score,
+      status: p.status,
+    })),
+    turnPlayerId: state.turnPlayerId,
+    phase: state.phase,
+    discardTop: state.discardPile[state.discardPile.length - 1] ?? null,
+    discardPileSize: state.discardPile.length,
+    stockSize: state.stock.length,
+  };
+}
+
+// Send public state to all; private hand only to actingPlayerId.
+function broadcastState(room: Room, state: GameState, actingPlayerId: string): void {
+  const pub = buildPublicState(room, state);
+  for (const p of room.players) {
+    if (p.socket === null) continue;
+    if (p.id === actingPlayerId) {
+      const gp = state.players.find(sp => sp.id === p.id);
+      send(p.socket, { t: 'state', public: pub, private: { hand: gp?.hand ?? [] } });
+    } else {
+      send(p.socket, { t: 'state', public: pub });
+    }
+  }
+}
+
+// Send public state + each player's own private hand to every connected player.
+function broadcastStateAll(room: Room, state: GameState): void {
+  const pub = buildPublicState(room, state);
+  for (const p of room.players) {
+    if (p.socket === null) continue;
+    const gp = state.players.find(sp => sp.id === p.id);
+    send(p.socket, { t: 'state', public: pub, private: { hand: gp?.hand ?? [] } });
+  }
+}
+
+// Next active player in turn order after afterId (wraps around).
+function nextActivePlayer(state: GameState, afterId: string): GamePlayer | undefined {
+  const idx = state.players.findIndex(p => p.id === afterId);
+  if (idx === -1) return undefined;
+  const total = state.players.length;
+  for (let i = 1; i < total; i++) {
+    const candidate = state.players[(idx + i) % total];
+    if (candidate?.status === 'active') return candidate;
+  }
+  return undefined;
+}
+
+// Score completed hand, update cumulative scores, broadcast events + final state.
+function handleHandEnd(room: Room, state: GameState): void {
+  const scores = basicVariant.scoreHand(state);
+  for (const gp of state.players) {
+    const pts = scores.get(gp.id) ?? 0;
+    gp.score += pts;
+    const sheet = state.scoreSheet.get(gp.id) ?? [];
+    sheet.push(pts);
+    state.scoreSheet.set(gp.id, sheet);
+  }
+
+  const winner = state.players.find(p => p.hand.length === 0 && p.status === 'active');
+  if (winner !== undefined) {
+    broadcast(room, { t: 'event', kind: 'wonHand', playerId: winner.id });
+  }
+
+  if (basicVariant.isGameOver(state.scoreSheet)) {
+    room.status = 'ended';
+    const gameWinner = state.players.length > 0
+      ? state.players.reduce((a, b) => (b.score > a.score ? b : a))
+      : undefined;
+    if (gameWinner !== undefined) {
+      broadcast(room, { t: 'event', kind: 'gameOver', playerId: gameWinner.id });
+    }
+  } else {
+    // Hand done but game not over; host must trigger a new hand.
+    room.status = 'ended';
+  }
+
+  broadcastStateAll(room, state);
 }
 
 function getIp(req: IncomingMessage): string {
@@ -169,8 +270,18 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         sendError(ws, 'ERR_NOT_ENOUGH_PLAYERS', `Need at least ${min} players`);
         return;
       }
+      if (room.variant !== 'basic') {
+        sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Only basic variant implemented');
+        return;
+      }
       room.status = 'playing';
+      room.gameState = createBasicGame(
+        room.code,
+        room.players.map(p => ({ id: p.id, name: p.name })),
+        cryptoRNG,
+      );
       broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
+      broadcastStateAll(room, room.gameState);
       break;
     }
 
@@ -183,17 +294,72 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       break;
     }
 
-    // Game actions — available in M3 when engine is wired.
-    case 'draw':
+    case 'draw': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      try {
+        applyDraw(room.gameState, player.id, msg.from);
+        broadcastState(room, room.gameState, player.id);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    case 'meld': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      try {
+        applyMeld(room.gameState, player.id, msg.cardIds);
+        broadcastState(room, room.gameState, player.id);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    case 'layoff': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      try {
+        applyLayoff(room.gameState, player.id, msg.meldId, msg.cardId);
+        broadcastState(room, room.gameState, player.id);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    case 'discard': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      try {
+        const result = applyDiscard(room.gameState, player.id, msg.cardId);
+        if (result.handEnded) {
+          handleHandEnd(room, room.gameState);
+        } else {
+          broadcastState(room, room.gameState, player.id);
+        }
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    // 500 Rum and Gin actions — not implemented until M5/M6.
     case 'drawFromPile':
-    case 'meld':
-    case 'layoff':
-    case 'discard':
     case 'knock': {
       const { room } = ctx;
       if (room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
-      if (room.status !== 'playing') { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
-      sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Game actions wired in M3');
+      sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Action not available for this variant');
       break;
     }
   }
@@ -220,13 +386,44 @@ function handleDisconnect(ws: WebSocket): void {
     maybeStartIdleTimer(room);
   } else if (room.status === 'playing') {
     player.status = 'forfeited';
+
+    // Sync engine game state for the forfeit.
+    const gs = room.gameState;
+    if (gs !== null) {
+      const gp = gs.players.find(p => p.id === player.id);
+      if (gp !== undefined) {
+        gp.status = 'forfeited';
+        // rules.md disconnect: hand + melds removed from play, NOT returned to stock.
+        gp.hand = [];
+        gp.melds = [];
+      }
+
+      // If it was the forfeiting player's turn, advance to next active player.
+      if (gs.turnPlayerId === player.id && gs.phase !== 'ended') {
+        const next = nextActivePlayer(gs, player.id);
+        if (next !== undefined) {
+          gs.turnPlayerId = next.id;
+          gs.phase = 'draw';
+          gs.drewFromDiscardId = null;
+          gs.meldedThisTurn = false;
+        } else {
+          gs.phase = 'ended';
+        }
+      }
+    }
+
     broadcast(room, { t: 'event', kind: 'forfeit', playerId: player.id });
+
     const still = activePlayers(room);
     if (still.length <= 1) {
       room.status = 'ended';
+      if (gs !== null) gs.phase = 'ended';
       const winner = still[0];
       if (winner !== undefined) broadcast(room, { t: 'event', kind: 'gameOver', playerId: winner.id });
+    } else if (gs !== null) {
+      broadcastStateAll(room, gs);
     }
+
     maybeStartIdleTimer(room);
   }
 }

@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import type { PlayerId, Variant } from '@online-rummy/shared';
+import type { GameState } from './engine/types.js';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
@@ -20,6 +21,7 @@ export type Room = {
   hostId: PlayerId;
   players: Player[];
   status: RoomStatus;
+  gameState: GameState | null;
 };
 
 const rooms = new Map<string, Room>();
@@ -35,7 +37,7 @@ function generateCode(): string {
 
 export function createRoom(variant: Variant, host: Player): Room {
   const code = generateCode();
-  const room: Room = { code, variant, hostId: host.id, players: [host], status: 'lobby' };
+  const room: Room = { code, variant, hostId: host.id, players: [host], status: 'lobby', gameState: null };
   rooms.set(code, room);
   sessionIndex.set(host.sessionId, code);
   return room;

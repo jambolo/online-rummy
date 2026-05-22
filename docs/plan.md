@@ -299,14 +299,25 @@ v1 = M1-M7. M8 after.
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
 - Hosting decision needed before M7.
 - 500 Rum ace high/low declaration UX: when player first melds an ace, prompt high or low for the hand. Lock for rest of hand. Design at M6.
+- Re-deal (multi-hand game) not yet implemented. After a hand ends (game not over), `room.status` becomes `'ended'`. A future message type or re-use of `start` must reset the engine for the next hand while preserving cumulative scores. Scope: M3.5 or early M4.
+
+## M3 implementation notes
+
+- `Room` now carries `gameState: GameState | null` — bridges the registry/session layer to the engine.
+- Two player representations must stay in sync on disconnect: `Room.Player.status` (for lobby/reconnect logic) and `GameState.GamePlayer.status` (for engine turn order). Disconnect handler updates both.
+- `broadcastStateAll` (game start, post-forfeit) sends private hand to every player. `broadcastState` (per-action) sends private only to the acting player — other players' hands are unchanged.
+- `start` handler guards `room.variant !== 'basic'` and returns `ERR_NOT_IMPLEMENTED` for gin/rum500 until M5/M6.
+- Engine errors use `ERR_X:detail` format; WS layer splits on `:` to extract the code prefix.
+- Browser verification of M3 deferred to M4 (no client yet).
 
 ## Status
 
 - [x] Plan finalized
 - [x] M1 complete
 - [x] M2 complete
-- [ ] M3-M8 not started
+- [x] M3 complete (server side; browser verification at M4)
+- [ ] M4-M8 not started
 
 ## Next action
 
-Start M3: wire `basicVariant` engine into WS message handlers. In `ws.ts`, replace `ERR_NOT_IMPLEMENTED` stubs with calls to `createBasicGame` (on `start`), `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` (on game actions). Broadcast `PublicState` to all + `PrivateState` to acting player after each action. Verify with two browser tabs.
+Start M4: build the React client. Scaffold `packages/client/src/` with `main.tsx`, `routes/Home.tsx` (create/join form), `routes/Room.tsx` (lobby + game shell), `store.ts` (Zustand — holds sessionId, publicState, privateState, roomCode), `net/ws.ts` (connect, send, reconnect). Render hand as a list of cards, discard pile top card, and a draw button. Wire all WS messages to the store. Goal: play one complete basic rummy hand across two browser tabs.
