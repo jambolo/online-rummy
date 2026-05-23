@@ -10,19 +10,21 @@ import type { GamePlayer, GameState, ScoreSheet, VariantEngine } from '../types.
 // House rule picks: plan.md "House rule picks (locked) > Basic Rummy"
 
 // rules.md A.1.2: deal counts per player count
-const DEAL_COUNTS: Record<number, number> = { 2: 10, 3: 7, 4: 7, 5: 6, 6: 6 };
+const DEAL_COUNTS: Record<number, number> = { 2: 10, 3: 7, 4: 7, 5: 6, 6: 6, 7: 10 };
 
 export const basicVariant: VariantEngine = {
   id: 'basic',
-  // rules.md A.1.1: 2-6 players (7P omitted from v1 scope per plan.md)
+  // rules.md A.1.1: 2-7 players (7P requires 2 combined decks per rules.md A.1.1)
   minPlayers: 2,
-  maxPlayers: 6,
-  // rules.md A.1.4: ace low (house rule pick: OFF). Round-the-corner: OFF.
+  maxPlayers: 7,
+  // rules.md A.1.4: ace low by default. Ace-either-end and round-the-corner are
+  // host-configurable house rules, both currently OFF.
   aceHigh: false,
   roundTheCorner: false,
 
   deal(playerCount: number, rng: RNG) {
-    const deck = buildShuffledDeck(rng, 1);
+    // rules.md A.1.1: 1 × 52 for 2-6 players, 2 × 52 combined for 7 players.
+    const deck = buildShuffledDeck(rng, playerCount === 7 ? 2 : 1);
     const count = DEAL_COUNTS[playerCount];
     if (count === undefined) throw new Error(`ERR_INVALID_PLAYER_COUNT:${playerCount}`);
 
@@ -46,12 +48,12 @@ export const basicVariant: VariantEngine = {
   },
 
   onDrawFromDiscard(state: GameState, _playerId: PlayerId, cardId: string): void {
-    // rules.md A.1.6 step 4 [PG-R]: record so canDiscard can forbid re-discarding it
+    // rules.md A.1.6 step 4: record so canDiscard can forbid re-discarding it
     state.drewFromDiscardId = cardId;
   },
 
   canDiscard(state: GameState, _playerId: PlayerId, cardId: string): boolean {
-    // rules.md A.1.6 step 4 [PG-R]: cannot discard same card drawn from discard this turn
+    // rules.md A.1.6 step 4: cannot discard same card drawn from discard this turn
     return state.drewFromDiscardId !== cardId;
   },
 
@@ -130,9 +132,10 @@ export function createBasicGame(
     discardPile: discard,
     cardRegistry,
     drewFromDiscardId: null,
-    meldedThisTurn: false,
     hasMeldedEver: new Map(players.map((p) => [p.id, false])),
     scoreSheet: new Map(players.map((p) => [p.id, []])),
+    mustMeldCardId: null,
+    meldedBy: new Map(),
   };
 }
 
@@ -180,7 +183,7 @@ function detectMeldKind(cards: Card[]): MeldKind {
   return allSameRank ? 'set' : 'run';
 }
 
-// rules.md A.1.6 step 2 [PG-R]: at most 1 meld per turn
+// rules.md A.1.6 step 2
 export function applyMeld(
   state: GameState,
   playerId: PlayerId,
@@ -188,9 +191,6 @@ export function applyMeld(
 ): void {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
-
-  // rules.md A.1.6 step 2 [PG-R]: only 1 meld per turn
-  if (state.meldedThisTurn) throw new Error('ERR_ALREADY_MELDED_THIS_TURN');
 
   const cards = cardIds.map((id) => {
     const c = lookupCard(state, id);
@@ -207,13 +207,13 @@ export function applyMeld(
     meld.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
   }
   player.melds.push(meld);
+  for (const id of cardIds) state.meldedBy.set(id, playerId);
 
-  state.meldedThisTurn = true;
   state.hasMeldedEver.set(playerId, true);
-  state.phase = 'discard'; // after melding, must discard
+  state.phase = 'meld';
 }
 
-// rules.md A.1.6 step 3 [WP]: lay off onto own or others' melds; must have ≥1 own prior meld
+// rules.md A.1.6 step 3
 export function applyLayoff(
   state: GameState,
   playerId: PlayerId,
@@ -222,9 +222,6 @@ export function applyLayoff(
 ): void {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
-
-  // rules.md A.1.6 step 3 [WP]: must have placed ≥1 own meld first
-  if (!(state.hasMeldedEver.get(playerId) ?? false)) throw new Error('ERR_NO_OWN_MELD');
 
   const card = lookupCard(state, cardId);
   if (!player.hand.find((c) => c.id === cardId)) throw new Error(`ERR_CARD_NOT_IN_HAND:${cardId}`);
@@ -269,6 +266,7 @@ export function applyLayoff(
 
   player.hand = player.hand.filter((c) => c.id !== cardId);
   targetMeld.cardIds.push(cardId);
+  state.meldedBy.set(cardId, playerId);
   // Sort runs by rank so the display order matches card sequence.
   if (targetMeld.kind === 'run') {
     targetMeld.cardIds.sort((a, b) => {
@@ -317,5 +315,4 @@ function advanceTurn(state: GameState): void {
   state.turnPlayerId = next.id;
   state.phase = 'draw';
   state.drewFromDiscardId = null;
-  state.meldedThisTurn = false;
 }

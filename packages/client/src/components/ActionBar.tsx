@@ -22,6 +22,9 @@ export default function ActionBar() {
   const isMyTurn = publicState.turnPlayerId === myPlayerId;
   const phase = publicState.phase;
   const sel = selectedCardIds;
+  const is500 = publicState.variant === "rum500";
+  const mustMeldCardId = publicState.mustMeldCardId;
+  const mustMeldBlock = isMyTurn && mustMeldCardId !== null;
 
   const myMeldsCount =
     publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
@@ -88,22 +91,41 @@ export default function ActionBar() {
       {/* ── Meld / discard phase ── */}
       {isMyTurn && (phase === "meld" || phase === "discard") && (
         <>
-          {/* Meld — need ≥2 cards, meld phase, basic allows 1 meld/turn */}
-          {phase === "meld" && sel.length >= 2 && (
-            <button className="primary" onClick={doMeld}>
-              Meld {sel.length} cards
-            </button>
+          {/* 500 Rum mustMeldCardId notice (rules.md A.4.4) */}
+          {mustMeldBlock && (
+            <span
+              style={{
+                fontSize: 12,
+                color: "#ffd166",
+                fontWeight: "bold",
+              }}
+            >
+              Must meld or lay off your dived card before discarding.
+            </span>
           )}
 
-          {/* Discard — need exactly 1 card */}
+          {/* Meld button: 500 Rum allows multiple melds per turn, basic only one */}
+          {(phase === "meld" || (is500 && phase === "discard")) &&
+            sel.length >= 2 && (
+              <button className="primary" onClick={doMeld}>
+                Meld {sel.length} cards
+              </button>
+            )}
+
+          {/* Discard — exactly 1 card; blocked in 500 Rum while a pile-dived card is unplaced */}
           {sel.length === 1 && (
-            <button className="danger" onClick={doDiscard}>
+            <button
+              className="danger"
+              onClick={doDiscard}
+              disabled={mustMeldBlock}
+              title={mustMeldBlock ? "Place the dived card first" : undefined}
+            >
               Discard selected
             </button>
           )}
 
           {/* Guidance when nothing selected */}
-          {sel.length === 0 && (
+          {sel.length === 0 && !mustMeldBlock && (
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
               {phase === "meld"
                 ? myMeldsCount === 0

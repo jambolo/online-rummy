@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Card } from '@online-rummy/shared';
 import { makeSeededRNG } from '../../rng.js';
 import { createBasicGame } from '../variants/basic.js';
+import { createRum500Game } from '../variants/rum500.js';
 import { runScript } from '../scripted-player.js';
 
 function c(rank: Card['rank'], suit: Card['suit'], id?: string): Card {
@@ -53,6 +54,77 @@ describe('runScript', () => {
     ]);
     expect(results[0]?.ok).toBe(false);
     expect(results[1]?.ok).toBe(true);
+  });
+
+  it('dispatches layoff action via runScript', () => {
+    const state = createBasicGame(
+      'room1',
+      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      makeSeededRNG(1),
+      0,
+    );
+    const setCards = [c('Q', 'C', 'q1'), c('Q', 'D', 'q2'), c('Q', 'H', 'q3')];
+    injectHand(state, 'p1', setCards);
+    state.players[1]!.melds.push({
+      id: 'opMeld',
+      kind: 'set',
+      cardIds: ['t1', 't2', 't3'],
+      ownerId: 'p2',
+    });
+    [c('5', 'C', 't1'), c('5', 'D', 't2'), c('5', 'H', 't3')].forEach((card) =>
+      state.cardRegistry.set(card.id, card),
+    );
+    const lo = c('5', 'S', 'lo');
+    injectHand(state, 'p1', [lo]);
+    const { results } = runScript(state, [
+      { t: 'draw', from: 'stock' },
+      { t: 'meld', cardIds: ['q1', 'q2', 'q3'] },
+      { t: 'layoff', meldId: 'opMeld', cardId: 'lo' },
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+  });
+
+  it('dispatches drawFromPile for rum500 variant', () => {
+    const state = createRum500Game(
+      'room1',
+      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      makeSeededRNG(1),
+      0,
+    );
+    const target = state.discardPile[0]!.id;
+    const { results } = runScript(state, [{ t: 'drawFromPile', cardId: target }]);
+    expect(results[0]?.ok).toBe(true);
+  });
+
+  it('drawFromPile against basic variant returns ERR_NOT_IMPLEMENTED', () => {
+    const state = createBasicGame(
+      'room1',
+      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      makeSeededRNG(1),
+      0,
+    );
+    const { results } = runScript(state, [{ t: 'drawFromPile', cardId: 'whatever' }]);
+    expect(results[0]?.ok).toBe(false);
+    expect((results[0] as { error: string }).error).toContain('ERR_NOT_IMPLEMENTED');
+  });
+
+  it.each([
+    { t: 'chat' as const, text: 'hi' },
+    { t: 'knock' as const },
+    { t: 'create' as const, variant: 'basic' as const, name: 'X' },
+    { t: 'join' as const, roomCode: 'A', name: 'X' },
+    { t: 'start' as const },
+  ])('non-engine action $t is a no-op', (action) => {
+    const state = createBasicGame(
+      'room1',
+      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      makeSeededRNG(1),
+      0,
+    );
+    const phaseBefore = state.phase;
+    const { results } = runScript(state, [action]);
+    expect(results[0]?.ok).toBe(true);
+    expect(state.phase).toBe(phaseBefore);
   });
 
   it('golden path: p1 draws, melds a set, discards, p2 draws, discards', () => {

@@ -10,8 +10,47 @@ import {
 } from './room.js';
 import { makeSessionId, signSessionId, verifySessionId } from './session.js';
 import { cryptoRNG } from './rng.js';
-import { basicVariant, createBasicGame, applyDraw, applyMeld, applyLayoff, applyDiscard } from './engine/variants/basic.js';
+import * as basic from './engine/variants/basic.js';
+import * as rum500 from './engine/variants/rum500.js';
+import { cardPoints, score500MeldCard } from './engine/meld.js';
 import type { GameState, GamePlayer } from './engine/types.js';
+import type { VariantEngine } from './engine/types.js';
+
+type VariantFns = {
+  variant: VariantEngine;
+  createGame: typeof basic.createBasicGame;
+  applyDraw: typeof basic.applyDraw;
+  applyMeld: typeof basic.applyMeld;
+  applyLayoff: typeof basic.applyLayoff;
+  applyDiscard: typeof basic.applyDiscard;
+  applyDrawFromPile?: typeof rum500.applyDrawFromPile;
+};
+
+function variantFns(v: Variant): VariantFns {
+  switch (v) {
+    case 'basic':
+      return {
+        variant: basic.basicVariant,
+        createGame: basic.createBasicGame,
+        applyDraw: basic.applyDraw,
+        applyMeld: basic.applyMeld,
+        applyLayoff: basic.applyLayoff,
+        applyDiscard: basic.applyDiscard,
+      };
+    case 'rum500':
+      return {
+        variant: rum500.rum500Variant,
+        createGame: rum500.createRum500Game,
+        applyDraw: rum500.applyDraw,
+        applyMeld: rum500.applyMeld,
+        applyLayoff: rum500.applyLayoff,
+        applyDiscard: rum500.applyDiscard,
+        applyDrawFromPile: rum500.applyDrawFromPile,
+      };
+    case 'gin':
+      throw new Error('ERR_NOT_IMPLEMENTED:gin');
+  }
+}
 
 // --- Module-level state (single-process singleton) ---
 let _secret = '';
@@ -92,7 +131,9 @@ function buildPublicState(room: Room, state: GameState): PublicState {
     phase: state.phase,
     discardTop: state.discardPile[state.discardPile.length - 1] ?? null,
     discardPileSize: state.discardPile.length,
+    discardPile: [...state.discardPile],
     stockSize: state.stock.length,
+    mustMeldCardId: state.mustMeldCardId,
   };
 }
 
@@ -134,7 +175,8 @@ function nextActivePlayer(state: GameState, afterId: string): GamePlayer | undef
 
 // Score completed hand, update cumulative scores, broadcast events + final state.
 function handleHandEnd(room: Room, state: GameState): void {
-  const scores = basicVariant.scoreHand(state);
+  const fns = variantFns(room.variant);
+  const scores = fns.variant.scoreHand(state);
   for (const gp of state.players) {
     const pts = scores.get(gp.id) ?? 0;
     gp.score += pts;
@@ -145,14 +187,45 @@ function handleHandEnd(room: Room, state: GameState): void {
 
   const winner = state.players.find(p => p.hand.length === 0 && p.status === 'active');
   if (winner !== undefined) {
-    // Include all players' final hands so clients can show full score breakdown.
+    // Include all players' final hands + per-player meld credits so clients can show full
+    // score breakdown. meldCredits is keyed by *placer* (not meld owner) — matches
+    // rules.md A.4.6/A.4.7 layoff crediting; basic variant placer == owner. Each entry
+    // carries the variant-correct per-card points so the client doesn't need to know
+    // run-direction ace rules (500 Rum: ace=1 in A-2-3, =15 elsewhere).
     const finalHands: Record<string, Card[]> = {};
-    for (const p of state.players) finalHands[p.id] = p.hand;
-    broadcast(room, { t: 'event', kind: 'wonHand', playerId: winner.id, data: { finalHands } });
+    const meldCredits: Record<string, { card: Card; pts: number }[]> = {};
+    const handDeadwood: Record<string, number> = {};
+    for (const p of state.players) {
+      finalHands[p.id] = p.hand;
+      meldCredits[p.id] = [];
+      const aceVal = room.variant === 'rum500' ? 15 : 1;
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, aceVal), 0);
+    }
+    for (const p of state.players) {
+      for (const m of p.melds) {
+        const meldCards = m.cardIds
+          .map((id) => state.cardRegistry.get(id))
+          .filter((c): c is Card => c !== undefined);
+        for (const card of meldCards) {
+          const placer = state.meldedBy.get(card.id) ?? p.id;
+          const pts = room.variant === 'rum500'
+            ? score500MeldCard(card, meldCards)
+            : cardPoints(card, 1);
+          (meldCredits[placer] ??= []).push({ card, pts });
+        }
+      }
+    }
+    broadcast(room, {
+      t: 'event',
+      kind: 'wonHand',
+      playerId: winner.id,
+      data: { finalHands, meldCredits, handDeadwood },
+    });
   }
 
-  if (basicVariant.isGameOver(state.scoreSheet)) {
+  if (fns.variant.isGameOver(state.scoreSheet)) {
     room.status = 'ended';
+    // rules.md A.4.7: highest cumulative wins at crossover (handles multi-crossover for 500 Rum).
     const gameWinner = state.players.length > 0
       ? state.players.reduce((a, b) => (b.score > a.score ? b : a))
       : undefined;
@@ -271,10 +344,11 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       const { player, room } = ctx;
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.hostId !== player.id) { sendError(ws, 'ERR_NOT_HOST', 'Only the host can start'); return; }
-      if (room.variant !== 'basic') {
-        sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Only basic variant implemented');
+      if (room.variant === 'gin') {
+        sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Gin variant not yet implemented');
         return;
       }
+      const fns = variantFns(room.variant);
 
       if (room.status === 'lobby') {
         const { min } = variantLimits(room.variant);
@@ -283,7 +357,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           return;
         }
         room.status = 'playing';
-        room.gameState = createBasicGame(
+        room.gameState = fns.createGame(
           room.code,
           room.players.map(p => ({ id: p.id, name: p.name })),
           cryptoRNG,
@@ -312,7 +386,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           if (prevIdx !== -1) nextFirstIndex = (prevIdx + 1) % newPlayers.length;
         }
         room.status = 'playing';
-        const newState = createBasicGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
+        const newState = fns.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
         // Carry forward cumulative scores and score history.
         for (const gp of newState.players) {
           const prev = oldState?.players.find(op => op.id === gp.id);
@@ -345,7 +419,23 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
       try {
-        applyDraw(room.gameState, player.id, msg.from);
+        variantFns(room.variant).applyDraw(room.gameState, player.id, msg.from);
+        broadcastState(room, room.gameState, player.id);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    case 'drawFromPile': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      const fn = variantFns(room.variant).applyDrawFromPile;
+      if (fn === undefined) { sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Pile dive not available for this variant'); return; }
+      try {
+        fn(room.gameState, player.id, msg.cardId);
         broadcastState(room, room.gameState, player.id);
       } catch (err) {
         const { code, msg: m } = engineError(err);
@@ -359,7 +449,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
       try {
-        applyMeld(room.gameState, player.id, msg.cardIds);
+        variantFns(room.variant).applyMeld(room.gameState, player.id, msg.cardIds);
         broadcastState(room, room.gameState, player.id);
       } catch (err) {
         const { code, msg: m } = engineError(err);
@@ -373,7 +463,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
       try {
-        applyLayoff(room.gameState, player.id, msg.meldId, msg.cardId);
+        variantFns(room.variant).applyLayoff(room.gameState, player.id, msg.meldId, msg.cardId);
         broadcastState(room, room.gameState, player.id);
       } catch (err) {
         const { code, msg: m } = engineError(err);
@@ -387,7 +477,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
       try {
-        const result = applyDiscard(room.gameState, player.id, msg.cardId);
+        const result = variantFns(room.variant).applyDiscard(room.gameState, player.id, msg.cardId);
         if (result.handEnded) {
           handleHandEnd(room, room.gameState);
         } else {
@@ -400,8 +490,6 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       break;
     }
 
-    // 500 Rum and Gin actions — not implemented until M5/M6.
-    case 'drawFromPile':
     case 'knock': {
       const { room } = ctx;
       if (room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
@@ -451,7 +539,6 @@ function handleDisconnect(ws: WebSocket): void {
           gs.turnPlayerId = next.id;
           gs.phase = 'draw';
           gs.drewFromDiscardId = null;
-          gs.meldedThisTurn = false;
         } else {
           gs.phase = 'ended';
         }

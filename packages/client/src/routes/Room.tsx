@@ -158,16 +158,20 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   );
 }
 
-// Game score overlay shown when hand ends
-// Basic rummy card point values (rules.md A.1.8)
-const RANK_PTS: Record<Rank, number> = {
+// Card point values per variant. Basic: rules.md A.1.8. 500 Rum: rules.md A.4.2 (ace in
+// hand always 15 per locked house rule simplification).
+const RANK_PTS_BASIC: Record<Rank, number> = {
   A: 1, "2": 2, "3": 3, "4": 4, "5": 5,
   "6": 6, "7": 7, "8": 8, "9": 9,
   "10": 10, J: 10, Q: 10, K: 10,
 };
-function cardPts(c: Card): number { return RANK_PTS[c.rank]; }
-function handPts(cards: Card[]): number {
-  return cards.reduce((s, c) => s + cardPts(c), 0);
+function cardPtsBasic(c: Card): number { return RANK_PTS_BASIC[c.rank]; }
+function cardPts500(c: Card): number {
+  if (c.rank === "A") return 15;
+  return RANK_PTS_BASIC[c.rank];
+}
+function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
+  return cards.reduce((s, c) => s + ptsFn(c), 0);
 }
 const SUIT_ORDER: Record<string, number> = { S: 3, H: 2, D: 1, C: 0 };
 // pointsFor: variant-specific scoring value (e.g. Ace=1 basic, Ace=15 500rum)
@@ -189,6 +193,8 @@ function ScoreOverlay() {
   const hostId = useAppStore((s) => s.hostId);
   const prevScores = useAppStore((s) => s.prevScores);
   const finalHands = useAppStore((s) => s.finalHands);
+  const meldCredits = useAppStore((s) => s.meldCredits);
+  const handDeadwood = useAppStore((s) => s.handDeadwood);
   const isGameOver = useAppStore((s) => s.isGameOver);
   const send = useAppStore((s) => s.send);
 
@@ -196,6 +202,9 @@ function ScoreOverlay() {
 
   const isHost = myPlayerId === hostId;
   const sorted = [...publicState.players].sort((a, b) => b.score - a.score);
+  const is500 = publicState.variant === "rum500";
+  const cardPts = is500 ? cardPts500 : cardPtsBasic;
+  const gameTarget = is500 ? 500 : 100;
 
   return (
     <div
@@ -229,7 +238,9 @@ function ScoreOverlay() {
             marginBottom: 20,
           }}
         >
-          {isGameOver ? "A player reached 100 pts" : "Game target: 100 pts"}
+          {isGameOver
+            ? `A player reached ${gameTarget} pts`
+            : `Game target: ${gameTarget} pts`}
         </div>
 
         {sorted.map((p, i) => {
@@ -237,7 +248,7 @@ function ScoreOverlay() {
           const delta = p.score - prev;
           const isWinner = i === 0;
           const playerCards = sortCardsDesc(finalHands[p.id] ?? [], cardPts);
-          const playerCardPts = handPts(playerCards);
+          const playerCardPts = handDeadwood[p.id] ?? handPts(playerCards, cardPts);
 
           return (
             <div
@@ -265,11 +276,20 @@ function ScoreOverlay() {
                 <span style={{ display: "flex", gap: 16 }}>
                   <span
                     style={{
-                      color: delta > 0 ? "#7fff7f" : "rgba(255,255,255,0.4)",
+                      color:
+                        delta > 0
+                          ? "#7fff7f"
+                          : delta < 0
+                            ? "#ff7f7f"
+                            : "rgba(255,255,255,0.4)",
                       fontSize: 13,
                     }}
                   >
-                    {delta > 0 ? `+${delta}` : "—"}
+                    {delta > 0
+                      ? `+${delta}`
+                      : delta < 0
+                        ? `${delta}`
+                        : "—"}
                   </span>
                   <span style={{ minWidth: 52, textAlign: "right" }}>
                     {p.score} pts
@@ -277,8 +297,8 @@ function ScoreOverlay() {
                 </span>
               </div>
 
-              {/* Score explanation */}
-              {isWinner && delta > 0 && (
+              {/* Score explanation — basic only; 500 Rum delta covers many sources */}
+              {!is500 && isWinner && delta > 0 && (
                 <div
                   style={{
                     fontSize: 11,
@@ -290,6 +310,54 @@ function ScoreOverlay() {
                 </div>
               )}
 
+              {/* Melded cards credited to this player (rules.md A.4.6 — layoffs credit
+                  the placer, not the meld owner). Shown for all variants; basic uses
+                  same placer == owner. Server pre-computes per-card pts (500 Rum ace
+                  varies by run direction). */}
+              {(() => {
+                const credited = [...(meldCredits[p.id] ?? [])].sort(
+                  (a, b) => b.pts - a.pts,
+                );
+                if (credited.length === 0) return null;
+                const meldedPts = credited.reduce((s, x) => s + x.pts, 0);
+                return (
+                  <div style={{ marginTop: 6 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.5)",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {p.id === myPlayerId ? "Your" : `${p.name}'s`} melded cards (+{meldedPts} pts):
+                    </div>
+                    <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                      {credited.map(({ card, pts }) => (
+                        <div key={card.id} style={{ position: "relative" }}>
+                          <CardComponent
+                            card={card}
+                            compact
+                            style={{ width: 36, height: 50, fontSize: 10 }}
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: 2,
+                              right: 3,
+                              fontSize: 9,
+                              color: "#2a7a2a",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            +{pts}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Unmelded cards breakdown — visible for all players */}
               {playerCards.length > 0 && (
                 <div style={{ marginTop: 6 }}>
@@ -300,7 +368,7 @@ function ScoreOverlay() {
                       marginBottom: 4,
                     }}
                   >
-                    {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({playerCardPts} pts):
+                    {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
                   </div>
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                     {playerCards.map((c) => (

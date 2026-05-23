@@ -28,6 +28,8 @@ Compiled from **primary authoritative sources** (Bicycle Cards + Pagat) and **se
 
 **Conflict resolution policy:** when authoritative primaries disagree with secondaries, use primaries, but note variation. When primaries disagree with each other, see the Inconsistencies section.
 
+**Terminology — "house rule":** in this document, any rule, value, or option flagged *(house rule)* is **host-configurable** — the game host may enable or disable it when creating a room. House rules are not the document author's editorial picks; they are non-canonical variants that real-world play groups commonly adopt. The default behavior (when a house rule is disabled) is whatever the surrounding standard rule specifies.
+
 ---
 
 ## A.1 Basic Rummy (a.k.a. Rum)
@@ -37,7 +39,7 @@ Compiled from **primary authoritative sources** (Bicycle Cards + Pagat) and **se
 | Param | Value |
 | --- | --- |
 | Players | 2-7 |
-| Deck | 1 x 52-card pack; 2 decks for 7 players |
+| Deck | 1 × 52-card pack for 2-6 players; **2 × 52-card packs combined into a single deck for 7 players** |
 | Jokers | Not used in basic rummy |
 
 ### A.1.2 Deal
@@ -53,6 +55,8 @@ Compiled from **primary authoritative sources** (Bicycle Cards + Pagat) and **se
 
 Dealer rotation: random first dealer; alternates if 2P, clockwise otherwise.
 
+**First player to act**: the player to the dealer's **left** (clockwise from dealer); the dealer acts last each turn cycle `[BIC-R, PG-R]`. In 2P, the non-dealer goes first.
+
 Stock + discard: remaining cards face-down = stock; top card flipped face-up = upcard / discard pile start.
 
 ### A.1.3 Objective
@@ -63,8 +67,9 @@ Be first to dispose of all cards by forming **melds** (sets + runs), laying off,
 
 `K (high), Q, J, 10, 9, 8, 7, 6, 5, 4, 3, 2, A` -- ace low by default; A-2-3 valid, Q-K-A invalid.
 
-Ace-high *(house rule)*: ace may rank either high or low `[BIC-R]`.
-Round-the-corner *(house rule)*: K-A-2 is legal.
+**Ace-either-end** *(house rule)* `[BIC-R]`: ace may rank as either high or low in a run, so **both** `A-2-3` and `Q-K-A` are valid. `K-A-2` is **still invalid** under this rule alone — that requires the separate round-the-corner house rule.
+
+**Round-the-corner** *(house rule)*: `K-A-2` is legal (ace wraps the deck).
 
 ### A.1.5 Melds
 
@@ -74,17 +79,19 @@ Round-the-corner *(house rule)*: K-A-2 is legal.
 ### A.1.6 Turn
 
 1. Draw 1: top of stock OR top of discard pile.
-2. (Optional) Meld. One meld per turn `[PG-R]` *(house rule)*.
-3. (Optional) Lay off cards onto own or others' existing melds. Player must have placed at least one meld before laying off `[WP]` *(house rule)*.
-4. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn `[PG-R]` *(house rule)*.
+2. (Optional) Meld. A player may place any number of melds per turn.
+   - **Maximum one meld per turn** *(house rule)* `[PG-R]`: when enabled, the player may place at most one meld this turn.
+3. (Optional) Lay off cards onto own or others' existing melds.
+   - **Layoff requires prior meld** *(house rule)* `[WP]`: when enabled, the player may only lay off if they have already placed at least one of their own melds (on any earlier turn, or earlier in the current turn).
+4. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn.
 
 ### A.1.7 Going out + Rummy bonus
 
 Going out = dispose of all cards via meld/lay-off/final discard. Play ceases immediately.
 
-**Going Rummy** (no prior melding or laying off before going out in one turn): every other player pays double.
+**Going Rummy** (going out in a single turn with no prior melding or laying off): each opponent's unmelded card point total (the amount the winner would normally collect from them; see A.1.8) is **doubled** before being credited to the winner.
 
-Variant: winner receives flat **+10 bonus** instead of doubling `[PG-R]` *(house rule)*.
+**Flat +10 bonus** *(house rule)* `[PG-R]`: when enabled, the going-rummy bonus is a flat **+10 points** added to the winner's normal score instead of doubling each opponent's contribution.
 
 ### A.1.8 Scoring
 
@@ -92,15 +99,13 @@ Card values:
 
 | Card | Points |
 | --- | --- |
-| Ace | 1 (or 11 in high-ace and round-the-corner variants) |
+| Ace | 1 (or 11 in ace-either-end and round-the-corner variants) |
 | 2-10 | face value |
 | J, Q, K | 10 |
 
-5/15 variant *(house rule, source unknown)*: 2-10 score as 5, Ace scores as 15 in ace-high and round-the-corner variants.
+Winner score = sum of opponents' unmelded card point values.
 
-Winner = sum of opponents' unmelded card point values. Unmelded Ace scores 11 in ace-high and round-the-corner variants.
-
-End-of-game: predetermined cumulative target (commonly 100 or 300) or fixed number of hands `[RRB]`. WP gives no fixed threshold.
+**End-of-game**: first player to reach a cumulative score of **100 points** wins the game.
 
 ---
 
@@ -120,11 +125,17 @@ End-of-game: predetermined cumulative target (commonly 100 or 300) or fixed numb
 - Set: 3 or 4 same rank.
 - Ace low only (A-2-3 valid; A-K-Q invalid).
 
-### A.2.3 Knock
+### A.2.3 Turn
+
+1. Draw 1: top of stock OR top of discard pile.
+2. (Optional) Knock before discarding — see A.2.4.
+3. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn.
+
+### A.2.4 Knock
 
 Knock allowed when deadwood ≤ 10 points.
 
-### A.2.4 Card values
+### A.2.5 Card values
 
 | Card | Points |
 | --- | --- |
@@ -132,7 +143,7 @@ Knock allowed when deadwood ≤ 10 points.
 | 2-10 | face value |
 | J, Q, K | 10 |
 
-### A.2.5 Bonuses
+### A.2.6 Bonuses
 
 | Bonus | Value |
 | --- | --- |
@@ -146,7 +157,7 @@ Knock allowed when deadwood ≤ 10 points.
 
 Gin bonus variant *(house rule)*: **25 points** + opponent's unmatched count `[GR]`.
 
-### A.2.6 Game end
+### A.2.7 Game end
 
 First player to cumulative ≥ 100 points wins; add game bonus + box bonuses.
 
@@ -172,20 +183,29 @@ Deck: 1 x 52.
 | 2-10 | face value |
 | J, Q, K | 10 |
 
-### A.3.3 Knock
+### A.3.3 Turn
+
+1. Draw 1: top of stock OR top of discard pile.
+2. Knock or discard 1. If you drew the top discard, you may NOT discard that same card on the same turn. Knock may be taken before discarding — see A.3.4.
+
+Hands stay concealed during play. There is no melding or laying off on the table; all scoring is computed from deadwood revealed at knock or hand end.
+
+### A.3.4 Knock
 
 Any player may knock before discarding, on any turn including their first. Knocker discards face down.
 
-### A.3.4 Scoring
+### A.3.5 Scoring
 
 - Lowest deadwood count wins.
 - Tie: tying player wins instead of knocker. Variant: knocker neither pays nor receives; non-knocker ties split winnings `[PG-K]` *(house rule)*.
 - Penalty if knocker not lowest: 10 points + difference to lowest.
 - **Rummy bonus** (going out with zero deadwood): each opponent pays their deadwood value + 25 points.
 
-### A.3.5 End
+### A.3.6 End
 
 Hand ends on knock or going out (laying all cards down on final turn without discard).
+
+> **TODO** — primary sources `[BIC-K]` and `[PG-K]` need re-verification for the relationship between A.3.4 (knock with face-down discard) and A.3.6 (going out without discard): are both legitimate end conditions in standard knock rummy, and does "going out" with zero deadwood differ from the A.3.5 Rummy bonus? Compiled text here implies both end conditions coexist, but primaries have not been re-checked since this file was first synthesized.
 
 ---
 
@@ -206,18 +226,25 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 | --- | --- |
 | 2-10 | face value |
 | J, Q, K | 10 |
-| Ace | 15 (high), or 1 when melded as A-2-3 sequence. Alternatively, Aces always 15 pts (high or low) `[RP]` *(house rule)* |
+| Ace | 15, or 1 when melded as A-2-3 sequence. |
+
+Aces-score-15 variant *(house rule)*: Aces always 15 pts `[RP]`
+low-5 variant *(house rule)*: 2-9 and ace in A-2-3 meld score 5, instead of face value and 1, respectively.
 
 ### A.4.3 Melds
 
 - Group: 3 or 4 same rank. In 2-deck play: different suits required `[PG-5]` *(house rule)*.
 - Sequence: 3+ consecutive same suit.
-- No round-the-corner: A-K-Q valid, A-2-3 valid, K-A-2 invalid.
-- Ace high OR low, **not both at once**.
+- No round-the-corner: `Q-K-A` valid, `A-2-3` valid, `K-A-2` invalid.
 
 ### A.4.4 Drawing from discard pile
 
-May take any card from anywhere in discard pile. Must take all cards above the selected card AND must immediately use the selected card by melding or laying off.
+Two draw modes (standard 500 Rum):
+
+- **Single top card**: take only the top card of the discard pile. The drawn card **cannot be re-discarded on the same turn** but is otherwise unrestricted — it need not be melded or laid off this turn.
+- **Pile dive** (any card below the top): take the selected card plus every card on top of it (the selected card and all cards above it move to the player's hand). The **selected card must be melded or laid off this turn before discarding**. No must-use restriction applies to the other cards taken from above.
+
+**Unified obligation** *(house rule)*: when enabled, the selected card must be immediately melded or laid off regardless of whether it was the single top card or a deeper pile dive — top-card draws also become subject to the must-use restriction.
 
 ### A.4.5 Jokers (house rule) `[PG-5]`
 
@@ -229,7 +256,9 @@ When laying off on another player's meld, place the card in front of yourself (y
 
 ### A.4.7 Scoring
 
-Net score = value of melded cards − value of cards remaining in hand. Play until one or more players' cumulative scores exceed 500; if multiple cross 500 in the same hand, highest score wins.
+Net score (per hand, per player) = value of all cards the player **placed** (own melds + cards laid off onto own or others' melds, per A.4.6) − value of cards remaining in the player's hand. Card values per A.4.2; ace direction in runs determined per meld (A.4.3).
+
+Play continues across hands until one or more players' cumulative scores exceed **500**. If multiple players cross 500 in the same hand, the player with the highest cumulative score wins.
 
 ---
 
@@ -239,7 +268,7 @@ Only one primary source -- no cross-primary check possible.
 
 | Param | Value |
 | --- | --- |
-| Players | 4, 5+ |
+| Players | 4 or more (upper bound TODO — primary source `[BIC-C]` does not specify a maximum) |
 | Deck | 2 x 52 + 1 joker per pack = 106 cards |
 | Deal | 15 cards each, dealt 3 at a time |
 | Stock + discard | next card flipped to start discard |
@@ -451,6 +480,7 @@ if game == basic_rummy:
     score: opp_unmelded; A=1, 2-10=pip, JQK=10
 elif game == gin:
     players == 2; deal = 10
+    constraint: if drew top_discard, cannot discard same card same turn
     knock if deadwood <= 10
     gin = deadwood 0 -> +20 + opp_unmatched
     undercut -> opp +10 + difference
@@ -458,6 +488,7 @@ elif game == gin:
 elif game == knock_rummy:
     deck = 1*52; players 2-6
     deal = {2:10, 3-4:7, 5-6:6}
+    constraint: if drew top_discard, cannot discard same card same turn
     any turn before discard: knock (discard face-down)
     lowest_deadwood wins difference from each opponent
     tie_with_knocker -> non-knocker wins
@@ -470,7 +501,8 @@ elif game == 500_rum:
     deal = {2:13, else:7}
     ace = high or low not both
     A=15 (1 in A-2-3 run), 2-10=pip, JQK=10
-    draw from anywhere in discard pile, must take all above and meld picked card
+    top-discard draw: cannot re-discard same turn (no must-meld obligation)
+    pile dive (below top): must take all above; selected card must meld/layoff before discard
     lay_off others' melds -> points credit yourself
     score = melded_value - hand_value; target >= 500
 elif game == continental:

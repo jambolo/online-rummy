@@ -4,6 +4,9 @@ import { RANK_INDEX } from '@online-rummy/shared';
 export type MeldOptions = {
   aceHigh: boolean;
   roundTheCorner: boolean;
+  // 500 Rum (rules.md A.4.3): a run may use A-2-3 OR Q-K-A, but not both at once.
+  // Tries both ace positions and accepts if either yields a valid run.
+  aceEitherEnd?: boolean;
 };
 
 // Validates a proposed meld (set or run). Returns true if valid.
@@ -23,40 +26,53 @@ function isSet(cards: Card[]): boolean {
 // Run: 3+ consecutive same-suit. rules.md A.1.5
 function isRun(cards: Card[], opts: MeldOptions): boolean {
   if (cards.length < 3) return false;
+  if (opts.aceEitherEnd) {
+    return isRunFixedAce(cards, false) || isRunFixedAce(cards, true);
+  }
+  return isRunFixedAce(cards, opts.aceHigh);
+}
+
+function isRunFixedAce(cards: Card[], aceHigh: boolean): boolean {
   const suit = cards[0]?.suit;
   if (!cards.every((c) => c.suit === suit)) return false;
 
-  const indices = cards.map((c) => rankIndex(c.rank, opts));
+  const indices = cards.map((c) => rankIndex(c.rank, aceHigh));
   indices.sort((a, b) => a - b);
-
-  // Check consecutive with no gaps or duplicates
   for (let i = 1; i < indices.length; i++) {
     if ((indices[i] as number) - (indices[i - 1] as number) !== 1) return false;
   }
-
-  // round-the-corner: K-A-2 only allowed if flag set. rules.md A.1.4
-  if (!opts.roundTheCorner) {
-    // ace-low default: Q-K-A invalid (A ranks 0, so sorted it appears first; K-Q-A would be 12,11,0 which fails gap check anyway)
-    // ace-high: A-2-3 invalid (A ranks 13, so 13 at end; 1,2,13 fails gap check)
-    // The gap check above already handles this correctly without extra logic.
-  }
-
   return true;
 }
 
-// Returns rank index considering ace-high/low setting.
-// rules.md A.1.4: ace low by default (A=0). If aceHigh, A=13.
-function rankIndex(rank: Rank, opts: MeldOptions): number {
-  const base = RANK_INDEX[rank];
-  if (rank === 'A' && opts.aceHigh) return 13;
-  return base;
+function rankIndex(rank: Rank, aceHigh: boolean): number {
+  if (rank === 'A' && aceHigh) return 13;
+  return RANK_INDEX[rank];
 }
 
 // Card point value for scoring unmelded cards. rules.md A.1.8
-// aceHigh flag used for 500 Rum (A=15). For basic: A=1.
+// aceValue: 1 (basic), 11 (basic ace-high variant), 15 (500 Rum).
 export function cardPoints(card: Card, aceValue: 1 | 11 | 15 = 1): number {
   const r = card.rank;
   if (r === 'A') return aceValue;
   if (r === 'J' || r === 'Q' || r === 'K') return 10;
   return parseInt(r, 10);
+}
+
+// Direction the ace plays in a run. Returns null for runs without ace and for sets.
+// rules.md A.4.2: A=1 when in A-2-3 sequence, otherwise 15.
+export function runAceDirection(cards: Card[]): 'low' | 'high' | null {
+  if (!cards.some((c) => c.rank === 'A')) return null;
+  if (cards.some((c) => c.rank === '2')) return 'low';
+  if (cards.some((c) => c.rank === 'K')) return 'high';
+  return null;
+}
+
+// 500 Rum per-card meld scoring (rules.md A.4.2, A.4.7).
+// Set: each card scored at base value, aces 15.
+// Run: aces 1 if A-2-3 run, else 15.
+export function score500MeldCard(card: Card, allCards: Card[]): number {
+  const allSameRank = allCards.every((c) => c.rank === allCards[0]?.rank);
+  if (allSameRank) return cardPoints(card, 15);
+  const ace = runAceDirection(allCards);
+  return cardPoints(card, ace === 'low' ? 1 : 15);
 }

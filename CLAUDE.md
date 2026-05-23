@@ -59,13 +59,14 @@ Node.js 20 + native `ws`. No ORM, no DB — all state in memory.
 | --- | --- |
 | `engine/types.ts` | `GameState`, `GamePlayer`, `VariantEngine` interface, `ScoreSheet` |
 | `engine/deck.ts` | `buildDeck`, `shuffle` (Fisher-Yates), `buildShuffledDeck`, `dealN` |
-| `engine/meld.ts` | `validateMeld(cards, opts)`, `cardPoints` |
+| `engine/meld.ts` | `validateMeld(cards, opts)` (`aceEitherEnd` for 500 Rum runs), `cardPoints`, `runAceDirection`, `score500MeldCard` |
 | `engine/variants/basic.ts` | `basicVariant: VariantEngine`, `createBasicGame`, `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` |
-| `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences for tests |
+| `engine/variants/rum500.ts` | `rum500Variant: VariantEngine`, `createRum500Game`, `applyDraw`, `applyDrawFromPile`, `applyMeld`, `applyLayoff`, `applyDiscard` |
+| `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences; dispatches per-variant via `state.variant` |
 | `rng.ts` | `RNG` type alias; wraps `node:crypto` `randomInt` |
 | `session.ts` | `makeSessionId`, `signSessionId`, `verifySessionId` — HMAC-SHA256 session tokens |
 | `room.ts` | `Room`/`Player` types (Room carries `gameState: GameState \| null`), Crockford base32 room codes, in-memory registry, `variantLimits` |
-| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`draw`/`meld`/`layoff`/`discard`/disconnect handlers |
+| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. |
 | `index.ts` | HTTP server, `SESSION_SECRET`/`ALLOWED_ORIGINS`/`PORT` env validation, startup |
 
 **`GameState` is mutated in place** by all `apply*` functions. Clone before passing to `runScript` if you need snapshot comparison.
@@ -90,12 +91,14 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | `src/routes/Room.tsx` | Lobby view (while `publicState === null`) or game view. Contains `ScoreOverlay` (hand-end modal with per-player card breakdown). |
 | `src/components/Card.tsx` | Playing card. `compact` prop hides center symbol and bottom corner for small meld-zone cards. Always sets `textAlign: left` to override inherited centering from Table wrappers. |
 | `src/components/Hand.tsx` | dnd-kit sortable hand. `PointerSensor` with `distance: 6` activation so taps toggle selection without triggering drag. |
-| `src/components/Table.tsx` | Stock pile + discard top. Clickable on draw phase. |
-| `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state (populated by server) — no client-side cache needed for opponent melds. |
-| `src/components/ActionBar.tsx` | Phase-aware action buttons. Shows current phase name and whose turn it is. |
+| `src/components/Table.tsx` | Stock pile + discard top. In 500 Rum, clicking discard opens `PileDiveModal`; otherwise sends `draw {from:'discard'}`. |
+| `src/components/PileDiveModal.tsx` | 500 Rum pile-dive picker (rules.md A.4.4). Shows full discard pile top-first; hovering a card highlights every card that will be taken. |
+| `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state. Layoff button shown when allowed: basic requires own meld, 500 Rum does not. |
+| `src/components/ActionBar.tsx` | Phase-aware action buttons. 500 Rum: multiple melds per turn; discard disabled when `mustMeldCardId` is set. |
 | `src/components/Chat.tsx` | Chat message list + send form. |
-| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. Basic content complete; Gin/500 Rum stubbed for M5/M6. |
+| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. Basic + 500 Rum content complete; Gin stubbed for M6. |
 | `src/content/howToPlay/basic.tsx` | Static Basic Rummy rules fragment — objective, turn flow, melds, scoring, locked house rules. |
+| `src/content/howToPlay/rum500.tsx` | Static 500 Rum rules fragment — pile dive, ace-either-end, multi-meld turns, layoff credit. |
 
 **Selector rule:** never pass an object literal to `useAppStore` — it creates a new ref every render and causes an infinite loop with React 18's `useSyncExternalStore`. Use one hook call per value.
 
@@ -111,14 +114,19 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 
 ## Key constraints
 
+- **Build order:** `pnpm --filter @online-rummy/shared build` must run before `tsc --noEmit` on server or client. Server imports from `@online-rummy/shared` dist, not source; stale or missing dist causes `TS2353` "property does not exist" errors on types that exist in source but not yet compiled output. `vitest` bypasses this via path alias in `vitest.config.ts`.
 - `strict: true` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` everywhere. No `any` without a comment.
 - All imports within the monorepo use `.js` extensions (NodeNext resolution).
 - Server shuffles with `node:crypto` only — never `Math.random`.
 - All rule citations in code use `// rules.md A.x.y` section IDs.
 - Engine errors are thrown as `Error` with `ERR_*` prefixed messages (e.g. `ERR_NOT_YOUR_TURN`, `ERR_WRONG_PHASE`). The WS layer (M2) will translate these to `{ t: 'error', code, msg }`.
-- `GameState.hasMeldedEver` and `drewFromDiscardId` enforce two locked house rules: going-rummy bonus (score×2) and no re-discard of drawn discard card.
+- `GameState.drewFromDiscardId` enforces the basic-rummy rule "no re-discard of drawn discard card" (rules.md A.1.6 step 4; 500 Rum behavior differs — see below).
+- `GameState.hasMeldedEver` exists for the **layoff-requires-prior-meld** house rule (rules.md A.1.6 step 3). This house rule is **NOT currently enforced** — it is host-configurable and defaults to off. Field/field-update code may remain in the engine for future toggling, but `applyLayoff` must not gate on it.
+- Going-rummy bonus = doubled per-opponent contribution (basic rules.md A.1.7), implemented as score×2 on the winner's hand-end credit.
 - `GameState.firstPlayerId` records who went first each hand; re-deal path in `ws.ts` uses it to rotate the starting player clockwise.
-- `createBasicGame` takes optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.
+- `createBasicGame` / `createRum500Game` take optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.
+- 500 Rum (rules.md A.4) — `GameState.mustMeldCardId` enforces the **pile-dive** must-use restriction (rules.md A.4.4 "Pile dive"). It is set **only** by `applyDrawFromPile` (a true pile dive, ≥2 cards). A simple top-card draw via `applyDraw {from:'discard'}` does NOT set `mustMeldCardId` — it sets only `drewFromDiscardId` (no re-discard same turn). The "unified obligation" house rule (rules.md A.4.4) that would extend must-use to top-card draws is **NOT currently enforced**. `GameState.meldedBy: Map<cardId, PlayerId>` credits layoff points to the placer, not the meld's original owner. Ace direction in runs is derived per meld from `runAceDirection`: A-2-3 → low (1 pt), Q-K-A → high (15 pts). Sets of aces always 15 pt; aces in hand always 15 pt.
+- `PublicState.discardPile: Card[]` is always populated (full visible pile) — basic clients ignore it; 500 Rum pile-dive UI reads it.
 
 ## Milestones
 
@@ -129,7 +137,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | M3 | Done | Wire engine to WS; 2-browser basic rummy |
 | M4 | Done | React client: hand fan, drag-drop, discard, meld zone, chat, score overlay |
 | M4.5 | Done | Re-deal, first-player rotation, How to Play modal (Basic), bug fixes |
-| M5 | Not started | Gin variant |
-| M6 | Not started | 500 Rum variant |
+| M5 | Done | 500 Rum variant — pile-dive UX, ace-either-end melds, multi-meld turns, layoff credit, How to Play |
+| M6 | Not started | Gin variant |
 | M7 | Not started | Deploy, structured logs, metrics |
 | M8 | Not started | PixiJS card layer |

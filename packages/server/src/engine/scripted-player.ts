@@ -9,12 +9,21 @@
  */
 import type { C2S } from '@online-rummy/shared';
 import type { GameState } from './types.js';
-import {
-  applyDiscard,
-  applyDraw,
-  applyLayoff,
-  applyMeld,
-} from './variants/basic.js';
+import * as basic from './variants/basic.js';
+import * as rum500 from './variants/rum500.js';
+
+type VariantFns = {
+  applyDraw: typeof basic.applyDraw;
+  applyMeld: typeof basic.applyMeld;
+  applyLayoff: typeof basic.applyLayoff;
+  applyDiscard: typeof basic.applyDiscard;
+  applyDrawFromPile?: typeof rum500.applyDrawFromPile;
+};
+
+function fnsFor(state: GameState): VariantFns {
+  if (state.variant === 'rum500') return rum500;
+  return basic;
+}
 
 export type ActionResult =
   | { ok: true; action: C2S; stateBefore: GameState; stateAfter: GameState }
@@ -64,21 +73,27 @@ export function runScript(state: GameState, script: C2S[]): ScriptedResult {
 }
 
 function dispatchAction(state: GameState, action: C2S): void {
-  // Determine acting player from action context (most actions implicitly apply to turnPlayerId)
   const pid = state.turnPlayerId;
+  const fns = fnsFor(state);
 
   switch (action.t) {
     case 'draw':
-      applyDraw(state, pid, action.from);
+      fns.applyDraw(state, pid, action.from);
+      break;
+    case 'drawFromPile':
+      if (fns.applyDrawFromPile === undefined) {
+        throw new Error('ERR_NOT_IMPLEMENTED:drawFromPile');
+      }
+      fns.applyDrawFromPile(state, pid, action.cardId);
       break;
     case 'meld':
-      applyMeld(state, pid, action.cardIds);
+      fns.applyMeld(state, pid, action.cardIds);
       break;
     case 'layoff':
-      applyLayoff(state, pid, action.meldId, action.cardId);
+      fns.applyLayoff(state, pid, action.meldId, action.cardId);
       break;
     case 'discard':
-      applyDiscard(state, pid, action.cardId);
+      fns.applyDiscard(state, pid, action.cardId);
       break;
     // Non-engine actions (no-op in scripted context)
     case 'create':
@@ -86,7 +101,6 @@ function dispatchAction(state: GameState, action: C2S): void {
     case 'start':
     case 'chat':
     case 'knock':
-    case 'drawFromPile':
       break;
     default: {
       const _exhaustive: never = action;

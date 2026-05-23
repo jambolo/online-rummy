@@ -9,10 +9,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_INVALID_MELD: "Those cards don't form a valid meld (need a set of 3–4 matching ranks, or a run of 3+ in the same suit).",
   ERR_CARD_NOT_IN_HAND: "That card is no longer in your hand.",
   ERR_DREW_DISCARD_REDISCARD: "You can't discard the same card you just drew from the discard pile.",
-  ERR_NO_OWN_MELD: "You need to have placed your own meld before you can lay off on others.",
   ERR_MELD_NOT_FOUND: "That meld no longer exists.",
   // ERR_INVALID_LAYOFF intentionally absent — server provides a specific reason in msg.
-  ERR_ALREADY_MELDED: "You've already melded once this turn.",
   ERR_NOT_IN_ROOM: "You're not in a room.",
   ERR_ROOM_NOT_FOUND: "Room not found — check the code and try again.",
   ERR_ROOM_FULL: "That room is already full.",
@@ -24,6 +22,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_INVALID_NAME: "Name can't be empty.",
   ERR_INVALID_VARIANT: "Unknown game variant.",
   ERR_NOT_IMPLEMENTED: "That variant isn't implemented yet.",
+  ERR_MUST_USE_PILE_CARD: "You drew a card from the discard pile — you must meld or lay it off before discarding.",
+  ERR_NO_LEGAL_DIVE: "You can't pile-dive that card — there's no legal meld or lay-off for it with your current hand.",
+  ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
+  ERR_DISCARD_EMPTY: "The discard pile is empty.",
+  ERR_STOCK_EMPTY: "The stock pile is empty.",
+  ERR_INVALID_LAYOFF: "That card doesn't fit on the selected meld.",
   ERR_RATE_LIMIT: "Sending messages too fast — slow down.",
   ERR_TOO_MANY_CONNECTIONS: "Too many connections from your network.",
   ERR_INVALID_JSON: "Malformed message sent to server.",
@@ -69,6 +73,12 @@ interface AppState {
   prevScores: Record<string, number>;
   // All players' final hands at hand end, keyed by playerId (from wonHand event).
   finalHands: Record<string, Card[]>;
+  // Per-player melded cards credited to *placer* (not meld owner) with variant-correct
+  // per-card points — used by ScoreOverlay for full hand-end breakdown.
+  meldCredits: Record<string, { card: Card; pts: number }[]>;
+  // Per-player unmelded hand point totals (variant-correct ace value). Server-computed
+  // to avoid client/server divergence over ace pts in 500 Rum.
+  handDeadwood: Record<string, number>;
   // True from gameOver event until the next gameStarted event.
   isGameOver: boolean;
 
@@ -100,6 +110,8 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   cardCache: {},
   prevScores: {},
   finalHands: {},
+  meldCredits: {},
+  handDeadwood: {},
   isGameOver: false,
 
   setConnected: (v) => set({ connected: v }),
@@ -150,9 +162,11 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const handJustStarted =
             s.publicState?.phase === "ended" && msg.public.phase !== "ended";
           const finalHands = handJustStarted ? {} : s.finalHands;
+          const meldCredits = handJustStarted ? {} : s.meldCredits;
+          const handDeadwood = handJustStarted ? {} : s.handDeadwood;
 
           if (msg.private === undefined) {
-            return { publicState: msg.public, prevScores, finalHands };
+            return { publicState: msg.public, prevScores, finalHands, meldCredits, handDeadwood };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
@@ -173,6 +187,8 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             cardCache,
             prevScores,
             finalHands,
+            meldCredits,
+            handDeadwood,
           };
         });
         break;
@@ -203,10 +219,16 @@ export const useAppStore = create<AppState>()((set, _get) => ({
 
       case "event":
         if (msg.kind === "wonHand" && msg.data !== undefined) {
-          const d = msg.data as { finalHands?: Record<string, Card[]> };
-          if (d.finalHands !== undefined) {
-            set({ finalHands: d.finalHands });
-          }
+          const d = msg.data as {
+            finalHands?: Record<string, Card[]>;
+            meldCredits?: Record<string, { card: Card; pts: number }[]>;
+            handDeadwood?: Record<string, number>;
+          };
+          set({
+            finalHands: d.finalHands ?? {},
+            meldCredits: d.meldCredits ?? {},
+            handDeadwood: d.handDeadwood ?? {},
+          });
         } else if (msg.kind === "gameOver") {
           set({ isGameOver: true });
         } else if (msg.kind === "gameStarted") {
