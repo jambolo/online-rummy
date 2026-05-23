@@ -90,11 +90,17 @@ The state visible to all players.
   "phase": "draw"|"meld"|"discard"|"ended",
   "discardTop": Card | null,
   "discardPileSize": 3,
-  "stockSize": 24
+  "discardPile": [Card, ...],
+  "stockSize": 24,
+  "mustMeldCardId": "string" | null
 }
 ```
 
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
+
+`discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rum uses this for the pile-dive picker and other variants may ignore it.
+
+`mustMeldCardId` is set in 500 Rum when the current turn player drew from the discard pile and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
 
 ### `PrivateState`
 
@@ -174,7 +180,7 @@ Player count requirements by variant:
 
 | Variant | Minimum | Maximum |
 | --- | --- | --- |
-| `basic` | 2 | 6 |
+| `basic` | 2 | 7 |
 | `gin` | 2 | 2 |
 | `rum500` | 2 | 8 |
 
@@ -191,7 +197,7 @@ Player count requirements by variant:
 | `ERR_WRONG_STATE` | Room is not in `lobby` or `ended` state (e.g. game is currently in progress) |
 | `ERR_NOT_HOST` | Sender is not the host |
 | `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players (checked after removing disconnected players on re-deal) |
-| `ERR_NOT_IMPLEMENTED` | Variant is not `basic` (gin and rum500 are not yet implemented) |
+| `ERR_NOT_IMPLEMENTED` | Variant is `gin` (not yet implemented) |
 
 ---
 
@@ -205,7 +211,10 @@ Draws the top card from either the stock pile or the discard pile. Valid only on
 
 After a successful draw, `phase` advances to `"meld"`.
 
-**House rule:** If you draw from the discard pile, you cannot discard that same card on the same turn.
+**Variant rules:**
+
+- **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn.
+- **500 Rum:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
 
 **Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
 
@@ -217,8 +226,41 @@ After a successful draw, `phase` advances to `"meld"`.
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
-| `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile |
+| `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile (basic) |
+| `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rum) |
 | `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
+
+---
+
+### `drawFromPile` — 500 Rum pile dive
+
+```json
+{ "t": "drawFromPile", "cardId": "string" }
+```
+
+500 Rum only. Take any card from the discard pile; the selected card plus every card on top of it move to your hand. Valid only on your turn when `phase` is `"draw"`.
+
+**Top-card shortcut:** if `cardId` is the top card of the discard pile, this behaves identically to `draw {from:"discard"}` — only `drewFromDiscardId` is set (cannot re-discard that card this turn), and `mustMeldCardId` is **not** set (no must-use obligation). Use `draw {from:"discard"}` for a plain top-card draw; `drawFromPile` with the top card's id works but is equivalent.
+
+**True pile dive (card below the top):** the selected card plus every card above it move to your hand. `PublicState.mustMeldCardId` is set to the selected card's id — you must place it in a meld or layoff before discarding. The server runs a preflight check: if the selected card cannot be legally melded or laid off given the hand you would have after taking all taken cards, the dive is rejected with `ERR_NO_LEGAL_DIVE` (prevents an unresolvable obligation).
+
+`mustMeldCardId` is cleared as soon as the card appears in a subsequent `meld` or `layoff` message.
+
+After any successful `drawFromPile`, `phase` advances to `"meld"`.
+
+**Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Variant is not `rum500` |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
+| `ERR_CARD_NOT_IN_PILE:<id>` | The specified card is not in the discard pile |
+| `ERR_NO_LEGAL_DIVE` | Preflight failed: the selected card cannot be legally melded or laid off given the cards that would be taken (only thrown for true pile dives, not top-card draws) |
 
 ---
 
@@ -230,9 +272,14 @@ After a successful draw, `phase` advances to `"meld"`.
 
 Places a new meld on the table using cards from your hand. Valid only on your turn when `phase` is `"meld"` or `"discard"`.
 
-A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive cards of the same suit (ace is low; round-the-corner is disabled). Minimum 3 cards in either case.
+A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive cards of the same suit. Minimum 3 cards in either case.
 
-Only one meld may be placed per turn. After placing a meld, `phase` advances to `"discard"`.
+Variant differences:
+
+- **Basic:** ace is low only; round-the-corner is disabled. Multiple melds per turn are allowed (the "maximum one meld per turn" rule is a host-configurable house rule, currently off). The phase stays at `"meld"` after a meld so the player can meld further before discarding.
+- **500 Rum:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
+
+If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that field is cleared after the meld.
 
 **Response:** A [`state`](#state--game-state) message. The acting player receives `public` and `private`. All other players receive `public` only.
 
@@ -244,7 +291,7 @@ Only one meld may be placed per turn. After placing a meld, `phase` advances to 
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn |
+| `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn (only emitted when the host-configurable "maximum one meld per turn" rule is enabled; currently off in v1) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
 | `ERR_INVALID_MELD` | The cards do not form a valid set or run |
@@ -259,9 +306,12 @@ Only one meld may be placed per turn. After placing a meld, `phase` advances to 
 
 Adds one card from your hand onto any meld already on the table (your own or another player's). Valid only on your turn when `phase` is `"meld"` or `"discard"`.
 
-You must have placed at least one of your own melds in any previous turn before you can lay off. The card must extend the target meld while keeping it valid.
+Variant differences:
 
-Multiple layoffs are allowed per turn; they are independent of the one-meld-per-turn restriction.
+- **Basic:** layoff is unrestricted. The host-configurable "layoff requires prior meld" rule (rules.md A.1.6 step 3) is currently off; when enabled, the server would return `ERR_NO_OWN_MELD` if the player has never placed a meld.
+- **500 Rum:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
+
+The card must extend the target meld while keeping it valid. Multiple layoffs are allowed per turn.
 
 **Response:** A [`state`](#state--game-state) message. The acting player receives `public` and `private`. All other players receive `public` only.
 
@@ -273,7 +323,7 @@ Multiple layoffs are allowed per turn; they are independent of the one-meld-per-
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_NO_OWN_MELD` | This player has never placed a meld |
+| `ERR_NO_OWN_MELD` | This player has never placed a meld (basic only; only emitted when the host-configurable "layoff requires prior meld" rule is enabled; currently off in v1) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 | `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
@@ -289,7 +339,10 @@ Multiple layoffs are allowed per turn; they are independent of the one-meld-per-
 
 Places one card from your hand onto the discard pile and ends your turn. Valid only on your turn when `phase` is `"meld"` or `"discard"`. You may discard without having melded or laid off.
 
-**House rule:** You cannot discard the card you drew from the discard pile on the same turn.
+**House rules:**
+
+- **Basic:** you cannot discard the card you drew from the discard pile on the same turn (`ERR_CANNOT_DISCARD_DRAWN_CARD`).
+- **500 Rum:** you cannot discard while `PublicState.mustMeldCardId` is set (`ERR_MUST_USE_PILE_CARD`). Place the pile-drawn card in a meld or layoff first.
 
 If discarding empties your hand, the hand ends immediately.
 
@@ -309,7 +362,8 @@ If discarding empties your hand, the hand ends immediately.
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from discard this turn |
+| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from the discard pile this turn (both basic and 500 Rum — applies to top-card draws in both variants) |
+| `ERR_MUST_USE_PILE_CARD` | Pile-dive obligation unmet: the selected card has not yet been melded or laid off (500 Rum true pile dives only) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 
@@ -333,9 +387,9 @@ Sends a chat message to all players in the room. The server trims `text` to 200 
 
 ---
 
-### `drawFromPile` / `knock` — Not yet implemented
+### `knock` — Not yet implemented
 
-These message types are defined in the protocol and are accepted by the server, but always return `ERR_NOT_IMPLEMENTED`. They are reserved for the 500 Rum (`drawFromPile`) and Gin (`knock`) variants.
+Defined in the protocol but always returns `ERR_NOT_IMPLEMENTED`. Reserved for Gin (M6).
 
 ---
 
@@ -537,10 +591,12 @@ Mid-game reconnect is not currently supported. If the game has already started w
 A player's turn follows this phase sequence:
 
 ```text
-"draw"  →  "meld"  →  "discard"  →  (next player's turn, phase resets to "draw")
+"draw"  →  "meld"  →  (next player's turn, phase resets to "draw")
 ```
 
-The current phase is always reflected in `PublicState.phase`. After drawing, the player may optionally meld once and/or lay off cards any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely.
+The current phase is always reflected in `PublicState.phase`. After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
+
+The `"discard"` phase value exists but is not set by either active variant (basic or 500 Rum) in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes (both allow meld, layoff, and discard).
 
 ### Example: A Full Turn with Meld and Layoff
 
@@ -581,7 +637,7 @@ Alice sends:
 { "t": "meld", "cardIds": ["card-id-7H", "card-id-7D", "card-id-7S"] }
 ```
 
-Alice receives `state` with `phase: "discard"` and her updated hand (three cards removed). Bob receives `state` with `public` only and can see Alice's new meld in `players[].melds`.
+Alice receives `state` with `phase: "meld"` and her updated hand (three cards removed). Bob receives `state` with `public` only and can see Alice's new meld in `players[].melds`.
 
 **Step 3 — Alice lays off a card onto Bob's existing run:**
 

@@ -89,7 +89,7 @@ export function activePlayers(room: Room): Player[] {
 
 export function variantLimits(variant: Variant): { min: number; max: number } {
   switch (variant) {
-    case 'basic':  return { min: 2, max: 6 };
+    case 'basic':  return { min: 2, max: 7 };
     case 'gin':    return { min: 2, max: 2 };
     case 'rum500': return { min: 2, max: 8 };
   }

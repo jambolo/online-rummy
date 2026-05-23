@@ -19,9 +19,10 @@ import CardComponent from "./Card";
 interface SortableCardProps {
   card: Card;
   selected: boolean;
+  mustMeld: boolean;
 }
 
-function SortableCard({ card, selected }: SortableCardProps) {
+function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
   const toggle = useAppStore((s) => s.toggleSelect);
   const {
     attributes,
@@ -52,6 +53,15 @@ function SortableCard({ card, selected }: SortableCardProps) {
         card={card}
         selected={selected}
         onClick={() => toggle(card.id)}
+        {...(mustMeld
+          ? {
+              style: {
+                outline: "3px solid #ffd166",
+                outlineOffset: 1,
+                borderRadius: 6,
+              },
+            }
+          : {})}
       />
     </div>
   );
@@ -59,9 +69,11 @@ function SortableCard({ card, selected }: SortableCardProps) {
 
 export default function Hand() {
   const privateState = useAppStore((s) => s.privateState);
+  const publicState = useAppStore((s) => s.publicState);
   const handOrder = useAppStore((s) => s.handOrder);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const setHandOrder = useAppStore((s) => s.setHandOrder);
+  const mustMeldCardId = publicState?.mustMeldCardId ?? null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -119,6 +131,7 @@ export default function Hand() {
                 key={card.id}
                 card={card}
                 selected={selectedCardIds.includes(card.id)}
+                mustMeld={card.id === mustMeldCardId}
               />
             ))}
           </div>

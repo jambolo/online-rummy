@@ -40,9 +40,8 @@ export default function BasicRules() {
             take the top card from the discard pile.
           </li>
           <li>
-            <strong>Meld / lay off</strong> (optional) — place one meld from
-            your hand, and/or lay off one card onto any existing meld on the
-            table.
+            <strong>Meld / lay off</strong> (optional) — place as many melds as
+            you like, and/or lay off cards onto any existing meld on the table.
           </li>
           <li>
             <strong>Discard</strong> — place one card face-up on the discard
@@ -108,13 +107,6 @@ export default function BasicRules() {
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>
             Ace is <strong>low only</strong> — A–2–3 valid; Q–K–A not valid.
-          </li>
-          <li>
-            At most <strong>one meld per turn</strong>.
-          </li>
-          <li>
-            Laying off requires at least <strong>one own meld</strong> already
-            on the table.
           </li>
           <li>
             You <strong>cannot discard</strong> the card you drew from the

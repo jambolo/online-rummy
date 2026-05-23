@@ -19,12 +19,14 @@ function MeldPile({ meld, ownerName }: MeldPileProps) {
   const isTurnPlayer = publicState.turnPlayerId === myPlayerId;
   const myMeldsCount =
     publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
+  // 500 Rum (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
+  // Basic (rules.md A.1.6 [WP]): own-meld required.
+  const ownMeldRequired = publicState.variant !== "rum500";
 
-  // Can lay off: exactly 1 selected card, my turn, meld/discard phase, I have ≥1 own meld
   const canLayoff =
     isTurnPlayer &&
     (publicState.phase === "meld" || publicState.phase === "discard") &&
-    myMeldsCount > 0 &&
+    (!ownMeldRequired || myMeldsCount > 0) &&
     selectedCardIds.length === 1;
 
   function handleLayoff() {

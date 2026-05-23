@@ -30,7 +30,13 @@ export type PublicState = {
   phase: Phase;
   discardTop: Card | null;
   discardPileSize: number;
+  // Full discard pile, bottom-to-top. All discards are public knowledge (face-up). 500
+  // Rum uses this for the pile-dive picker; basic clients can ignore it.
+  discardPile: Card[];
   stockSize: number;
+  // 500 Rum: the card a player picked from the pile this turn that must still be melded
+  // or laid off before discarding. Null otherwise.
+  mustMeldCardId: string | null;
 };
 
 export type PrivateState = { hand: Card[] };
