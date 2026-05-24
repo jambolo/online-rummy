@@ -47,12 +47,12 @@ online-rummy/
         engine/
           types.ts        # GameState, GamePlayer, VariantEngine interface, ScoreSheet (server-only)
           deck.ts         # buildDeck, buildShuffledDeck, shuffle, dealN
-          meld.ts         # validateMeld(cards, opts), cardPoints
+          meld.ts         # validateMeld(cards, opts), cardPoints, runAceDirection, score500MeldCard
           scripted-player.ts  # runScript(state, C2S[]) → ActionResult[] (engine-level, no WS)
           variants/
             basic.ts      # basicVariant, createBasicGame, applyDraw/Meld/Layoff/Discard
-            gin.ts        # M6
-            rum500.ts     # M5
+            gin.ts        # ginVariant, createGinGame, applyDraw/PassUpcard/Discard/Knock/GinLayoff
+            rum500.ts     # rum500Variant, createRum500Game, applyDraw/DrawFromPile/Meld/Layoff/Discard
     client/
       src/
         main.tsx
@@ -78,7 +78,9 @@ type Card = { id: string; suit: Suit; rank: Rank };  // server-generated id, sta
 type MeldKind = 'set' | 'run';
 type Meld = { id: string; kind: MeldKind; cardIds: string[]; ownerId: string };
 
-type Phase = 'draw' | 'meld' | 'discard' | 'ended';
+type Phase = 'firstUpcardOffer' | 'draw' | 'meld' | 'discard' | 'layoff' | 'ended';
+// Phase values are per-variant subsets: basic/500 use draw|meld|discard|ended;
+// gin uses firstUpcardOffer|draw|discard|layoff|ended (no `meld` phase).
 
 type PublicState = {
   roomId: string;
@@ -92,7 +94,8 @@ type PublicState = {
   discardTop: Card | null;
   discardPile: Card[];          // full pile bottom-to-top; basic ignores, 500 Rum pile-dive reads it
   stockSize: number;
-  mustMeldCardId: string | null; // 500 Rum: pile-dive obligation; null = no obligation
+  mustMeldCardId: string | null;  // 500 Rum: pile-dive obligation; null otherwise
+  ginKnockerId: string | null;    // Gin: knocker id during layoff phase / scoring; null otherwise
 };
 
 type PrivateState = { hand: Card[] };  // owner-only
@@ -120,7 +123,7 @@ type LobbyPlayer = { id: string; name: string };
 type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
   | { t: 'lobby'; roomCode: string; variant: Variant; hostId: string; players: LobbyPlayer[]; sessionId: string }
-  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'forfeit'|'gameOver'|'gameStarted';
+  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'handCancelled'|'forfeit'|'gameOver'|'gameStarted';
       playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
@@ -132,22 +135,29 @@ Server validates every action. Pessimistic UI v1 (wait for server `state` before
 
 ## Variant strategy interface
 
+Canonical definition lives in `packages/server/src/engine/types.ts` (`VariantEngine`). Skeleton:
+
 ```ts
-interface Variant {
+interface VariantEngine {
   id: 'basic' | 'gin' | 'rum500';
   minPlayers: number;
   maxPlayers: number;
-  deal(playerCount: number, rng: RNG): { hands: Card[][]; stock: Card[]; discard: Card[] };
-  validateMeld(cards: Card[]): boolean;        // set or run check
-  canDrawFromDiscard(state: GameState, playerId: string, cardId?: string): boolean;
-  onDiscardDraw(state: GameState, playerId: string, cardId: string): void;  // 500 rum dive logic
-  canDiscard(state: GameState, playerId: string, cardId: string): boolean;  // basic: not same as drew from discard
-  scoreHand(state: GameState): Map<PlayerId, number>;
-  isGameOver(scoreSheet: ScoreSheet): boolean;
   aceHigh: boolean;
   roundTheCorner: boolean;
+  deal(playerCount, rng): { hands; stock; discard };
+  validateMeld(cards): boolean;
+  canDrawFromDiscard(state, playerId, cardId?): boolean;
+  onDrawFromDiscard(state, playerId, cardId): void;
+  canDiscard(state, playerId, cardId): boolean;
+  scoreHand(state): Map<PlayerId, number>;
+  isGameOver(scoreSheet): boolean;
 }
 ```
+
+Engine action handlers (`applyDraw`/`applyMeld`/`applyLayoff`/`applyDiscard` + variant-specific
+`applyDrawFromPile`/`applyKnock`/`applyGinLayoff`/`applyPassUpcard`) are currently free function
+exports from each variant module — refactor in `docs/refactor-plan.md` Phase 3 promotes them onto
+the interface.
 
 ## Rule mapping (rules.md → variant impl)
 
@@ -420,7 +430,7 @@ v1 = M1-M7. M8 after.
 - **`MeldOptions.aceEitherEnd`** is the 500 Rum-specific knob in `meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap.
 - **`GameState.mustMeldCardId`** enforces rules.md A.4.4 pile-dive obligation: set to the selected card's id in `applyDrawFromPile`. `applyMeld`/`applyLayoff` clear it when the card is used. `applyDiscard` throws `ERR_MUST_USE_PILE_CARD` while non-null. **Distinct from simple top-discard draw:** `applyDraw {from:'discard'}` takes only the top card, sets `drewFromDiscardId` (cannot re-discard same turn), and does NOT set `mustMeldCardId` — matches standard rules.md A.4.4 (single top card has no must-use obligation). The unified-obligation house rule is host-configurable and currently off.
 - **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rum scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (harmless; its scoring doesn't read it).
-- **500 Rum allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` does not check `hasMeldedEver` (basic-only constraint, A.1.6 step 3 [WP]). Phase stays at `'meld'` after a 500 Rum meld so the player can keep melding/laying off until they discard.
+- **500 Rum allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` has no own-meld prerequisite (basic-only constraint, A.1.6 step 3 [WP], host-configurable house rule — currently off, no engine state needed). Phase stays at `'meld'` after a 500 Rum meld so the player can keep melding/laying off until they discard.
 - **PublicState gained `discardPile: Card[]` and `mustMeldCardId: string | null`.** Pile is always populated bottom-to-top; basic clients ignore it, 500 Rum reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak.
 - **`variantFns(v)` in `ws.ts`** routes per-variant engine fns. Replaces direct `basic.*` imports in handlers. `scripted-player.ts` dispatches the same way via `state.variant`. Adding Gin will only require a third branch in both files.
 - **Pile-dive picker (`PileDiveModal.tsx`)** renders the discardPile top-first. Hovering a card highlights every card that will be taken (selected card + everything above it in the pile). Click sends `{ t: 'drawFromPile', cardId }`.
@@ -452,4 +462,4 @@ v1 = M1-M7. M8 after.
 
 ## Next action
 
-Start M7: deploy (Docker image, GCE e2-micro or Cloudflare Tunnel), structured logs, room/player counters.
+Execute structural refactor before M7. See `docs/refactor-plan.md` — bottom-up phases land directly on `develop`. After all phases green, start M7 (deploy + structured logs + room/player counters).

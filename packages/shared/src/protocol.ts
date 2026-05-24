@@ -33,6 +33,3 @@ export type S2C =
   | { t: 'event'; kind: EventKind; playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
-
-// Convenience: cards present in drawFromPile response data
-export type PileSlice = { taken: Card[] };

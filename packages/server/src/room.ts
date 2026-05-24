@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import type { PlayerId, Variant } from '@online-rummy/shared';
 import type { GameState } from './engine/types.js';
+import { VARIANTS } from './engine/variants/index.js';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
@@ -88,9 +89,6 @@ export function activePlayers(room: Room): Player[] {
 }
 
 export function variantLimits(variant: Variant): { min: number; max: number } {
-  switch (variant) {
-    case 'basic':  return { min: 2, max: 7 };
-    case 'gin':    return { min: 2, max: 2 };
-    case 'rum500': return { min: 2, max: 8 };
-  }
+  const v = VARIANTS[variant];
+  return { min: v.minPlayers, max: v.maxPlayers };
 }

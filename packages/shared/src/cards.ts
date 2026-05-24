@@ -22,6 +22,14 @@ export type PublicPlayer = {
   status: PlayerStatus;
 };
 
+// Variant-specific public state pocket. Client narrows on `variantPublic.variant` to
+// access its variant's fields. Keeps the top-level PublicState clean of per-variant
+// fields that other variants would always see as null.
+export type VariantPublic =
+  | { variant: 'basic';  data: Record<string, never> }
+  | { variant: 'rum500'; data: { mustMeldCardId: string | null } }
+  | { variant: 'gin';    data: { ginKnockerId: string | null } };
+
 export type PublicState = {
   roomId: string;
   variant: Variant;
@@ -34,11 +42,8 @@ export type PublicState = {
   // Rum uses this for the pile-dive picker; basic clients can ignore it.
   discardPile: Card[];
   stockSize: number;
-  // 500 Rum: the card a player picked from the pile this turn that must still be melded
-  // or laid off before discarding. Null otherwise.
-  mustMeldCardId: string | null;
-  // Gin: ID of player who knocked; present during 'layoff' phase and through scoring.
-  ginKnockerId: string | null;
+  // Per-variant fields. See VariantPublic.
+  variantPublic: VariantPublic;
 };
 
 export type PrivateState = { hand: Card[] };

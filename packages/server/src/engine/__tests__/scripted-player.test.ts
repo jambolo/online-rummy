@@ -110,7 +110,6 @@ describe('runScript', () => {
 
   it.each([
     { t: 'chat' as const, text: 'hi' },
-    { t: 'knock' as const, discardId: 'none' },
     { t: 'create' as const, variant: 'basic' as const, name: 'X' },
     { t: 'join' as const, roomCode: 'A', name: 'X' },
     { t: 'start' as const },
@@ -125,6 +124,19 @@ describe('runScript', () => {
     const { results } = runScript(state, [action]);
     expect(results[0]?.ok).toBe(true);
     expect(state.phase).toBe(phaseBefore);
+  });
+
+  it('engine action not available for variant returns ERR_NOT_IMPLEMENTED', () => {
+    // basic has no applyKnock — dispatcher rejects, scripted result records error.
+    const state = createBasicGame(
+      'room1',
+      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      makeSeededRNG(1),
+      0,
+    );
+    const { results } = runScript(state, [{ t: 'knock' as const, discardId: 'none' }]);
+    expect(results[0]?.ok).toBe(false);
+    expect((results[0] as { error: string }).error).toContain('ERR_NOT_IMPLEMENTED');
   });
 
   it('golden path: p1 draws, melds a set, discards, p2 draws, discards', () => {

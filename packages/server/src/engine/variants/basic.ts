@@ -1,10 +1,18 @@
-import { randomUUID } from 'node:crypto';
 import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
-import { RANK_INDEX, RANKS } from '@online-rummy/shared';
+import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
-import { cardPoints, validateMeld as coreMeldCheck } from '../meld.js';
-import type { GamePlayer, GameState, ScoreSheet, VariantEngine } from '../types.js';
+import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
+import type { GameState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
+import {
+  advanceTurn,
+  buildBaseState,
+  detectMeldKind,
+  lookupCard,
+  makeMeldId,
+  requireTurn,
+} from '../util.js';
+import { formatLayoffError } from '../layoff-error.js';
 
 // rules.md A.1 — Basic Rummy (Rum)
 // House rule picks: plan.md "House rule picks (locked) > Basic Rummy"
@@ -77,8 +85,9 @@ export const basicVariant: VariantEngine = {
       for (const [pid, val] of unmelded) {
         if (pid !== winner.id) earned += val;
       }
-      // rules.md A.1.7: going-rummy bonus — score × 2 (house rule pick: double not +10)
-      const wentRummy = !(state.hasMeldedEver.get(winner.id) ?? false);
+      // rules.md A.1.7: going rummy = winner placed no card all hand (no meld, no layoff).
+      // meldedBy tracks placer for every card on the table. No entry for winner ⇒ went rummy.
+      const wentRummy = ![...state.meldedBy.values()].includes(winner.id);
       result.set(winner.id, wentRummy ? earned * 2 : earned);
     }
 
@@ -92,6 +101,55 @@ export const basicVariant: VariantEngine = {
     }
     return false;
   },
+
+  // ---- Lifecycle / actions (Phase 3 promotion) ----
+
+  createGame: (roomId, players, rng, firstPlayerIndex) =>
+    createBasicGame(roomId, players, rng, firstPlayerIndex),
+
+  applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
+  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
+  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
+
+  // Re-deal: rotate one seat clockwise from the previous hand's first player.
+  // Falls back to 0 on first deal or if previous first player has been dropped.
+  nextFirstPlayerIndex(oldState, newPlayers) {
+    if (oldState === null) return 0;
+    const prevIdx = newPlayers.findIndex((p) => p.id === oldState.firstPlayerId);
+    if (prevIdx === -1) return 0;
+    return (prevIdx + 1) % newPlayers.length;
+  },
+
+  // Winner = the active player who emptied their hand. Null mid-hand or after forfeit.
+  winnerForHand(state, _scores) {
+    return state.players.find((p) => p.hand.length === 0 && p.status === 'active')?.id ?? null;
+  },
+
+  // Hand-end payload: per-player final hand, per-card meld credits (basic ace=1),
+  // and per-player deadwood (sum of unmelded card values).
+  handEndPayload(state, _scores): WonHandData {
+    const finalHands: Record<PlayerId, Card[]> = {};
+    const meldCredits: Record<PlayerId, { card: Card; pts: number }[]> = {};
+    const handDeadwood: Record<PlayerId, number> = {};
+    for (const p of state.players) {
+      finalHands[p.id] = p.hand;
+      meldCredits[p.id] = [];
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 1), 0);
+    }
+    for (const p of state.players) {
+      for (const m of p.melds) {
+        const meldCards = m.cardIds
+          .map((id) => state.cardRegistry.get(id))
+          .filter((c): c is Card => c !== undefined);
+        for (const card of meldCards) {
+          const placer = state.meldedBy.get(card.id) ?? p.id;
+          (meldCredits[placer] ??= []).push({ card, pts: cardPoints(card, 1) });
+        }
+      }
+    }
+    return { finalHands, meldCredits, handDeadwood };
+  },
 };
 
 // ---- Game state factory ----
@@ -102,60 +160,12 @@ export function createBasicGame(
   rng: RNG,
   // When omitted, first player is chosen randomly. Pass an explicit index for re-deals.
   firstPlayerIndex?: number,
-): GameState {
-  const { hands, stock, discard } = basicVariant.deal(players.length, rng);
-
-  const cardRegistry = new Map<string, Card>();
-  const registerAll = (cards: Card[]) => cards.forEach((c) => cardRegistry.set(c.id, c));
-  hands.forEach(registerAll);
-  registerAll(stock);
-  registerAll(discard);
-
-  const startIdx = firstPlayerIndex ?? rng(0, players.length);
-  const firstPlayer = players[startIdx]!;
-
-  return {
-    roomId,
-    variant: 'basic',
-    players: players.map((p, i) => ({
-      id: p.id,
-      name: p.name,
-      hand: hands[i] ?? [],
-      melds: [],
-      score: 0,
-      status: 'active',
-    })),
-    turnPlayerId: firstPlayer.id,
-    firstPlayerId: firstPlayer.id,
-    phase: 'draw',
-    stock,
-    discardPile: discard,
-    cardRegistry,
-    drewFromDiscardId: null,
-    hasMeldedEver: new Map(players.map((p) => [p.id, false])),
-    scoreSheet: new Map(players.map((p) => [p.id, []])),
-    mustMeldCardId: null,
-    meldedBy: new Map(),
-    ginKnockerId: null,
-    cancelledHand: false,
-  };
+): GameState & { variant: 'basic' } {
+  const deal = basicVariant.deal(players.length, rng);
+  return buildBaseState(roomId, 'basic', players, deal, rng, 'draw', {}, firstPlayerIndex) as GameState & { variant: 'basic' };
 }
 
 // ---- Turn actions ----
-
-function requireTurn(state: GameState, playerId: PlayerId): GamePlayer {
-  if (state.turnPlayerId !== playerId) throw new Error('ERR_NOT_YOUR_TURN');
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) throw new Error('ERR_PLAYER_NOT_FOUND');
-  if (player.status === 'forfeited') throw new Error('ERR_PLAYER_FORFEITED');
-  return player;
-}
-
-function lookupCard(state: GameState, id: string): Card {
-  const card = state.cardRegistry.get(id);
-  if (!card) throw new Error(`ERR_UNKNOWN_CARD:${id}`);
-  return card;
-}
 
 // rules.md A.1.6 step 1
 export function applyDraw(
@@ -180,11 +190,6 @@ export function applyDraw(
   state.phase = 'meld';
 }
 
-function detectMeldKind(cards: Card[]): MeldKind {
-  const allSameRank = cards.every((c) => c.rank === cards[0]!.rank);
-  return allSameRank ? 'set' : 'run';
-}
-
 // rules.md A.1.6 step 2
 export function applyMeld(
   state: GameState,
@@ -203,7 +208,7 @@ export function applyMeld(
   if (!basicVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
 
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
-  const meld = { id: randomUUID(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
+  const meld = { id: makeMeldId(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
   // Sort runs by rank so display order always matches card sequence.
   if (meld.kind === 'run') {
     meld.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
@@ -211,7 +216,6 @@ export function applyMeld(
   player.melds.push(meld);
   for (const id of cardIds) state.meldedBy.set(id, playerId);
 
-  state.hasMeldedEver.set(playerId, true);
   state.phase = 'meld';
 }
 
@@ -239,31 +243,7 @@ export function applyLayoff(
   // Validate extended meld — build a descriptive message when invalid
   const existingCards = targetMeld.cardIds.map((id) => lookupCard(state, id));
   if (!basicVariant.validateMeld([...existingCards, card])) {
-    const suit = (s: string) => ({ C: '♣', D: '♦', H: '♥', S: '♠' })[s] ?? s;
-    if (targetMeld.kind === 'set') {
-      const setRank = existingCards[0]?.rank ?? '?';
-      if (card.rank !== setRank) {
-        throw new Error(`ERR_INVALID_LAYOFF: Set contains ${setRank}s — ${card.rank} doesn't match`);
-      }
-      throw new Error(`ERR_INVALID_LAYOFF: Set is already full (4 cards)`);
-    } else {
-      const runSuit = existingCards[0]?.suit ?? '?';
-      if (card.suit !== runSuit) {
-        throw new Error(
-          `ERR_INVALID_LAYOFF: Card suit (${suit(card.suit)}) doesn't match run suit (${suit(runSuit)})`,
-        );
-      }
-      const indices = existingCards.map((c) => RANK_INDEX[c.rank]);
-      const lo = Math.min(...indices);
-      const hi = Math.max(...indices);
-      const loRank = RANKS[lo] ?? '?';
-      const hiRank = RANKS[hi] ?? '?';
-      throw new Error(
-        `ERR_INVALID_LAYOFF: Run is ${suit(runSuit)}${loRank}–${hiRank}; ` +
-        `${card.rank} must go at ${loRank === 'A' ? 'the high end' : 'the low end'} or ` +
-        `${hiRank === 'K' ? 'the low end' : 'the high end'}`,
-      );
-    }
+    throw new Error(formatLayoffError(targetMeld, existingCards, card));
   }
 
   player.hand = player.hand.filter((c) => c.id !== cardId);
@@ -277,7 +257,6 @@ export function applyLayoff(
       return RANK_INDEX[ca.rank] - RANK_INDEX[cb.rank];
     });
   }
-  state.hasMeldedEver.set(playerId, true);
 }
 
 // rules.md A.1.6 step 4
@@ -306,15 +285,4 @@ export function applyDiscard(
 
   advanceTurn(state);
   return { handEnded: false };
-}
-
-function advanceTurn(state: GameState): void {
-  const activePlayers = state.players.filter((p) => p.status === 'active');
-  const idx = activePlayers.findIndex((p) => p.id === state.turnPlayerId);
-  const next = activePlayers[(idx + 1) % activePlayers.length];
-  if (!next) throw new Error('ERR_NO_ACTIVE_PLAYERS');
-
-  state.turnPlayerId = next.id;
-  state.phase = 'draw';
-  state.drewFromDiscardId = null;
 }

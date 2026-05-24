@@ -1,17 +1,32 @@
-import { randomUUID } from 'node:crypto';
 import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
-import { cardPoints, validateMeld as coreMeldCheck } from '../meld.js';
-import type { GamePlayer, GameState, ScoreSheet, VariantEngine } from '../types.js';
+import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
+import type { GamePlayer, GameState, GinState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
+import {
+  advanceTurn,
+  buildBaseState,
+  lookupCard,
+  makeMeldId,
+  requireTurn,
+} from '../util.js';
+import { formatLayoffError } from '../layoff-error.js';
+import { deadwood, validateKnockMelds } from '../scoring.js';
+
+// Narrowing helper. See r500 in rum500.ts for the pattern.
+function gs(state: GameState): GinState {
+  if (state.variant !== 'gin') throw new Error('ERR_VARIANT_MISMATCH:gin');
+  return state.variantState;
+}
 
 // rules.md A.2 — Gin Rummy
 // House rule picks: plan.md "House rule picks (locked) > Gin Rummy"
 
-// Unmelded card value (deadwood) for a player. rules.md A.2: A=1, face=10, pip=pip.
+// rules.md A.2: A=1, face=10, pip=pip. Thin re-export for callers that
+// historically used ginDeadwood; new code should call deadwood(player, 1) directly.
 export function ginDeadwood(player: GamePlayer): number {
-  return player.hand.reduce((s, c) => s + cardPoints(c, 1), 0);
+  return deadwood(player, 1);
 }
 
 export const ginVariant: VariantEngine = {
@@ -60,7 +75,7 @@ export const ginVariant: VariantEngine = {
     if (active.length < 2) return result;
 
     // Knocker identified by ginKnockerId (turnPlayerId may be defender after layoff phase).
-    const knockerId = state.ginKnockerId ?? state.turnPlayerId;
+    const knockerId = gs(state).ginKnockerId ?? state.turnPlayerId;
     const knocker = active.find(p => p.id === knockerId) ?? active[0]!;
     const defender = active.find(p => p.id !== knocker.id) ?? active[1]!;
 
@@ -110,6 +125,82 @@ export const ginVariant: VariantEngine = {
     }
     return false;
   },
+
+  // ---- Lifecycle / actions (Phase 3 promotion) ----
+
+  createGame: (roomId, players, rng, firstPlayerIndex) =>
+    createGinGame(roomId, players, rng, firstPlayerIndex),
+
+  applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
+  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
+  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
+  applyKnock: (state, playerId, melds, discardId) => applyKnock(state, playerId, melds, discardId),
+  applyGinLayoff: (state, playerId, layoffs, ownMelds) =>
+    applyGinLayoff(state, playerId, layoffs, ownMelds),
+  applyPassUpcard: (state, playerId) => applyPassUpcard(state, playerId),
+
+  // Re-deal first-player rotation:
+  // - Cancelled hand (stock-depletion): same dealer re-deals → same first player.
+  // - Normal end: winner deals next hand → loser plays first (rules.md A.2.2). With 2P
+  //   Gin, the loser is the player with the last-hand score of 0 in scoreSheet.
+  nextFirstPlayerIndex(oldState, newPlayers) {
+    if (oldState === null) return 0;
+    if (oldState.variant === 'gin' && oldState.variantState.cancelledHand) {
+      const prevIdx = newPlayers.findIndex((p) => p.id === oldState.firstPlayerId);
+      return prevIdx === -1 ? 0 : prevIdx;
+    }
+    for (const [pid, hands] of oldState.scoreSheet.entries()) {
+      const last = hands[hands.length - 1] ?? 0;
+      if (last === 0) {
+        const idx = newPlayers.findIndex((p) => p.id === pid);
+        if (idx !== -1) return idx;
+      }
+    }
+    return 0;
+  },
+
+  // Winner = first player with a positive score this hand. Returns null on cancelled
+  // hand or any other zero-winner scenario.
+  winnerForHand(_state, scores) {
+    for (const [pid, pts] of scores) {
+      if (pts > 0) return pid;
+    }
+    return null;
+  },
+
+  // Hand-end payload: finalHands + handDeadwood (ace=1). Gin scores via deadwood
+  // comparison, not meld accumulation, so meldCredits is empty per player. ginInfo
+  // carries knock/gin/undercut label + per-player deadwood for client display.
+  handEndPayload(state, _scores): WonHandData {
+    const finalHands: Record<PlayerId, Card[]> = {};
+    const meldCredits: Record<PlayerId, { card: Card; pts: number }[]> = {};
+    const handDeadwood: Record<PlayerId, number> = {};
+    for (const p of state.players) {
+      finalHands[p.id] = p.hand;
+      meldCredits[p.id] = [];
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 1), 0);
+    }
+
+    const knockerId = gs(state).ginKnockerId ?? state.turnPlayerId;
+    const knocker = state.players.find((p) => p.id === knockerId);
+    const defender = state.players.find(
+      (p) => p.id !== knockerId && p.status !== 'forfeited',
+    );
+    if (knocker === undefined || defender === undefined) {
+      return { finalHands, meldCredits, handDeadwood };
+    }
+    const kDead = ginDeadwood(knocker);
+    const dDead = ginDeadwood(defender);
+    const result: 'gin' | 'knock' | 'undercut' =
+      kDead === 0 ? 'gin' : kDead < dDead ? 'knock' : 'undercut';
+    return {
+      finalHands,
+      meldCredits,
+      handDeadwood,
+      ginInfo: { knockerId: knocker.id, knockerDeadwood: kDead, defenderDeadwood: dDead, result },
+    };
+  },
 };
 
 // ---- Game state factory ----
@@ -119,63 +210,18 @@ export function createGinGame(
   players: Array<{ id: string; name: string }>,
   rng: RNG,
   firstPlayerIndex?: number,
-): GameState {
-  const { hands, stock, discard } = ginVariant.deal(players.length, rng);
-
-  const cardRegistry = new Map<string, Card>();
-  const registerAll = (cards: Card[]) => cards.forEach(c => cardRegistry.set(c.id, c));
-  hands.forEach(registerAll);
-  registerAll(stock);
-  registerAll(discard);
-
-  const startIdx = firstPlayerIndex ?? rng(0, players.length);
-  const firstPlayer = players[startIdx]!;
-
-  return {
-    roomId,
-    variant: 'gin',
-    players: players.map((p, i) => ({
-      id: p.id,
-      name: p.name,
-      hand: hands[i] ?? [],
-      melds: [],
-      score: 0,
-      status: 'active',
-    })),
-    turnPlayerId: firstPlayer.id,
-    firstPlayerId: firstPlayer.id,
-    // rules.md A.2.2: hand opens with the upcard offered to the non-dealer (= first player)
-    // first. They may take it or pass to the dealer. If both decline, the non-dealer
-    // proceeds with a normal draw.
-    phase: 'firstUpcardOffer',
-    stock,
-    discardPile: discard,
-    cardRegistry,
-    drewFromDiscardId: null,
-    hasMeldedEver: new Map(players.map(p => [p.id, false])),
-    scoreSheet: new Map(players.map(p => [p.id, []])),
-    mustMeldCardId: null,
-    meldedBy: new Map(),
-    ginKnockerId: null,
-    cancelledHand: false,
-  };
+): GameState & { variant: 'gin' } {
+  const deal = ginVariant.deal(players.length, rng);
+  // rules.md A.2.2: hand opens with the upcard offered to the non-dealer (= first player).
+  // They may take it or pass to the dealer. If both decline, normal draw proceeds.
+  return buildBaseState(
+    roomId, 'gin', players, deal, rng, 'firstUpcardOffer',
+    { ginKnockerId: null, cancelledHand: false },
+    firstPlayerIndex,
+  ) as GameState & { variant: 'gin' };
 }
 
 // ---- Turn actions ----
-
-function requireTurn(state: GameState, playerId: PlayerId): GamePlayer {
-  if (state.turnPlayerId !== playerId) throw new Error('ERR_NOT_YOUR_TURN');
-  const player = state.players.find(p => p.id === playerId);
-  if (!player) throw new Error('ERR_PLAYER_NOT_FOUND');
-  if (player.status === 'forfeited') throw new Error('ERR_PLAYER_FORFEITED');
-  return player;
-}
-
-function lookupCard(state: GameState, id: string): Card {
-  const card = state.cardRegistry.get(id);
-  if (!card) throw new Error(`ERR_UNKNOWN_CARD:${id}`);
-  return card;
-}
 
 // rules.md A.2.3 step 1: draw from stock or top of discard.
 //
@@ -233,10 +279,6 @@ export function applyPassUpcard(state: GameState, playerId: PlayerId): void {
   }
 }
 
-function detectMeldKind(cards: Card[]): MeldKind {
-  return cards.every(c => c.rank === cards[0]!.rank) ? 'set' : 'run';
-}
-
 // rules.md A.2: melds are declared at knock time, not during regular play.
 export function applyMeld(
   _state: GameState,
@@ -285,7 +327,7 @@ export function applyDiscard(
   // knocking).
   if (state.stock.length <= 2) {
     state.phase = 'ended';
-    state.cancelledHand = true;
+    gs(state).cancelledHand = true;
     state.drewFromDiscardId = null;
     return { handEnded: true, cancelled: true };
   }
@@ -307,20 +349,12 @@ export function applyKnock(
   if (state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
   // Validate declared meld groups first so meld errors surface before discard errors.
-  const meldedIds = new Set<string>();
-  const validatedMelds: { kind: MeldKind; cardIds: string[] }[] = [];
-
-  for (const group of (melds ?? [])) {
-    const cards: Card[] = [];
-    for (const id of group) {
-      if (meldedIds.has(id)) throw new Error(`ERR_CARD_IN_MULTIPLE_MELDS:${id}`);
-      if (!player.hand.find(c => c.id === id)) throw new Error(`ERR_CARD_NOT_IN_HAND:${id}`);
-      cards.push(lookupCard(state, id));
-    }
-    if (!ginVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
-    for (const id of group) meldedIds.add(id);
-    validatedMelds.push({ kind: detectMeldKind(cards), cardIds: [...group] });
-  }
+  const { validated: validatedMelds, meldedIds } = validateKnockMelds(
+    state,
+    player,
+    melds,
+    ginVariant.validateMeld,
+  );
 
   // rules.md A.2.4: face-down discard is required to signal the knock.
   if (discardId === undefined) throw new Error('ERR_KNOCK_REQUIRES_DISCARD');
@@ -341,7 +375,7 @@ export function applyKnock(
 
   // Apply validated melds to state — move cards from hand to melds.
   for (const { kind, cardIds } of validatedMelds) {
-    const meldObj = { id: randomUUID(), kind, cardIds, ownerId: playerId };
+    const meldObj = { id: makeMeldId(), kind, cardIds, ownerId: playerId };
     if (kind === 'run') {
       meldObj.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
     }
@@ -350,7 +384,7 @@ export function applyKnock(
   }
   player.hand = deadwoodCards; // only unmelded cards remain
 
-  state.ginKnockerId = playerId;
+  gs(state).ginKnockerId = playerId;
 
   if (dw === 0) {
     // Gin (rules.md A.2.4): defender cannot lay off — end hand immediately.
@@ -377,28 +411,20 @@ export function applyGinLayoff(
 
   const defender = state.players.find(p => p.id === playerId);
   if (!defender) throw new Error('ERR_PLAYER_NOT_FOUND');
-  const knocker = state.players.find(p => p.id === state.ginKnockerId);
+  const knocker = state.players.find(p => p.id === gs(state).ginKnockerId);
   if (!knocker) throw new Error('ERR_PLAYER_NOT_FOUND');
 
   // --- Step 1: validate and apply the defender's own meld declarations ---
   // (rules.md A.2.4 step 3: "separates their own melds from deadwood")
-  const ownMeldedIds = new Set<string>();
-  const validatedOwnMelds: { kind: MeldKind; cardIds: string[] }[] = [];
-
-  for (const group of (ownMelds ?? [])) {
-    const cards: Card[] = [];
-    for (const id of group) {
-      if (ownMeldedIds.has(id)) throw new Error(`ERR_CARD_IN_MULTIPLE_MELDS:${id}`);
-      if (!defender.hand.find(c => c.id === id)) throw new Error(`ERR_CARD_NOT_IN_HAND:${id}`);
-      cards.push(lookupCard(state, id));
-    }
-    if (!ginVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
-    for (const id of group) ownMeldedIds.add(id);
-    validatedOwnMelds.push({ kind: detectMeldKind(cards), cardIds: [...group] });
-  }
+  const { validated: validatedOwnMelds, meldedIds: ownMeldedIds } = validateKnockMelds(
+    state,
+    defender,
+    ownMelds,
+    ginVariant.validateMeld,
+  );
 
   for (const { kind, cardIds } of validatedOwnMelds) {
-    const meldObj = { id: randomUUID(), kind, cardIds, ownerId: playerId };
+    const meldObj = { id: makeMeldId(), kind, cardIds, ownerId: playerId };
     if (kind === 'run') {
       meldObj.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
     }
@@ -419,7 +445,9 @@ export function applyGinLayoff(
     if (!meld) throw new Error(`ERR_MELD_NOT_FOUND:${meldId}`);
     const meldCards = meld.cardIds.map(id => lookupCard(state, id));
     const newCard = lookupCard(state, cardId);
-    if (!ginVariant.validateMeld([...meldCards, newCard])) throw new Error('ERR_INVALID_LAYOFF');
+    if (!ginVariant.validateMeld([...meldCards, newCard])) {
+      throw new Error(formatLayoffError(meld, meldCards, newCard));
+    }
     usedCardIds.add(cardId);
   }
 
@@ -434,15 +462,4 @@ export function applyGinLayoff(
   }
 
   state.phase = 'ended';
-}
-
-function advanceTurn(state: GameState): void {
-  const activePlayers = state.players.filter(p => p.status === 'active');
-  const idx = activePlayers.findIndex(p => p.id === state.turnPlayerId);
-  const next = activePlayers[(idx + 1) % activePlayers.length];
-  if (!next) throw new Error('ERR_NO_ACTIVE_PLAYERS');
-
-  state.turnPlayerId = next.id;
-  state.phase = 'draw';
-  state.drewFromDiscardId = null;
 }

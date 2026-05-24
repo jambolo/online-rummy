@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Card, Rank } from "@online-rummy/shared";
-import { RANK_INDEX } from "@online-rummy/shared";
+import type { Card } from "@online-rummy/shared";
+import { RANK_INDEX, cardPoints } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "../components/Card";
 import Hand from "../components/Hand";
@@ -159,18 +159,10 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   );
 }
 
-// Card point values per variant. Basic: rules.md A.1.8. 500 Rum: rules.md A.4.2 (ace in
-// hand always 15 per locked house rule simplification).
-const RANK_PTS_BASIC: Record<Rank, number> = {
-  A: 1, "2": 2, "3": 3, "4": 4, "5": 5,
-  "6": 6, "7": 7, "8": 8, "9": 9,
-  "10": 10, J: 10, Q: 10, K: 10,
-};
-function cardPtsBasic(c: Card): number { return RANK_PTS_BASIC[c.rank]; }
-function cardPts500(c: Card): number {
-  if (c.rank === "A") return 15;
-  return RANK_PTS_BASIC[c.rank];
-}
+// Card point values per variant. Basic / Gin: rules.md A.1.8 (ace = 1).
+// 500 Rum: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
+function cardPtsBasic(c: Card): number { return cardPoints(c, 1); }
+function cardPts500(c: Card): number { return cardPoints(c, 15); }
 function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
   return cards.reduce((s, c) => s + ptsFn(c), 0);
 }

@@ -1,14 +1,11 @@
-import type { Card, Rank, Suit } from "@online-rummy/shared";
-import { RANK_INDEX } from "@online-rummy/shared";
+import type { Card, Suit } from "@online-rummy/shared";
+import { cardPoints, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
 
-const RANK_PTS_GIN: Record<Rank, number> = {
-  A: 1, "2": 2, "3": 3, "4": 4, "5": 5,
-  "6": 6, "7": 7, "8": 8, "9": 9,
-  "10": 10, J: 10, Q: 10, K: 10,
-};
+// Gin meld validation: ace low only (rules.md A.2 house rule).
+const GIN_MELD_OPTS = { aceHigh: false, roundTheCorner: false } as const;
 
 const PHASE_LABEL: Record<string, string> = {
   firstUpcardOffer: "Take upcard or pass",
@@ -19,24 +16,8 @@ const PHASE_LABEL: Record<string, string> = {
   ended: "Hand over",
 };
 
-// Client-side meld validation for Gin (ace low only — rules.md A.2 house rule).
-function isGinSet(cards: Card[]): boolean {
-  if (cards.length < 3 || cards.length > 4) return false;
-  const rank = cards[0]?.rank;
-  return cards.every((c) => c.rank === rank);
-}
-function isGinRun(cards: Card[]): boolean {
-  if (cards.length < 3) return false;
-  const suit = cards[0]?.suit;
-  if (!cards.every((c) => c.suit === suit)) return false;
-  const indices = cards.map((c) => RANK_INDEX[c.rank]).sort((a, b) => a - b);
-  for (let i = 1; i < indices.length; i++) {
-    if ((indices[i] as number) - (indices[i - 1] as number) !== 1) return false;
-  }
-  return true;
-}
 function isValidGinMeld(cards: Card[]): boolean {
-  return isGinSet(cards) || isGinRun(cards);
+  return validateMeld(cards, GIN_MELD_OPTS);
 }
 
 function cardLabel(c: Card): string {
@@ -69,7 +50,10 @@ export default function ActionBar() {
   const sel = selectedCardIds;
   const is500 = publicState.variant === "rum500";
   const isGin = publicState.variant === "gin";
-  const mustMeldCardId = publicState.mustMeldCardId;
+  const mustMeldCardId =
+    publicState.variantPublic.variant === 'rum500'
+      ? publicState.variantPublic.data.mustMeldCardId
+      : null;
   const mustMeldBlock = isMyTurn && mustMeldCardId !== null;
 
   const myMeldsCount =
@@ -101,7 +85,7 @@ export default function ActionBar() {
   const deadwoodCards = hand.filter(
     (c) => !knockMeldedIds.has(c.id) && c.id !== knockDiscardId,
   );
-  const deadwoodValue = deadwoodCards.reduce((s, c) => s + RANK_PTS_GIN[c.rank], 0);
+  const deadwoodValue = deadwoodCards.reduce((s, c) => s + cardPoints(c, 1), 0);
 
   const selCards = sel.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined);
   const selAlreadyMelded = sel.some((id) => knockMeldedIds.has(id));

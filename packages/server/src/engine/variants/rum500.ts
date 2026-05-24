@@ -1,15 +1,48 @@
-import { randomUUID } from 'node:crypto';
 import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
+import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
+import type { GameState, Rum500State, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
 import {
-  cardPoints,
-  validateMeld as coreMeldCheck,
-  runAceDirection,
-  score500MeldCard,
-} from '../meld.js';
-import type { GamePlayer, GameState, ScoreSheet, VariantEngine } from '../types.js';
+  advanceTurn as baseAdvanceTurn,
+  buildBaseState,
+  detectMeldKind,
+  lookupCard,
+  makeMeldId,
+  requireTurn,
+} from '../util.js';
+import { formatLayoffError } from '../layoff-error.js';
+
+// Narrowing helper: every function here is only ever called on a 500 Rum state.
+// Throws on misuse to keep TS happy + catch dispatch bugs early.
+function r500(state: GameState): Rum500State {
+  if (state.variant !== 'rum500') throw new Error('ERR_VARIANT_MISMATCH:rum500');
+  return state.variantState;
+}
+
+// 500-Rum-specific scoring helpers (rules.md A.4.2, A.4.7).
+// Moved here from engine/meld.ts in Phase 1 because they encode 500-specific
+// ace direction + pile-context point rules that don't generalize across variants.
+
+// Direction the ace plays in a run. Returns null for runs without ace and for sets.
+// rules.md A.4.2: A=1 when in A-2-3 sequence, otherwise 15.
+export function runAceDirection(cards: Card[]): 'low' | 'high' | null {
+  if (!cards.some((c) => c.rank === 'A')) return null;
+  if (cards.some((c) => c.rank === '2')) return 'low';
+  if (cards.some((c) => c.rank === 'K')) return 'high';
+  return null;
+}
+
+// 500 Rum per-card meld scoring (rules.md A.4.2, A.4.7).
+// Set: each card scored at base value, aces 15.
+// Run: aces 1 if A-2-3 run, else 15.
+export function score500MeldCard(card: Card, allCards: Card[]): number {
+  const allSameRank = allCards.every((c) => c.rank === allCards[0]?.rank);
+  if (allSameRank) return cardPoints(card, 15);
+  const ace = runAceDirection(allCards);
+  return cardPoints(card, ace === 'low' ? 1 : 15);
+}
 
 // rules.md A.4 — 500 Rum (a.k.a. Pinochle Rummy)
 // House rule picks: plan.md "House rule picks (locked) > 500 Rum"
@@ -71,7 +104,7 @@ export const rum500Variant: VariantEngine = {
 
   canDiscard(state: GameState, _playerId: PlayerId, cardId: string): boolean {
     // rules.md A.4.4: pile dive obligation unmet → no discard allowed.
-    if (state.mustMeldCardId !== null) return false;
+    if (r500(state).mustMeldCardId !== null) return false;
     // rules.md A.4.4: simple top-discard draw → cannot re-discard that card same turn.
     return state.drewFromDiscardId !== cardId;
   },
@@ -113,6 +146,55 @@ export const rum500Variant: VariantEngine = {
     }
     return false;
   },
+
+  // ---- Lifecycle / actions (Phase 3 promotion) ----
+
+  createGame: (roomId, players, rng, firstPlayerIndex) =>
+    createRum500Game(roomId, players, rng, firstPlayerIndex),
+
+  applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
+  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
+  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
+  applyDrawFromPile: (state, playerId, cardId) => applyDrawFromPile(state, playerId, cardId),
+
+  // Re-deal: clockwise rotation from previous first player. Same as basic.
+  nextFirstPlayerIndex(oldState, newPlayers) {
+    if (oldState === null) return 0;
+    const prevIdx = newPlayers.findIndex((p) => p.id === oldState.firstPlayerId);
+    if (prevIdx === -1) return 0;
+    return (prevIdx + 1) % newPlayers.length;
+  },
+
+  // Winner = the active player who emptied their hand.
+  winnerForHand(state, _scores) {
+    return state.players.find((p) => p.hand.length === 0 && p.status === 'active')?.id ?? null;
+  },
+
+  // Hand-end payload: per-card meld credit uses score500MeldCard (ace=1 in A-2-3, else 15).
+  // handDeadwood uses ace=15 (rules.md A.4.2 locked simplification).
+  handEndPayload(state, _scores): WonHandData {
+    const finalHands: Record<PlayerId, Card[]> = {};
+    const meldCredits: Record<PlayerId, { card: Card; pts: number }[]> = {};
+    const handDeadwood: Record<PlayerId, number> = {};
+    for (const p of state.players) {
+      finalHands[p.id] = p.hand;
+      meldCredits[p.id] = [];
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 15), 0);
+    }
+    for (const p of state.players) {
+      for (const m of p.melds) {
+        const meldCards = m.cardIds
+          .map((id) => state.cardRegistry.get(id))
+          .filter((c): c is Card => c !== undefined);
+        for (const card of meldCards) {
+          const placer = state.meldedBy.get(card.id) ?? p.id;
+          (meldCredits[placer] ??= []).push({ card, pts: score500MeldCard(card, meldCards) });
+        }
+      }
+    }
+    return { finalHands, meldCredits, handDeadwood };
+  },
 };
 
 // ---- Game state factory ----
@@ -122,65 +204,16 @@ export function createRum500Game(
   players: Array<{ id: string; name: string }>,
   rng: RNG,
   firstPlayerIndex?: number,
-): GameState {
-  const { hands, stock, discard } = rum500Variant.deal(players.length, rng);
-
-  const cardRegistry = new Map<string, Card>();
-  const registerAll = (cards: Card[]) => cards.forEach((c) => cardRegistry.set(c.id, c));
-  hands.forEach(registerAll);
-  registerAll(stock);
-  registerAll(discard);
-
-  const startIdx = firstPlayerIndex ?? rng(0, players.length);
-  const firstPlayer = players[startIdx]!;
-
-  return {
-    roomId,
-    variant: 'rum500',
-    players: players.map((p, i) => ({
-      id: p.id,
-      name: p.name,
-      hand: hands[i] ?? [],
-      melds: [],
-      score: 0,
-      status: 'active',
-    })),
-    turnPlayerId: firstPlayer.id,
-    firstPlayerId: firstPlayer.id,
-    phase: 'draw',
-    stock,
-    discardPile: discard,
-    cardRegistry,
-    drewFromDiscardId: null,
-    hasMeldedEver: new Map(players.map((p) => [p.id, false])),
-    scoreSheet: new Map(players.map((p) => [p.id, []])),
-    mustMeldCardId: null,
-    meldedBy: new Map(),
-    ginKnockerId: null,
-    cancelledHand: false,
-  };
+): GameState & { variant: 'rum500' } {
+  const deal = rum500Variant.deal(players.length, rng);
+  return buildBaseState(
+    roomId, 'rum500', players, deal, rng, 'draw',
+    { mustMeldCardId: null },
+    firstPlayerIndex,
+  ) as GameState & { variant: 'rum500' };
 }
 
 // ---- Turn actions ----
-
-function requireTurn(state: GameState, playerId: PlayerId): GamePlayer {
-  if (state.turnPlayerId !== playerId) throw new Error('ERR_NOT_YOUR_TURN');
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) throw new Error('ERR_PLAYER_NOT_FOUND');
-  if (player.status === 'forfeited') throw new Error('ERR_PLAYER_FORFEITED');
-  return player;
-}
-
-function lookupCard(state: GameState, id: string): Card {
-  const card = state.cardRegistry.get(id);
-  if (!card) throw new Error(`ERR_UNKNOWN_CARD:${id}`);
-  return card;
-}
-
-function detectMeldKind(cards: Card[]): MeldKind {
-  const allSameRank = cards.every((c) => c.rank === cards[0]!.rank);
-  return allSameRank ? 'set' : 'run';
-}
 
 // rules.md A.4.3: aces play at either end (A-2-3 OR Q-K-A). For display, sort runs so
 // the ace sits at the correct end of its sequence — RANK_INDEX alone (A=0) misorders
@@ -249,7 +282,7 @@ export function applyDrawFromPile(
     // rules.md A.4.4 simple top-card draw: cannot re-discard same turn, no must-use.
     state.drewFromDiscardId = cardId;
   } else {
-    state.mustMeldCardId = cardId;
+    r500(state).mustMeldCardId = cardId;
   }
   state.phase = 'meld';
   return { taken };
@@ -315,7 +348,7 @@ export function applyMeld(
 
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
   const meld = {
-    id: randomUUID(),
+    id: makeMeldId(),
     kind: detectMeldKind(cards),
     cardIds: [...cardIds],
     ownerId: playerId,
@@ -326,10 +359,10 @@ export function applyMeld(
   player.melds.push(meld);
   for (const id of cardIds) state.meldedBy.set(id, playerId);
 
-  state.hasMeldedEver.set(playerId, true);
   // Clear must-meld obligation if satisfied by this meld.
-  if (state.mustMeldCardId !== null && cardIds.includes(state.mustMeldCardId)) {
-    state.mustMeldCardId = null;
+  const vs = r500(state);
+  if (vs.mustMeldCardId !== null && cardIds.includes(vs.mustMeldCardId)) {
+    vs.mustMeldCardId = null;
   }
   // Multiple melds + layoffs allowed per turn — stay in meld phase until player discards.
   state.phase = 'meld';
@@ -363,7 +396,7 @@ export function applyLayoff(
 
   const existingCards = targetMeld.cardIds.map((id) => lookupCard(state, id));
   if (!rum500Variant.validateMeld([...existingCards, card])) {
-    throw new Error('ERR_INVALID_LAYOFF');
+    throw new Error(formatLayoffError(targetMeld, existingCards, card));
   }
 
   player.hand = player.hand.filter((c) => c.id !== cardId);
@@ -372,9 +405,8 @@ export function applyLayoff(
   if (targetMeld.kind === 'run') {
     sortRunCardIds(state, targetMeld.cardIds);
   }
-  state.hasMeldedEver.set(playerId, true);
-  if (state.mustMeldCardId !== null && cardId === state.mustMeldCardId) {
-    state.mustMeldCardId = null;
+  if (r500(state).mustMeldCardId !== null && cardId === r500(state).mustMeldCardId) {
+    r500(state).mustMeldCardId = null;
   }
 }
 
@@ -387,7 +419,7 @@ export function applyDiscard(
   if (state.phase !== 'discard' && state.phase !== 'meld') {
     throw new Error('ERR_WRONG_PHASE');
   }
-  if (state.mustMeldCardId !== null) {
+  if (r500(state).mustMeldCardId !== null) {
     throw new Error('ERR_MUST_USE_PILE_CARD');
   }
   if (state.drewFromDiscardId === cardId) {
@@ -411,14 +443,8 @@ export function applyDiscard(
   return { handEnded: false };
 }
 
+// 500 Rum clears its variant-specific pile-dive obligation on turn end.
 function advanceTurn(state: GameState): void {
-  const activePlayers = state.players.filter((p) => p.status === 'active');
-  const idx = activePlayers.findIndex((p) => p.id === state.turnPlayerId);
-  const next = activePlayers[(idx + 1) % activePlayers.length];
-  if (!next) throw new Error('ERR_NO_ACTIVE_PLAYERS');
-
-  state.turnPlayerId = next.id;
-  state.phase = 'draw';
-  state.drewFromDiscardId = null;
-  state.mustMeldCardId = null;
+  baseAdvanceTurn(state);
+  r500(state).mustMeldCardId = null;
 }

@@ -87,12 +87,13 @@ The state visible to all players.
   "variant": "basic"|"gin"|"rum500",
   "players": [PublicPlayer, ...],
   "turnPlayerId": "string",
-  "phase": "draw"|"meld"|"discard"|"ended",
+  "phase": "firstUpcardOffer"|"draw"|"meld"|"discard"|"layoff"|"ended",
   "discardTop": Card | null,
   "discardPileSize": 3,
   "discardPile": [Card, ...],
   "stockSize": 24,
-  "mustMeldCardId": "string" | null
+  "mustMeldCardId": "string" | null,
+  "ginKnockerId": "string" | null
 }
 ```
 
@@ -100,7 +101,14 @@ The `players` array is in turn order. `discardTop` is `null` only if the discard
 
 `discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rum uses this for the pile-dive picker and other variants may ignore it.
 
-`mustMeldCardId` is set in 500 Rum when the current turn player drew from the discard pile and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
+`mustMeldCardId` is set in 500 Rum when the current turn player drew via pile dive and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
+
+`ginKnockerId` is set in Gin after a knock (during `layoff` phase and through scoring). Identifies the knocker so the client can distinguish knocker from defender. Always `null` in `basic` and `rum500`.
+
+**Phase values are per-variant subsets:**
+
+- `basic` / `rum500`: `draw → meld → ended` (with `discard` reserved for the "max one meld per turn" house rule, currently unused).
+- `gin`: `firstUpcardOffer → draw → discard → layoff? → ended`. No `meld` phase — Gin reveals melds only at knock time.
 
 ### `PrivateState`
 
@@ -174,7 +182,11 @@ Only the host may send this. The room must be in `lobby` or `ended` state.
 
 **First start (`lobby` state):** creates a fresh game. First player is chosen randomly.
 
-**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. The starting player rotates one seat clockwise from the previous hand's first player.
+**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. First-player rotation depends on variant:
+
+- `basic` / `rum500`: rotates one seat clockwise from the previous hand's first player.
+- `gin` (normal end): winner deals next hand → **loser** plays first (rules.md A.2.2).
+- `gin` (cancelled hand from stock-depletion): same dealer re-deals → **same first player** (rules.md A.2.3).
 
 Player count requirements by variant:
 
@@ -197,7 +209,6 @@ Player count requirements by variant:
 | `ERR_WRONG_STATE` | Room is not in `lobby` or `ended` state (e.g. game is currently in progress) |
 | `ERR_NOT_HOST` | Sender is not the host |
 | `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players (checked after removing disconnected players on re-deal) |
-| `ERR_NOT_IMPLEMENTED` | Variant is `gin` (not yet implemented) |
 
 ---
 
@@ -278,6 +289,7 @@ Variant differences:
 
 - **Basic:** ace is low only; round-the-corner is disabled. Multiple melds per turn are allowed (the "maximum one meld per turn" rule is a host-configurable house rule, currently off). The phase stays at `"meld"` after a meld so the player can meld further before discarding.
 - **500 Rum:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
+- **Gin:** **not supported** — Gin reveals melds only at knock time. `meld` always returns `ERR_NOT_SUPPORTED`. Use [`knock`](#knock--gin-knock-or-go-gin) instead.
 
 If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that field is cleared after the meld.
 
@@ -291,6 +303,7 @@ If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that fiel
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
+| `ERR_NOT_SUPPORTED` | Variant is `gin` (melds declared at knock time) |
 | `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn (only emitted when the host-configurable "maximum one meld per turn" rule is enabled; currently off in v1) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
@@ -308,8 +321,9 @@ Adds one card from your hand onto any meld already on the table (your own or ano
 
 Variant differences:
 
-- **Basic:** layoff is unrestricted. The host-configurable "layoff requires prior meld" rule (rules.md A.1.6 step 3) is currently off; when enabled, the server would return `ERR_NO_OWN_MELD` if the player has never placed a meld.
+- **Basic:** layoff is unrestricted. The "layoff requires prior meld" rule (rules.md A.1.6 step 3) is documented as a future host-configurable house rule; not currently scaffolded.
 - **500 Rum:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
+- **Gin:** **not supported during regular play** — Gin layoffs happen only in the `layoff` phase after a knock, via the separate [`ginLayoff`](#ginlayoff--gin-defender-layoff) message. Plain `layoff` returns `ERR_NOT_SUPPORTED` in Gin.
 
 The card must extend the target meld while keeping it valid. Multiple layoffs are allowed per turn.
 
@@ -323,7 +337,7 @@ The card must extend the target meld while keeping it valid. Multiple layoffs ar
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_NO_OWN_MELD` | This player has never placed a meld (basic only; only emitted when the host-configurable "layoff requires prior meld" rule is enabled; currently off in v1) |
+| `ERR_NOT_SUPPORTED` | Variant is `gin` (use `ginLayoff` during `layoff` phase) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 | `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
@@ -343,16 +357,22 @@ Places one card from your hand onto the discard pile and ends your turn. Valid o
 
 - **Basic:** you cannot discard the card you drew from the discard pile on the same turn (`ERR_CANNOT_DISCARD_DRAWN_CARD`).
 - **500 Rum:** you cannot discard while `PublicState.mustMeldCardId` is set (`ERR_MUST_USE_PILE_CARD`). Place the pile-drawn card in a meld or layoff first.
+- **Gin:** standard discard ends the turn (advances to the other player's `draw` phase). To end the hand, use [`knock`](#knock--gin-knock-or-go-gin) instead. **Stock-depletion cancel** (rules.md A.2.3): if the discard reduces stock to ≤ 2 cards without a knock, the hand is cancelled — no scoring, same dealer re-deals.
 
-If discarding empties your hand, the hand ends immediately.
+If discarding empties your hand (basic / 500 Rum), the hand ends immediately.
 
 **Normal response (hand continues):** A [`state`](#state--game-state) message is sent. The acting player receives `public` and `private`. All other players receive `public` only. Turn advances to the next active player with `phase` reset to `"draw"`.
 
-**Hand-end response (hand emptied):** Three messages are sent to all connected players:
+**Hand-end response (hand emptied — basic / 500 Rum):** Three messages are sent to all connected players:
 
-1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner; `data.finalHands` contains every player's remaining cards
+1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner; `data` contains `finalHands`, `meldCredits`, `handDeadwood` (see [event docs](#event--game-event))
 2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
 3. A [`state`](#state--game-state) with both `public` and each player's own `private` hand
+
+**Hand-cancelled response (Gin stock-depletion):** Two messages are sent to all connected players:
+
+1. An [`event`](#event--game-event) with `kind: "handCancelled"` (no scoring)
+2. A [`state`](#state--game-state) with both `public` and each player's own `private` hand (phase = `"ended"`)
 
 **Errors:**
 
@@ -387,9 +407,107 @@ Sends a chat message to all players in the room. The server trims `text` to 200 
 
 ---
 
-### `knock` — Not yet implemented
+### `knock` — Gin knock or go gin
 
-Defined in the protocol but always returns `ERR_NOT_IMPLEMENTED`. Reserved for Gin (M6).
+```json
+{ "t": "knock", "melds": [["cardId", ...], ...], "discardId": "string" }
+```
+
+Gin only. Ends the hand by declaring meld groups and a face-down discard (rules.md A.2.4). Valid only on your turn when `phase` is `"discard"`.
+
+- `melds` (optional) — array of card-id groups; each group becomes a meld owned by the knocker. Each group must independently be a valid set or run. A card may appear in at most one group.
+- `discardId` (required) — id of the card discarded face-down to signal the knock. Must be in the player's hand and not appear in any declared meld group.
+
+The server applies all declared melds, removes the discard, then computes **deadwood** = sum of remaining unmelded cards (A=1, 2-10=pip, J/Q/K=10). If deadwood > 10 the action is rejected with `ERR_CANNOT_KNOCK`.
+
+If `deadwood === 0` → **gin**: `phase` advances to `"ended"`; defender cannot lay off. `handleHandEnd` runs (see [discard hand-end response](#discard--discard-a-card-and-end-your-turn)).
+
+Else **regular knock**: `phase` advances to `"layoff"`; `turnPlayerId` switches to the defender; `PublicState.ginKnockerId` is set. Defender submits [`ginLayoff`](#ginlayoff--gin-defender-layoff) to extend the knocker's melds with their own cards, then the hand ends.
+
+**Response:**
+
+- **Gin:** event `wonHand` + optional `gameOver` + final `state` (same as discard hand-end).
+- **Regular knock:** `state` broadcast to all players (phase = `"layoff"`).
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"discard"` |
+| `ERR_KNOCK_REQUIRES_DISCARD` | `discardId` is missing |
+| `ERR_CANNOT_DISCARD_MELDED_CARD` | `discardId` appears in one of the declared meld groups |
+| `ERR_CANNOT_DISCARD_DRAWN_CARD` | `discardId` is the card drawn from discard pile this turn |
+| `ERR_CARD_NOT_IN_HAND:<id>` | A specified card (in any meld group or `discardId`) is not in the player's hand |
+| `ERR_CARD_IN_MULTIPLE_MELDS:<id>` | The same card appears in more than one declared group |
+| `ERR_INVALID_MELD` | A declared group is not a valid set or run |
+| `ERR_CANNOT_KNOCK` | Deadwood after the declared melds + discard exceeds 10. `msg` includes the computed deadwood. |
+
+---
+
+### `ginLayoff` — Gin defender layoff
+
+```json
+{
+  "t": "ginLayoff",
+  "ownMelds": [["cardId", ...], ...],
+  "layoffs": [{ "cardId": "string", "meldId": "string" }, ...]
+}
+```
+
+Gin only. Submitted by the defender during `phase = "layoff"` after a non-gin knock (rules.md A.2.4 step 3). Ends the hand.
+
+- `ownMelds` (optional) — defender's own meld groups, separated from deadwood. Validated and applied first.
+- `layoffs` (required, may be empty) — extension cards onto the **knocker's** melds. Each entry's card must legally extend the named meld.
+
+Submit an empty `layoffs: []` (and no `ownMelds`) to skip layoff entirely.
+
+Once processed, the server runs hand-end scoring. Defender's deadwood (post-layoff) is compared to knocker's deadwood — undercut goes to defender if defender's deadwood ≤ knocker's.
+
+**Response:** same as discard hand-end (event `wonHand` + optional `gameOver` + final `state`).
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_YOUR_TURN` | Defender is not this player |
+| `ERR_WRONG_PHASE` | Current phase is not `"layoff"` |
+| `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the defender's hand |
+| `ERR_CARD_IN_MULTIPLE_MELDS:<id>` | The same card appears in `ownMelds` and `layoffs`, or twice in `layoffs` |
+| `ERR_INVALID_MELD` | An `ownMelds` group is not a valid set or run |
+| `ERR_MELD_NOT_FOUND:<id>` | `meldId` does not match any meld in play |
+| `ERR_INVALID_LAYOFF` | The cardId does not legally extend the target meld |
+
+---
+
+### `passUpcard` — Gin decline initial upcard offer
+
+```json
+{ "t": "passUpcard" }
+```
+
+Gin only. Valid only during `phase = "firstUpcardOffer"` (rules.md A.2.2). The non-dealer is offered the upcard first; on pass, the offer moves to the dealer; if both pass, the hand opens normally with the non-dealer drawing from stock.
+
+**Response:** `state` broadcast to all players. Turn and phase may change:
+
+- Non-dealer passes → turn moves to dealer; phase stays `"firstUpcardOffer"`.
+- Dealer passes → phase becomes `"draw"`; turn returns to the non-dealer.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"firstUpcardOffer"` |
 
 ---
 
@@ -448,7 +566,8 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `kind` | Sent when | `data` |
 | --- | --- | --- |
 | `gameStarted` | The host triggered game start | absent |
-| `wonHand` | A player emptied their hand and won the hand | `{ "finalHands": { "<playerId>": [Card, ...], ... } }` |
+| `wonHand` | Hand ended with a winner | `{ finalHands, meldCredits, handDeadwood, ginInfo? }` — see below |
+| `handCancelled` | Gin hand cancelled (stock-depletion, rules.md A.2.3) | absent |
 | `forfeit` | A player disconnected during play | absent |
 | `gameOver` | The game-ending score threshold has been reached | absent |
 | `drew` | Reserved — defined but not yet emitted | — |
@@ -458,7 +577,24 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 
 #### `wonHand` data
 
-`finalHands` maps every player ID to that player's remaining unmelded cards at the moment the hand ended. The winner's entry is an empty array. Clients use this to display the per-player score breakdown (sum of unmelded card point values) in the hand-end overlay.
+```json
+{
+  "finalHands":   { "<playerId>": [Card, ...] },           // unmelded cards remaining
+  "meldCredits":  { "<playerId>": [{ "card": Card, "pts": number }, ...] },  // cards placed by this player + per-card pts
+  "handDeadwood": { "<playerId>": number },                // sum of unmelded card values (variant-correct ace value)
+  "ginInfo": {                                             // gin only
+    "knockerId": "string",
+    "knockerDeadwood": number,
+    "defenderDeadwood": number,
+    "result": "gin" | "knock" | "undercut"
+  }
+}
+```
+
+- `finalHands` — every player's remaining unmelded cards at hand-end. Winner of basic/500 Rum has empty array; Gin knocker may still hold deadwood.
+- `meldCredits` — keyed by **placer** (not meld owner). 500 Rum credits the layoff player for points; basic placer == owner. Each entry includes pre-computed per-card points (500 Rum: ace=1 in A-2-3, =15 elsewhere). Gin entries are empty (Gin scores via deadwood comparison, not meld accumulation).
+- `handDeadwood` — sum of unmelded card values per player. Ace value = 15 for 500 Rum; = 1 for basic and Gin.
+- `ginInfo` — present only for Gin. `result` distinguishes knock outcomes; client renders the appropriate label and bonus breakdown.
 
 ---
 
@@ -588,15 +724,31 @@ Mid-game reconnect is not currently supported. If the game has already started w
 
 ### Phase Sequence
 
-A player's turn follows this phase sequence:
+`PublicState.phase` reflects the current phase. Variants differ:
+
+**Basic / 500 Rum:**
 
 ```text
 "draw"  →  "meld"  →  (next player's turn, phase resets to "draw")
 ```
 
-The current phase is always reflected in `PublicState.phase`. After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
+After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
 
-The `"discard"` phase value exists but is not set by either active variant (basic or 500 Rum) in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes (both allow meld, layoff, and discard).
+The `"discard"` phase value exists but is not set by basic or 500 Rum in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
+
+**Gin:**
+
+```text
+"firstUpcardOffer"  →  "draw"  →  "discard"  →  (knock?)  →  "layoff"?  →  "ended"
+                                  ↓
+                          (else next player's turn, phase resets to "draw")
+```
+
+- `"firstUpcardOffer"` — non-dealer offered the upcard first. Send `draw {from:"discard"}` to take it (advance to `"discard"`), or `passUpcard` to decline. On dealer's pass, phase becomes `"draw"` with turn back to non-dealer.
+- `"draw"` — draw from stock or discard top. Advances to `"discard"`. There is no `"meld"` phase in Gin — melds reveal only at knock time.
+- `"discard"` — choose `discard` (continue) or `knock` (end hand). A discard that reduces stock to ≤ 2 cards cancels the hand (rules.md A.2.3); a knock declares melds + face-down discard.
+- `"layoff"` — defender's phase after a non-gin knock. Defender submits `ginLayoff` to declare own melds + extend knocker's melds. Hand then ends.
+- `"ended"` — hand over (either via knock/gin, hand-empty win, forfeit, or stock-depletion cancel).
 
 ### Example: A Full Turn with Meld and Layoff
 

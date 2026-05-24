@@ -123,7 +123,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 - All rule citations in code use `// rules.md A.x.y` section IDs.
 - Engine errors are thrown as `Error` with `ERR_*` prefixed messages (e.g. `ERR_NOT_YOUR_TURN`, `ERR_WRONG_PHASE`). The WS layer (M2) will translate these to `{ t: 'error', code, msg }`.
 - `GameState.drewFromDiscardId` enforces the basic-rummy rule "no re-discard of drawn discard card" (rules.md A.1.6 step 4; 500 Rum behavior differs — see below).
-- `GameState.hasMeldedEver` exists for the **layoff-requires-prior-meld** house rule (rules.md A.1.6 step 3). This house rule is **NOT currently enforced** — it is host-configurable and defaults to off. Field/field-update code may remain in the engine for future toggling, but `applyLayoff` must not gate on it.
+- **Going Rummy detection** (rules.md A.1.7) uses `state.meldedBy` — if no entry maps to the winner's id, the winner placed no card all hand → score × 2. The previous `hasMeldedEver` flag has been removed (Phase 0 refactor). The "layoff-requires-prior-meld" house rule (rules.md A.1.6 step 3) is documented but not scaffolded; add it when first needed.
 - Going-rummy bonus = doubled per-opponent contribution (basic rules.md A.1.7), implemented as score×2 on the winner's hand-end credit.
 - `GameState.firstPlayerId` records who went first each hand; re-deal path in `ws.ts` uses it to rotate the starting player clockwise.
 - `createBasicGame` / `createRum500Game` take optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.

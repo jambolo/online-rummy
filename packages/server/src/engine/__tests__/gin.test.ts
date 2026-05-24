@@ -65,7 +65,7 @@ describe('createGinGame', () => {
 
   it('cancelledHand defaults to false', () => {
     const state = twoPlayerGame();
-    expect(state.cancelledHand).toBe(false);
+    expect(state.variantState.cancelledHand).toBe(false);
   });
 
   it('all 52 cards in registry', () => {
@@ -265,7 +265,7 @@ describe('applyDiscard', () => {
 
     expect(result.handEnded).toBe(true);
     expect(result.cancelled).toBe(true);
-    expect(state.cancelledHand).toBe(true);
+    expect(state.variantState.cancelledHand).toBe(true);
     expect(state.phase).toBe('ended');
   });
 
@@ -276,7 +276,7 @@ describe('applyDiscard', () => {
     const card = state.players[0]!.hand[0]!;
     const result = applyDiscard(state, 'p1', card.id);
     expect(result.handEnded).toBe(false);
-    expect(state.cancelledHand).toBe(false);
+    expect(state.variantState.cancelledHand).toBe(false);
   });
 });
 
@@ -332,7 +332,7 @@ describe('applyKnock', () => {
     ], 'k_disc');
 
     expect(state.phase).toBe('layoff');
-    expect(state.ginKnockerId).toBe('p1');
+    expect(state.variantState.ginKnockerId).toBe('p1');
     expect(state.turnPlayerId).toBe('p2'); // turn switches to defender
     expect(state.players[0]?.hand.map(c => c.id)).toEqual(['k10', 'k11']); // only deadwood remains
     expect(state.players[0]?.melds).toHaveLength(3);
@@ -430,7 +430,7 @@ describe('ginVariant.scoreHand', () => {
     state.players[0]!.hand = p1Hand;
     state.players[1]!.hand = p2Hand;
     state.turnPlayerId = knockerId;
-    state.ginKnockerId = knockerId;
+    state.variantState.ginKnockerId = knockerId;
     state.phase = 'ended';
     return state;
   }
