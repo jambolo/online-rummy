@@ -11,7 +11,9 @@ export type C2S =
   | { t: 'meld'; cardIds: string[] }
   | { t: 'layoff'; meldId: string; cardId: string }
   | { t: 'discard'; cardId: string }
-  | { t: 'knock' }
+  | { t: 'knock'; melds?: string[][]; discardId: string }  // gin only — melds declared at knock; discardId = face-down discard (rules.md A.2.4)
+  | { t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }  // gin only — defender declares own melds + lays off onto knocker's melds (rules.md A.2.4)
+  | { t: 'passUpcard' }                   // gin only — decline initial upcard offer (rules.md A.2.2)
   | { t: 'chat'; text: string };
 
 export type EventKind =
@@ -20,6 +22,7 @@ export type EventKind =
   | 'laidOff'
   | 'discarded'
   | 'wonHand'
+  | 'handCancelled'  // gin only — stock-depletion cancelled hand (rules.md A.2.3)
   | 'forfeit'
   | 'gameOver'
   | 'gameStarted';

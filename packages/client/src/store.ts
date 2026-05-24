@@ -28,6 +28,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_DISCARD_EMPTY: "The discard pile is empty.",
   ERR_STOCK_EMPTY: "The stock pile is empty.",
   ERR_INVALID_LAYOFF: "That card doesn't fit on the selected meld.",
+  ERR_KNOCK_REQUIRES_DISCARD: "Select a card to discard face-down when knocking.",
+  ERR_CANNOT_DISCARD_MELDED_CARD: "You can't discard a card that's in one of your declared melds.",
   ERR_RATE_LIMIT: "Sending messages too fast — slow down.",
   ERR_TOO_MANY_CONNECTIONS: "Too many connections from your network.",
   ERR_INVALID_JSON: "Malformed message sent to server.",
@@ -76,11 +78,21 @@ interface AppState {
   // Per-player melded cards credited to *placer* (not meld owner) with variant-correct
   // per-card points — used by ScoreOverlay for full hand-end breakdown.
   meldCredits: Record<string, { card: Card; pts: number }[]>;
+  // Gin-specific hand result, populated from wonHand event data.
+  ginInfo: { knockerId: string; knockerDeadwood: number; defenderDeadwood: number; result: 'gin' | 'knock' | 'undercut' } | null;
+  // Gin: declared meld groups accumulated by the player before knocking (client-only).
+  knockMelds: string[][];
+  // Gin: defender's pending own meld declarations during 'layoff' phase (client-only).
+  ginDefenderMelds: string[][];
+  // Gin: defender's pending layoff declarations during 'layoff' phase (client-only).
+  ginLayoffs: Array<{ cardId: string; meldId: string }>;
   // Per-player unmelded hand point totals (variant-correct ace value). Server-computed
   // to avoid client/server divergence over ace pts in 500 Rum.
   handDeadwood: Record<string, number>;
   // True from gameOver event until the next gameStarted event.
   isGameOver: boolean;
+  // Gin (rules.md A.2.3): set when the server emits handCancelled (stock-depletion). Cleared on next gameStarted.
+  handCancelled: boolean;
 
   setConnected(v: boolean): void;
   send(msg: C2S): void;
@@ -90,6 +102,15 @@ interface AppState {
   setHandOrder(ids: string[]): void;
   dismissError(): void;
   lookupCard(id: string): Card | undefined;
+  addKnockMeld(cardIds: string[]): void;
+  removeKnockMeld(index: number): void;
+  clearKnockMelds(): void;
+  addGinDefenderMeld(cardIds: string[]): void;
+  removeGinDefenderMeld(index: number): void;
+  clearGinDefenderMelds(): void;
+  addGinLayoff(cardId: string, meldId: string): void;
+  removeGinLayoff(index: number): void;
+  clearGinLayoffs(): void;
 }
 
 export const useAppStore = create<AppState>()((set, _get) => ({
@@ -112,7 +133,12 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   finalHands: {},
   meldCredits: {},
   handDeadwood: {},
+  ginInfo: null,
+  knockMelds: [],
+  ginDefenderMelds: [],
+  ginLayoffs: [],
   isGameOver: false,
+  handCancelled: false,
 
   setConnected: (v) => set({ connected: v }),
 
@@ -164,9 +190,14 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const finalHands = handJustStarted ? {} : s.finalHands;
           const meldCredits = handJustStarted ? {} : s.meldCredits;
           const handDeadwood = handJustStarted ? {} : s.handDeadwood;
+          const ginInfo = handJustStarted ? null : s.ginInfo;
+          // Clear declared knock melds and gin layoffs at the start of each turn (draw phase).
+          const knockMelds = msg.public.phase === 'draw' ? [] : s.knockMelds;
+          const ginDefenderMelds = msg.public.phase === 'draw' ? [] : s.ginDefenderMelds;
+          const ginLayoffs = msg.public.phase === 'draw' ? [] : s.ginLayoffs;
 
           if (msg.private === undefined) {
-            return { publicState: msg.public, prevScores, finalHands, meldCredits, handDeadwood };
+            return { publicState: msg.public, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
@@ -189,6 +220,10 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             finalHands,
             meldCredits,
             handDeadwood,
+            ginInfo,
+            knockMelds,
+            ginDefenderMelds,
+            ginLayoffs,
           };
         });
         break;
@@ -223,16 +258,20 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             finalHands?: Record<string, Card[]>;
             meldCredits?: Record<string, { card: Card; pts: number }[]>;
             handDeadwood?: Record<string, number>;
+            ginInfo?: { knockerId: string; knockerDeadwood: number; defenderDeadwood: number; result: 'gin' | 'knock' | 'undercut' };
           };
           set({
             finalHands: d.finalHands ?? {},
             meldCredits: d.meldCredits ?? {},
             handDeadwood: d.handDeadwood ?? {},
+            ginInfo: d.ginInfo ?? null,
           });
         } else if (msg.kind === "gameOver") {
           set({ isGameOver: true });
+        } else if (msg.kind === "handCancelled") {
+          set({ handCancelled: true });
         } else if (msg.kind === "gameStarted") {
-          set({ isGameOver: false });
+          set({ isGameOver: false, handCancelled: false, knockMelds: [], ginDefenderMelds: [], ginLayoffs: [] });
         }
         break;
     }
@@ -249,4 +288,19 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   setHandOrder: (ids) => set({ handOrder: ids }),
   dismissError: () => set({ lastError: null }),
   lookupCard: (id) => _get().cardCache[id],
+  addKnockMeld: (cardIds) =>
+    set((s) => ({ knockMelds: [...s.knockMelds, cardIds], selectedCardIds: [] })),
+  removeKnockMeld: (index) =>
+    set((s) => ({ knockMelds: s.knockMelds.filter((_, i) => i !== index) })),
+  clearKnockMelds: () => set({ knockMelds: [] }),
+  addGinDefenderMeld: (cardIds) =>
+    set((s) => ({ ginDefenderMelds: [...s.ginDefenderMelds, cardIds], selectedCardIds: [] })),
+  removeGinDefenderMeld: (index) =>
+    set((s) => ({ ginDefenderMelds: s.ginDefenderMelds.filter((_, i) => i !== index) })),
+  clearGinDefenderMelds: () => set({ ginDefenderMelds: [] }),
+  addGinLayoff: (cardId, meldId) =>
+    set((s) => ({ ginLayoffs: [...s.ginLayoffs, { cardId, meldId }], selectedCardIds: [] })),
+  removeGinLayoff: (index) =>
+    set((s) => ({ ginLayoffs: s.ginLayoffs.filter((_, i) => i !== index) })),
+  clearGinLayoffs: () => set({ ginLayoffs: [] }),
 }));

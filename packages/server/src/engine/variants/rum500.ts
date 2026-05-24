@@ -156,6 +156,8 @@ export function createRum500Game(
     scoreSheet: new Map(players.map((p) => [p.id, []])),
     mustMeldCardId: null,
     meldedBy: new Map(),
+    ginKnockerId: null,
+    cancelledHand: false,
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Variant } from "@online-rummy/shared";
 import BasicRules from "../content/howToPlay/basic";
 import Rum500Rules from "../content/howToPlay/rum500";
+import GinRules from "../content/howToPlay/gin";
 
 interface Props {
   variant: Variant;
@@ -69,11 +70,7 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
 
         {variant === "basic" && <BasicRules />}
         {variant === "rum500" && <Rum500Rules />}
-        {variant === "gin" && (
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
-            Gin Rummy rules — coming in a future update.
-          </p>
-        )}
+        {variant === "gin" && <GinRules />}
       </div>
     </div>
   );

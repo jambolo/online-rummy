@@ -1,18 +1,40 @@
-import type { Meld } from "@online-rummy/shared";
+import type { Card, Meld } from "@online-rummy/shared";
+import { RANK_INDEX } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
+
+// Client-side check: can `newCard` extend `meld`? (gin ace low only)
+function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
+  const meldCards = meld.cards ?? [];
+  if (meldCards.length === 0) return false;
+  const all = [...meldCards, newCard];
+  // Set: same rank, max 4 cards total
+  if (all.every(c => c.rank === all[0]!.rank)) return all.length <= 4;
+  // Run: same suit, consecutive
+  if (!all.every(c => c.suit === all[0]!.suit)) return false;
+  if (all.length < 3) return false;
+  const indices = all.map(c => RANK_INDEX[c.rank]).sort((a, b) => a - b);
+  for (let i = 1; i < indices.length; i++) {
+    if ((indices[i] as number) - (indices[i - 1] as number) !== 1) return false;
+  }
+  return true;
+}
 
 interface MeldPileProps {
   meld: Meld;
   ownerName: string;
+  pending?: boolean;
 }
 
-function MeldPile({ meld, ownerName }: MeldPileProps) {
+function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   const publicState = useAppStore((s) => s.publicState);
   const myPlayerId = useAppStore((s) => s.myPlayerId);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const lookupCard = useAppStore((s) => s.lookupCard);
   const send = useAppStore((s) => s.send);
+  const addGinLayoff = useAppStore((s) => s.addGinLayoff);
+  const ginLayoffs = useAppStore((s) => s.ginLayoffs);
+  const privateState = useAppStore((s) => s.privateState);
 
   if (!publicState) return null;
 
@@ -21,13 +43,39 @@ function MeldPile({ meld, ownerName }: MeldPileProps) {
     publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
   // 500 Rum (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
   // Basic (rules.md A.1.6 [WP]): own-meld required.
+  const isGin = publicState.variant === "gin";
   const ownMeldRequired = publicState.variant !== "rum500";
 
   const canLayoff =
+    !isGin &&
     isTurnPlayer &&
     (publicState.phase === "meld" || publicState.phase === "discard") &&
     (!ownMeldRequired || myMeldsCount > 0) &&
     selectedCardIds.length === 1;
+
+  // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.3).
+  const selectedCard = selectedCardIds.length === 1
+    ? lookupCard(selectedCardIds[0]!)
+    : undefined;
+  const canGinLayoff =
+    isGin &&
+    publicState.phase === "layoff" &&
+    isTurnPlayer &&
+    !pending &&
+    selectedCard !== undefined &&
+    canLayoffOnMeld(meld, selectedCard);
+
+  // Staged layoffs targeting this meld (client-side preview during layoff phase).
+  const stagedLayoffs = isGin && publicState.phase === "layoff"
+    ? ginLayoffs
+        .filter((l) => l.meldId === meld.id)
+        .map((l) => {
+          const card = lookupCard(l.cardId) ??
+            privateState?.hand.find((c) => c.id === l.cardId);
+          return card ?? null;
+        })
+        .filter((c): c is Card => c !== null)
+    : [];
 
   function handleLayoff() {
     const cardId = selectedCardIds[0];
@@ -35,24 +83,32 @@ function MeldPile({ meld, ownerName }: MeldPileProps) {
     send({ t: "layoff", meldId: meld.id, cardId });
   }
 
+  function handleGinLayoff() {
+    const cardId = selectedCardIds[0];
+    if (!cardId) return;
+    addGinLayoff(cardId, meld.id);
+  }
+
   return (
     <div
       style={{
-        background: "rgba(0,0,0,0.15)",
+        background: pending ? "rgba(255,200,0,0.08)" : "rgba(0,0,0,0.15)",
         borderRadius: 6,
         padding: "6px 10px",
+        opacity: pending ? 0.7 : 1,
+        border: pending ? "1px dashed rgba(255,200,0,0.4)" : undefined,
       }}
     >
       <div
         style={{
           fontSize: 10,
-          color: "rgba(255,255,255,0.5)",
+          color: pending ? "rgba(255,200,0,0.7)" : "rgba(255,255,255,0.5)",
           marginBottom: 4,
           textTransform: "uppercase",
           letterSpacing: 1,
         }}
       >
-        {ownerName} · {meld.kind}
+        {ownerName} · {meld.kind}{pending ? " · pending" : ""}
       </div>
       <div style={{ display: "flex", gap: 3, alignItems: "flex-end" }}>
         {meld.cardIds.map((id, i) => {
@@ -78,9 +134,25 @@ function MeldPile({ meld, ownerName }: MeldPileProps) {
             />
           );
         })}
+        {stagedLayoffs.map((card) => (
+          <CardComponent
+            key={`staged-${card.id}`}
+            card={card}
+            compact
+            style={{ width: 40, height: 56, fontSize: 11, opacity: 0.55 }}
+          />
+        ))}
         {canLayoff && (
           <button
             onClick={handleLayoff}
+            style={{ fontSize: 11, padding: "4px 6px", marginLeft: 4 }}
+          >
+            +
+          </button>
+        )}
+        {canGinLayoff && (
+          <button
+            onClick={handleGinLayoff}
             style={{ fontSize: 11, padding: "4px 6px", marginLeft: 4 }}
           >
             +
@@ -94,6 +166,9 @@ function MeldPile({ meld, ownerName }: MeldPileProps) {
 export default function MeldZone() {
   const publicState = useAppStore((s) => s.publicState);
   const myPlayerId = useAppStore((s) => s.myPlayerId);
+  const ginDefenderMelds = useAppStore((s) => s.ginDefenderMelds);
+  const lookupCard = useAppStore((s) => s.lookupCard);
+  const privateState = useAppStore((s) => s.privateState);
 
   if (!publicState) return null;
 
@@ -101,7 +176,38 @@ export default function MeldZone() {
     (p) => p.melds.length > 0
   );
 
-  if (playersWithMelds.length === 0) {
+  // During gin layoff phase, the turn player is the defender. Show staged
+  // defender melds as pending piles even before submission.
+  const isGinLayoff =
+    publicState.variant === "gin" &&
+    publicState.phase === "layoff" &&
+    publicState.turnPlayerId === myPlayerId;
+
+  const myName =
+    publicState.players.find((p) => p.id === myPlayerId)?.name ?? "Me";
+
+  // Build synthetic Meld objects for staged defender melds (client-only preview).
+  const pendingMelds: Array<{ meld: Meld; ownerName: string }> = isGinLayoff
+    ? ginDefenderMelds.map((cardIds, i) => {
+        const cards = cardIds
+          .map((id) => lookupCard(id) ?? privateState?.hand.find((c) => c.id === id))
+          .filter((c): c is Card => c !== undefined);
+        return {
+          meld: {
+            id: `pending-${i}`,
+            kind: cards.length >= 3 && cards.every(c => c.suit === cards[0]!.suit) ? "run" : "set",
+            cardIds,
+            cards,
+            ownerId: myPlayerId ?? "",
+          } satisfies Meld,
+          ownerName: myName,
+        };
+      })
+    : [];
+
+  const hasAnything = playersWithMelds.length > 0 || pendingMelds.length > 0;
+
+  if (!hasAnything) {
     return (
       <div
         style={{
@@ -139,6 +245,9 @@ export default function MeldZone() {
             <MeldPile key={meld.id} meld={meld} ownerName={player.name} />
           ))
         )}
+        {pendingMelds.map(({ meld, ownerName }) => (
+          <MeldPile key={meld.id} meld={meld} ownerName={ownerName} pending />
+        ))}
       </div>
     </div>
   );
