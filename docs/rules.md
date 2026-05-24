@@ -116,26 +116,98 @@ Winner score = sum of opponents' unmelded card point values.
 | Param | Value |
 | --- | --- |
 | Players | 2 |
-| Deck | 52 cards, no jokers |
-| Deal | 10 cards each |
+| Deck | 1 × 52-card pack |
+| Jokers | Not used |
 
-### A.2.2 Melds
+### A.2.2 Deal
 
-- Run: 3+ same suit consecutive.
-- Set: 3 or 4 same rank.
-- Ace low only (A-2-3 valid; A-K-Q invalid).
+| Param | Value |
+| --- | --- |
+| Cards each | 10 |
+| Stock | Remaining 31 cards face-down |
+| Discard pile | 21st card (next after deal) flipped face-up — the **upcard** |
+
+**First dealer**: determined randomly. **Subsequent hands**: previous hand's **winner** deals.
+
+**Loser-deals-next** *(house rule)* `[PG-G]`: previous hand's loser deals the next hand instead of the winner.
+
+**First-upcard offer**: at the start of each hand the initial upcard is offered first to the **non-dealer**; if they decline, the **dealer** may take it; if both decline, the non-dealer begins normal play by drawing from stock. A player who takes the offered upcard then completes the turn normally (the upcard is their draw — they must still discard).
 
 ### A.2.3 Turn
 
-1. Draw 1: top of stock OR top of discard pile.
-2. (Optional) Knock before discarding — see A.2.4.
-3. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn.
+Non-dealer plays first (or whoever took the offered upcard, see A.2.2).
 
-### A.2.4 Knock
+1. **Draw 1**: top of stock OR top of discard pile.
+2. (Optional) **Knock** — see A.2.4 — before discarding.
+3. **Discard 1**. If the drawn card came from the top of the discard pile, the player may **not** discard that same card on the same turn.
 
-Knock allowed when deadwood ≤ 10 points.
+There is **no mid-turn melding**. Hands remain concealed throughout play; melds are revealed only at knock or gin (see A.2.4).
 
-### A.2.5 Card values
+**Stock depletion (cancelled hand)**: if the stock is reduced to **2 cards** and the player who took the third-to-last stock card discards without knocking, the hand is **cancelled** — no score; the same dealer re-deals.
+
+### A.2.4 Knock, gin, undercut, layoff, and hand scoring
+
+A player may end the hand by **knocking** when their **deadwood** (sum of unmatched-card point values, per A.2.7) is **≤ 10** after their draw. Knock procedure:
+
+1. The knocker discards the final card **face-down**.
+2. The knocker spreads their melds face-up and declares their deadwood total.
+3. The opponent spreads their hand, separates their own melds from deadwood, and (in a non-gin knock) may lay off — see below.
+
+**Gin** = knock with **0 deadwood** — all 10 remaining cards form valid melds after the face-down final discard.
+
+**Layoff**: after a **non-gin** knock, the opponent may extend the **knocker's** melds with their own unmatched cards to reduce their deadwood. The knocker may **not** lay off onto the opponent's melds. **No layoff against gin**: if the knocker went gin, the opponent's deadwood is counted in full.
+
+**Undercut**: if, after layoff, the opponent's deadwood is **less than or equal to** the knocker's deadwood, the knocker is **undercut** and the opponent scores instead. (Ties go to the opponent — the knocker must strictly beat the opponent's count to win the knock.)
+
+Hand-scoring formulas:
+
+| Outcome | Score awarded to | Formula |
+| --- | --- | --- |
+| Knock wins | knocker | `opponent_deadwood − knocker_deadwood` |
+| Gin | knocker | `20 + opponent_deadwood` (no layoff) |
+| Undercut | opponent | `(knocker_deadwood − opponent_deadwood) + 10` |
+
+**Gin bonus 25** *(house rule)* `[PG-G, GR]`: gin awards `25 + opponent_deadwood` instead of `20 + ...`.
+
+**Undercut bonus 25** *(house rule)* `[PG-G]`: undercut awards `(knocker_deadwood − opponent_deadwood) + 25` instead of `+ 10`.
+
+### A.2.5 Game end and bonuses
+
+Play continues across hands until a player's cumulative score reaches **100 points or more**. At that point each player computes their final game total:
+
+| Bonus | Value | Awarded to |
+| --- | --- | --- |
+| Box / line bonus | 20 points per hand won | each player, per hand won |
+| Game-winning bonus | 100 points | first player to cumulative ≥ 100 |
+| Shutout (skunk / schneider) | 100 points | winner, only if the loser scored 0 across the entire game |
+
+**Shutout bonus 200** *(house rule)* `[PG-G]`: shutout bonus is 200.
+
+```text
+final_total = sum_of_hand_scores
+            + 20 * boxes_won
+            + 100  (game-winning bonus, winner only)
+            + shutout_bonus  (winner only, iff loser_total == 0)
+```
+
+Winner of the game = player with the higher `final_total`.
+
+**Doubled-score shutout** *(house rule)* `[PG-G]`: if the loser scored zero, the winner's **entire** cumulative score (including box and game-winning bonuses) is doubled instead of awarding a flat shutout bonus.
+
+**Extra boxes for undercut / gin** *(house rule)* `[PG-G]`: each undercut counts as an extra box; each gin counts as two extra boxes.
+
+### A.2.6 Melds
+
+- **Set / Group**: 3 or 4 cards of the same rank. Example: `7♣ 7♦ 7♥`.
+- **Run / Sequence**: 3 or more cards of the same suit in consecutive order. Example: `4♠ 5♠ 6♠`.
+
+A card may belong to **only one** meld per hand — no overlapping or shared cards across melds `[PG-G]`.
+
+### A.2.7 Card rank and card values
+
+Rank: `K (high), Q, J, 10, 9, 8, 7, 6, 5, 4, 3, 2, A (low)`. Ace **low only**: `A-2-3` valid; `Q-K-A` invalid; **no round-the-corner** (`K-A-2` invalid). No ace-either-end option is supported in standard Gin.
+
+Card point values (used for deadwood, hand scoring, and Oklahoma Gin upcard threshold):
 
 | Card | Points |
 | --- | --- |
@@ -143,23 +215,31 @@ Knock allowed when deadwood ≤ 10 points.
 | 2-10 | face value |
 | J, Q, K | 10 |
 
-### A.2.6 Bonuses
+### A.2.8 Variants
 
-| Bonus | Value |
+Documented for reference only. **No Gin Rummy variants are planned for implementation.**
+
+#### Oklahoma Gin `[PG-G]` *(house rule)*
+
+A widely-played variant where the **rank of the first upcard** sets the maximum-deadwood knock threshold for the entire hand.
+
+| Upcard rank | Knock threshold this hand |
 | --- | --- |
-| Gin | 20 + opponent's unmatched count |
-| Knock (knocker wins) | difference in unmatched values |
-| Undercut | opponent scores difference + 10 bonus |
-| Box / line bonus | 20 points per hand won |
-| Game bonus | 100 |
-| Shutout bonus | 100 `[BIC-G]` / 200 `[PG-G]` (opponent scored nothing) |
-| Game target | 100+ points |
+| 2-10 | upcard pip value (e.g., upcard `6` → may knock only if deadwood ≤ 6) |
+| J, Q, K | 10 (standard) |
+| A | **gin only** — may knock only with deadwood = 0 *(optional sub-rule)* |
 
-Gin bonus variant *(house rule)*: **25 points** + opponent's unmatched count `[GR]`.
+**Spade-doubled** sub-rule: if the first upcard is **any spade**, the hand's score is **doubled** for the winner of that hand. Stacks multiplicatively with the rank-based threshold.
 
-### A.2.7 Game end
+Oklahoma Gin game target is typically **150 points** rather than 100.
 
-First player to cumulative ≥ 100 points wins; add game bonus + box bonuses.
+#### Other listed variants `[PG-G]`
+
+- **25-point gin bonus** — see A.2.4.
+- **25-point undercut bonus** — see A.2.4.
+- **Loser-deals-next** — see A.2.2.
+- **Doubled-score shutout** — see A.2.5.
+- **Extra boxes for undercut / gin** — see A.2.5.
 
 ---
 
@@ -479,12 +559,20 @@ if game == basic_rummy:
     going_rummy_bonus: score *= 2  (or +10 variant per PG-R)
     score: opp_unmelded; A=1, 2-10=pip, JQK=10
 elif game == gin:
-    players == 2; deal = 10
+    deck = 1*52, no jokers; players == 2; deal = 10
+    ace = low only; A=1, 2-10=pip, JQK=10
+    melds: set(3-4 same rank) | run(3+ same suit sequential); no overlap; hands concealed until reveal
+    first_upcard: offered non-dealer first, then dealer; if both pass, non-dealer draws stock
+    turn: draw(stock|top_discard) -> optional knock -> discard
     constraint: if drew top_discard, cannot discard same card same turn
-    knock if deadwood <= 10
-    gin = deadwood 0 -> +20 + opp_unmatched
-    undercut -> opp +10 + difference
-    box = +20 per hand won; game_end >= 100 -> +100 (or +200 shutout)
+    no mid-turn melding (melds revealed only at knock/gin)
+    knock if deadwood <= 10; final discard face-down
+    gin = deadwood 0 -> knocker +20 + opp_deadwood; opp cannot lay off
+    knock (non-gin) -> opp may lay off onto knocker's melds; knocker scores opp_dw - knocker_dw
+    undercut (opp_dw <= knocker_dw after layoff) -> opp +10 + (knocker_dw - opp_dw)
+    stock_depleted (2 left after 3rd-last taken + no-knock discard) -> hand cancelled, no score
+    box = +20 per hand won; game_end >= 100 -> +100 game bonus
+    shutout (loser scored 0) -> +100 [BIC-G] / +200 [PG-G]
 elif game == knock_rummy:
     deck = 1*52; players 2-6
     deal = {2:10, 3-4:7, 5-6:6}

@@ -63,8 +63,12 @@ export default function Table() {
 
   const isMyTurn = publicState.turnPlayerId === myPlayerId;
   const drawPhase = publicState.phase === "draw";
+  // rules.md A.2.2: during firstUpcardOffer the discard pile is clickable as the
+  // accept-upcard action (Gin-only; basic/500Rum never enter this phase).
+  const upcardOfferPhase = publicState.phase === "firstUpcardOffer";
   const is500 = publicState.variant === "rum500";
   const canDraw = isMyTurn && drawPhase;
+  const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
   const pileHasCards = publicState.discardPileSize > 0;
 
   // 500 Rum interactive picker: only when it is the player's turn to draw.
@@ -78,7 +82,7 @@ export default function Table() {
 
   function handleDiscardClick() {
     if (!pileHasCards) return;
-    if (!is500 && canDraw) {
+    if (!is500 && canDrawDiscard) {
       send({ t: "draw", from: "discard" });
       return;
     }
@@ -183,7 +187,7 @@ export default function Table() {
             {...(pileHasCards
               ? {
                   onClick: handleDiscardClick,
-                  style: canDraw
+                  style: canDrawDiscard
                     ? { boxShadow: "0 0 10px rgba(74,158,255,0.6)" }
                     : { cursor: "pointer" },
                 }

@@ -36,6 +36,12 @@ export type GameState = {
   // 500 Rum (rules.md A.4.6, A.4.7): scoring credits the player who placed a card,
   // not the meld's original owner. Tracks placer for every card in any meld.
   meldedBy: Map<string, PlayerId>;
+  // Gin: ID of the player who knocked — set by applyKnock, read by scoreHand/handleHandEnd.
+  // Needed because turnPlayerId switches to defender during 'layoff' phase.
+  ginKnockerId: string | null;
+  // Gin (rules.md A.2.3): set when applyDiscard reduces the stock to ≤2 cards without a
+  // knock. Signals that the hand is over with no scoring; same dealer re-deals.
+  cancelledHand: boolean;
 };
 
 export interface VariantEngine {

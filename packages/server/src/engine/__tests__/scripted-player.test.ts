@@ -110,7 +110,7 @@ describe('runScript', () => {
 
   it.each([
     { t: 'chat' as const, text: 'hi' },
-    { t: 'knock' as const },
+    { t: 'knock' as const, discardId: 'none' },
     { t: 'create' as const, variant: 'basic' as const, name: 'X' },
     { t: 'join' as const, roomCode: 'A', name: 'X' },
     { t: 'start' as const },

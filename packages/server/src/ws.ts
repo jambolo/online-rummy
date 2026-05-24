@@ -12,6 +12,7 @@ import { makeSessionId, signSessionId, verifySessionId } from './session.js';
 import { cryptoRNG } from './rng.js';
 import * as basic from './engine/variants/basic.js';
 import * as rum500 from './engine/variants/rum500.js';
+import * as gin from './engine/variants/gin.js';
 import { cardPoints, score500MeldCard } from './engine/meld.js';
 import type { GameState, GamePlayer } from './engine/types.js';
 import type { VariantEngine } from './engine/types.js';
@@ -22,8 +23,11 @@ type VariantFns = {
   applyDraw: typeof basic.applyDraw;
   applyMeld: typeof basic.applyMeld;
   applyLayoff: typeof basic.applyLayoff;
-  applyDiscard: typeof basic.applyDiscard;
+  applyDiscard: typeof gin.applyDiscard; // broadest return shape (includes optional `cancelled`)
   applyDrawFromPile?: typeof rum500.applyDrawFromPile;
+  applyKnock?: typeof gin.applyKnock;
+  applyGinLayoff?: typeof gin.applyGinLayoff;
+  applyPassUpcard?: typeof gin.applyPassUpcard;
 };
 
 function variantFns(v: Variant): VariantFns {
@@ -48,7 +52,17 @@ function variantFns(v: Variant): VariantFns {
         applyDrawFromPile: rum500.applyDrawFromPile,
       };
     case 'gin':
-      throw new Error('ERR_NOT_IMPLEMENTED:gin');
+      return {
+        variant: gin.ginVariant,
+        createGame: gin.createGinGame,
+        applyDraw: gin.applyDraw,
+        applyMeld: gin.applyMeld,
+        applyLayoff: gin.applyLayoff,
+        applyDiscard: gin.applyDiscard,
+        applyKnock: gin.applyKnock,
+        applyGinLayoff: gin.applyGinLayoff,
+        applyPassUpcard: gin.applyPassUpcard,
+      };
   }
 }
 
@@ -134,6 +148,7 @@ function buildPublicState(room: Room, state: GameState): PublicState {
     discardPile: [...state.discardPile],
     stockSize: state.stock.length,
     mustMeldCardId: state.mustMeldCardId,
+    ginKnockerId: state.ginKnockerId,
   };
 }
 
@@ -173,6 +188,15 @@ function nextActivePlayer(state: GameState, afterId: string): GamePlayer | undef
   return undefined;
 }
 
+// Gin (rules.md A.2.3) stock-depletion cancel: no scoring, no winner. Mark room ended
+// so the host can re-deal with the same dealer.
+function handleHandCancelled(room: Room, state: GameState): void {
+  room.status = 'ended';
+  state.phase = 'ended';
+  broadcast(room, { t: 'event', kind: 'handCancelled', playerId: state.turnPlayerId });
+  broadcastStateAll(room, state);
+}
+
 // Score completed hand, update cumulative scores, broadcast events + final state.
 function handleHandEnd(room: Room, state: GameState): void {
   const fns = variantFns(room.variant);
@@ -185,7 +209,17 @@ function handleHandEnd(room: Room, state: GameState): void {
     state.scoreSheet.set(gp.id, sheet);
   }
 
-  const winner = state.players.find(p => p.hand.length === 0 && p.status === 'active');
+  // Winner: player with positive hand score. Basic/500 Rum: hand.length === 0 player.
+  // Gin: determined by deadwood comparison (knocker may still hold cards).
+  const winner = room.variant === 'gin'
+    ? (() => {
+        for (const [pid, pts] of scores) {
+          if (pts > 0) return state.players.find(p => p.id === pid);
+        }
+        return undefined;
+      })()
+    : state.players.find(p => p.hand.length === 0 && p.status === 'active');
+
   if (winner !== undefined) {
     // Include all players' final hands + per-player meld credits so clients can show full
     // score breakdown. meldCredits is keyed by *placer* (not meld owner) — matches
@@ -201,25 +235,44 @@ function handleHandEnd(room: Room, state: GameState): void {
       const aceVal = room.variant === 'rum500' ? 15 : 1;
       handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, aceVal), 0);
     }
-    for (const p of state.players) {
-      for (const m of p.melds) {
-        const meldCards = m.cardIds
-          .map((id) => state.cardRegistry.get(id))
-          .filter((c): c is Card => c !== undefined);
-        for (const card of meldCards) {
-          const placer = state.meldedBy.get(card.id) ?? p.id;
-          const pts = room.variant === 'rum500'
-            ? score500MeldCard(card, meldCards)
-            : cardPoints(card, 1);
-          (meldCredits[placer] ??= []).push({ card, pts });
+    // Gin scores based on deadwood comparison — no per-card meld credits to compute.
+    if (room.variant !== 'gin') {
+      for (const p of state.players) {
+        for (const m of p.melds) {
+          const meldCards = m.cardIds
+            .map((id) => state.cardRegistry.get(id))
+            .filter((c): c is Card => c !== undefined);
+          for (const card of meldCards) {
+            const placer = state.meldedBy.get(card.id) ?? p.id;
+            const pts = room.variant === 'rum500'
+              ? score500MeldCard(card, meldCards)
+              : cardPoints(card, 1);
+            (meldCredits[placer] ??= []).push({ card, pts });
+          }
         }
       }
     }
+
+    // Gin-specific result metadata for client display.
+    type GinInfo = { knockerId: string; knockerDeadwood: number; defenderDeadwood: number; result: 'gin' | 'knock' | 'undercut' };
+    let ginInfo: GinInfo | undefined;
+    if (room.variant === 'gin') {
+      const knockerId = state.ginKnockerId ?? state.turnPlayerId;
+      const knocker = state.players.find(p => p.id === knockerId);
+      const defender = state.players.find(p => p.id !== knockerId && p.status !== 'forfeited');
+      if (knocker !== undefined && defender !== undefined) {
+        const kDead = gin.ginDeadwood(knocker);
+        const dDead = gin.ginDeadwood(defender);
+        const result: GinInfo['result'] = kDead === 0 ? 'gin' : kDead < dDead ? 'knock' : 'undercut';
+        ginInfo = { knockerId: knocker.id, knockerDeadwood: kDead, defenderDeadwood: dDead, result };
+      }
+    }
+
     broadcast(room, {
       t: 'event',
       kind: 'wonHand',
       playerId: winner.id,
-      data: { finalHands, meldCredits, handDeadwood },
+      data: { finalHands, meldCredits, handDeadwood, ...(ginInfo !== undefined ? { ginInfo } : {}) },
     });
   }
 
@@ -344,10 +397,6 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       const { player, room } = ctx;
       if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
       if (room.hostId !== player.id) { sendError(ws, 'ERR_NOT_HOST', 'Only the host can start'); return; }
-      if (room.variant === 'gin') {
-        sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Gin variant not yet implemented');
-        return;
-      }
       const fns = variantFns(room.variant);
 
       if (room.status === 'lobby') {
@@ -378,12 +427,33 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           sendError(ws, 'ERR_NOT_ENOUGH_PLAYERS', `Need at least ${min} players`);
           return;
         }
-        // Rotate first player clockwise from whoever went first last hand.
+        // First-player rotation for the new hand:
+        // - Gin cancelled hand (rules.md A.2.3): same dealer re-deals → same first player.
+        // - Gin normal end (rules.md A.2.2): winner deals → loser plays first.
+        // - Basic / 500 Rum: clockwise rotation from previous first player.
         const newPlayers = room.players.map(p => ({ id: p.id, name: p.name }));
         let nextFirstIndex = 0;
         if (oldState !== null) {
-          const prevIdx = newPlayers.findIndex(p => p.id === oldState.firstPlayerId);
-          if (prevIdx !== -1) nextFirstIndex = (prevIdx + 1) % newPlayers.length;
+          if (room.variant === 'gin' && oldState.cancelledHand) {
+            const prevIdx = newPlayers.findIndex(p => p.id === oldState.firstPlayerId);
+            if (prevIdx !== -1) nextFirstIndex = prevIdx;
+          } else if (room.variant === 'gin') {
+            // Loser of the previous hand goes first (winner deals — rules.md A.2.2). With
+            // 2P Gin and a normal hand end, exactly one player has a positive last-hand
+            // score (the winner); the other has 0 (the loser).
+            let loserId: string | undefined;
+            for (const [pid, hands] of oldState.scoreSheet.entries()) {
+              const last = hands[hands.length - 1] ?? 0;
+              if (last === 0) loserId = pid;
+            }
+            if (loserId !== undefined) {
+              const idx = newPlayers.findIndex(p => p.id === loserId);
+              if (idx !== -1) nextFirstIndex = idx;
+            }
+          } else {
+            const prevIdx = newPlayers.findIndex(p => p.id === oldState.firstPlayerId);
+            if (prevIdx !== -1) nextFirstIndex = (prevIdx + 1) % newPlayers.length;
+          }
         }
         room.status = 'playing';
         const newState = fns.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
@@ -478,7 +548,9 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
       try {
         const result = variantFns(room.variant).applyDiscard(room.gameState, player.id, msg.cardId);
-        if (result.handEnded) {
+        if (result.cancelled === true) {
+          handleHandCancelled(room, room.gameState);
+        } else if (result.handEnded) {
           handleHandEnd(room, room.gameState);
         } else {
           broadcastState(room, room.gameState, player.id);
@@ -490,10 +562,58 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       break;
     }
 
+    case 'passUpcard': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      const passFn = variantFns(room.variant).applyPassUpcard;
+      if (passFn === undefined) { sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Upcard offer not available for this variant'); return; }
+      try {
+        passFn(room.gameState, player.id);
+        // Both players need to see the new turnPlayerId / phase. No hand contents change.
+        broadcastStateAll(room, room.gameState);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
     case 'knock': {
-      const { room } = ctx;
-      if (room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
-      sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Action not available for this variant');
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      const knockFn = variantFns(room.variant).applyKnock;
+      if (knockFn === undefined) { sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Knock not available for this variant'); return; }
+      try {
+        knockFn(room.gameState, player.id, msg.melds, msg.discardId);
+        if (room.gameState.phase === 'ended') {
+          // Gin (0 deadwood) — no defender layoff; hand ends immediately.
+          handleHandEnd(room, room.gameState);
+        } else {
+          // Knock — defender gets layoff opportunity; broadcast new phase to both players.
+          broadcastStateAll(room, room.gameState);
+        }
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
+      break;
+    }
+
+    case 'ginLayoff': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (room.status !== 'playing' || room.gameState === null) { sendError(ws, 'ERR_WRONG_STATE', 'Game not in progress'); return; }
+      const layoffFn = variantFns(room.variant).applyGinLayoff;
+      if (layoffFn === undefined) { sendError(ws, 'ERR_NOT_IMPLEMENTED', 'Gin layoff not available for this variant'); return; }
+      try {
+        layoffFn(room.gameState, player.id, msg.layoffs, msg.ownMelds);
+        handleHandEnd(room, room.gameState);
+      } catch (err) {
+        const { code, msg: m } = engineError(err);
+        sendError(ws, code, m);
+      }
       break;
     }
   }

@@ -11,17 +11,22 @@ import type { C2S } from '@online-rummy/shared';
 import type { GameState } from './types.js';
 import * as basic from './variants/basic.js';
 import * as rum500 from './variants/rum500.js';
+import * as gin from './variants/gin.js';
 
 type VariantFns = {
   applyDraw: typeof basic.applyDraw;
   applyMeld: typeof basic.applyMeld;
   applyLayoff: typeof basic.applyLayoff;
-  applyDiscard: typeof basic.applyDiscard;
+  applyDiscard: typeof gin.applyDiscard;
   applyDrawFromPile?: typeof rum500.applyDrawFromPile;
+  applyKnock?: typeof gin.applyKnock;
+  applyGinLayoff?: typeof gin.applyGinLayoff;
+  applyPassUpcard?: typeof gin.applyPassUpcard;
 };
 
 function fnsFor(state: GameState): VariantFns {
   if (state.variant === 'rum500') return rum500;
+  if (state.variant === 'gin') return gin;
   return basic;
 }
 
@@ -95,12 +100,26 @@ function dispatchAction(state: GameState, action: C2S): void {
     case 'discard':
       fns.applyDiscard(state, pid, action.cardId);
       break;
+    case 'knock':
+      if (fns.applyKnock !== undefined) {
+        fns.applyKnock(state, pid, action.melds, action.discardId);
+      }
+      break;
+    case 'ginLayoff':
+      if (fns.applyGinLayoff !== undefined) {
+        fns.applyGinLayoff(state, pid, action.layoffs, action.ownMelds);
+      }
+      break;
+    case 'passUpcard':
+      if (fns.applyPassUpcard !== undefined) {
+        fns.applyPassUpcard(state, pid);
+      }
+      break;
     // Non-engine actions (no-op in scripted context)
     case 'create':
     case 'join':
     case 'start':
     case 'chat':
-    case 'knock':
       break;
     default: {
       const _exhaustive: never = action;

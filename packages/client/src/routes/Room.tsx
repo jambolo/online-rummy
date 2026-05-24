@@ -17,11 +17,9 @@ function OpponentStrip() {
 
   if (!publicState) return null;
 
-  const opponents = publicState.players.filter((p) => p.id !== myPlayerId);
-
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-      {opponents.map((p) => (
+      {publicState.players.map((p) => (
         <div
           key={p.id}
           style={{
@@ -39,6 +37,9 @@ function OpponentStrip() {
           }}
         >
           <span style={{ fontWeight: "bold", fontSize: 14 }}>{p.name}</span>
+          {p.id === myPlayerId && (
+            <span style={{ fontSize: 11, color: "#7fd4ff" }}>you</span>
+          )}
           <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
             {p.handCount} cards
           </span>
@@ -195,7 +196,9 @@ function ScoreOverlay() {
   const finalHands = useAppStore((s) => s.finalHands);
   const meldCredits = useAppStore((s) => s.meldCredits);
   const handDeadwood = useAppStore((s) => s.handDeadwood);
+  const ginInfo = useAppStore((s) => s.ginInfo);
   const isGameOver = useAppStore((s) => s.isGameOver);
+  const handCancelled = useAppStore((s) => s.handCancelled);
   const send = useAppStore((s) => s.send);
 
   if (!publicState || publicState.phase !== "ended") return null;
@@ -203,8 +206,77 @@ function ScoreOverlay() {
   const isHost = myPlayerId === hostId;
   const sorted = [...publicState.players].sort((a, b) => b.score - a.score);
   const is500 = publicState.variant === "rum500";
+  const isGin = publicState.variant === "gin";
   const cardPts = is500 ? cardPts500 : cardPtsBasic;
   const gameTarget = is500 ? 500 : 100;
+
+  // rules.md A.2.3 stock-depletion cancel: no scoring; show simple banner + Re-deal.
+  if (handCancelled) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.65)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 100,
+        }}
+      >
+        <div
+          style={{
+            background: "#1a4a1a",
+            border: "2px solid rgba(255,255,255,0.2)",
+            borderRadius: 12,
+            padding: 32,
+            width: 340,
+            textAlign: "center",
+          }}
+        >
+          <h2 style={{ marginBottom: 8 }}>Hand Cancelled</h2>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 20 }}>
+            Stock ran low before anyone knocked. No score this hand — same dealer re-deals.
+          </div>
+          {sorted.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: "6px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                fontSize: 13,
+              }}
+            >
+              <span>{p.name}{p.id === myPlayerId ? " (you)" : ""}</span>
+              <span>{p.score} pts</span>
+            </div>
+          ))}
+          {isHost ? (
+            <button
+              className="primary"
+              onClick={() => send({ t: "start" })}
+              style={{ width: "100%", marginTop: 20 }}
+            >
+              Re-deal
+            </button>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: 20,
+                color: "rgba(255,255,255,0.5)",
+                fontSize: 13,
+              }}
+            >
+              Waiting for host…
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -297,8 +369,22 @@ function ScoreOverlay() {
                 </span>
               </div>
 
+              {/* Gin result — shows knock/gin/undercut label and deadwood for each player */}
+              {isGin && ginInfo && (
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>
+                  {p.id === ginInfo.knockerId
+                    ? ginInfo.result === "gin"
+                      ? `Gin! — 0 deadwood (+20 gin bonus, +20 box)`
+                      : ginInfo.result === "knock"
+                        ? `Knocked — ${ginInfo.knockerDeadwood} deadwood (+20 box)`
+                        : `Knocked — ${ginInfo.knockerDeadwood} deadwood (undercut!)`
+                    : ginInfo.result === "undercut"
+                      ? `Undercut! — ${ginInfo.defenderDeadwood} deadwood (+10 undercut, +20 box)`
+                      : `${ginInfo.defenderDeadwood} deadwood`}
+                </div>
+              )}
               {/* Score explanation — basic only; 500 Rum delta covers many sources */}
-              {!is500 && isWinner && delta > 0 && (
+              {!is500 && !isGin && isWinner && delta > 0 && (
                 <div
                   style={{
                     fontSize: 11,

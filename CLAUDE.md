@@ -62,11 +62,12 @@ Node.js 20 + native `ws`. No ORM, no DB — all state in memory.
 | `engine/meld.ts` | `validateMeld(cards, opts)` (`aceEitherEnd` for 500 Rum runs), `cardPoints`, `runAceDirection`, `score500MeldCard` |
 | `engine/variants/basic.ts` | `basicVariant: VariantEngine`, `createBasicGame`, `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` |
 | `engine/variants/rum500.ts` | `rum500Variant: VariantEngine`, `createRum500Game`, `applyDraw`, `applyDrawFromPile`, `applyMeld`, `applyLayoff`, `applyDiscard` |
+| `engine/variants/gin.ts` | `ginVariant: VariantEngine`, `createGinGame`, `applyDraw`, `applyPassUpcard`, `applyDiscard`, `applyKnock(state, pid, melds?, discardId)`, `applyGinLayoff(state, pid, layoffs, ownMelds?)`, `ginDeadwood`. `applyMeld`/`applyLayoff` throw `ERR_NOT_SUPPORTED` (Gin declares melds at knock time only). |
 | `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences; dispatches per-variant via `state.variant` |
 | `rng.ts` | `RNG` type alias; wraps `node:crypto` `randomInt` |
 | `session.ts` | `makeSessionId`, `signSessionId`, `verifySessionId` — HMAC-SHA256 session tokens |
 | `room.ts` | `Room`/`Player` types (Room carries `gameState: GameState \| null`), Crockford base32 room codes, in-memory registry, `variantLimits` |
-| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. |
+| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/`knock`/`ginLayoff`/`passUpcard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. `handleHandCancelled` handles Gin stock-depletion (no scoring, same dealer re-deals). |
 | `index.ts` | HTTP server, `SESSION_SECRET`/`ALLOWED_ORIGINS`/`PORT` env validation, startup |
 
 **`GameState` is mutated in place** by all `apply*` functions. Clone before passing to `runScript` if you need snapshot comparison.
@@ -86,19 +87,20 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | File / dir | Purpose |
 | --- | --- |
 | `src/net/ws.ts` | `connect(url, callbacks)`, `send(msg)`, `disconnect()`. Epoch counter prevents stale socket events from React StrictMode double-mount. |
-| `src/store.ts` | Zustand store — all app state. `handleMessage(S2C)` is the single entry point for server messages. `cardCache` holds Card objects by id so melded cards (removed from hand) can still be rendered. |
+| `src/store.ts` | Zustand store — all app state. `handleMessage(S2C)` is the single entry point for server messages. `cardCache` holds Card objects by id so melded cards (removed from hand) can still be rendered. Gin staging: `knockMelds`, `ginDefenderMelds`, `ginLayoffs` accumulate client-side declarations before submission; each has add/remove-by-index/clear actions. All three cleared on `draw` phase and `gameStarted`. |
 | `src/routes/Home.tsx` | Create/join forms. Shows error banner for pre-join errors. |
 | `src/routes/Room.tsx` | Lobby view (while `publicState === null`) or game view. Contains `ScoreOverlay` (hand-end modal with per-player card breakdown). |
 | `src/components/Card.tsx` | Playing card. `compact` prop hides center symbol and bottom corner for small meld-zone cards. Always sets `textAlign: left` to override inherited centering from Table wrappers. |
 | `src/components/Hand.tsx` | dnd-kit sortable hand. `PointerSensor` with `distance: 6` activation so taps toggle selection without triggering drag. |
 | `src/components/Table.tsx` | Stock pile + discard top. In 500 Rum, clicking discard opens `PileDiveModal`; otherwise sends `draw {from:'discard'}`. |
 | `src/components/PileDiveModal.tsx` | 500 Rum pile-dive picker (rules.md A.4.4). Shows full discard pile top-first; hovering a card highlights every card that will be taken. |
-| `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state. Layoff button shown when allowed: basic requires own meld, 500 Rum does not. |
-| `src/components/ActionBar.tsx` | Phase-aware action buttons. 500 Rum: multiple melds per turn; discard disabled when `mustMeldCardId` is set. |
+| `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state. Layoff button shown when allowed: basic requires own meld, 500 Rum does not. During Gin `layoff` phase: staged `ginDefenderMelds` render as dashed-border pending piles; staged `ginLayoffs` render as semi-transparent cards appended to their target knocker meld. |
+| `src/components/ActionBar.tsx` | Phase-aware action buttons. 500 Rum: multiple melds per turn; discard disabled when `mustMeldCardId` is set. Gin: `firstUpcardOffer` take/pass, knock meld-group builder (chips with × per group, live deadwood indicator, knock button when deadwood ≤ 10), defender layoff-phase UI (own-meld chips with ×, staged layoff chips with ×, submit sends one `ginLayoff` message). |
 | `src/components/Chat.tsx` | Chat message list + send form. |
-| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. Basic + 500 Rum content complete; Gin stubbed for M6. |
+| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. All three variants have full content. |
 | `src/content/howToPlay/basic.tsx` | Static Basic Rummy rules fragment — objective, turn flow, melds, scoring, locked house rules. |
 | `src/content/howToPlay/rum500.tsx` | Static 500 Rum rules fragment — pile dive, ace-either-end, multi-meld turns, layoff credit. |
+| `src/content/howToPlay/gin.tsx` | Static Gin Rummy rules fragment — upcard offer, knock/gin/undercut scoring, layoff after knock, stock-depletion cancel, locked house rules. |
 
 **Selector rule:** never pass an object literal to `useAppStore` — it creates a new ref every render and causes an infinite loop with React 18's `useSyncExternalStore`. Use one hook call per value.
 
@@ -126,7 +128,8 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 - `GameState.firstPlayerId` records who went first each hand; re-deal path in `ws.ts` uses it to rotate the starting player clockwise.
 - `createBasicGame` / `createRum500Game` take optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.
 - 500 Rum (rules.md A.4) — `GameState.mustMeldCardId` enforces the **pile-dive** must-use restriction (rules.md A.4.4 "Pile dive"). It is set **only** by `applyDrawFromPile` (a true pile dive, ≥2 cards). A simple top-card draw via `applyDraw {from:'discard'}` does NOT set `mustMeldCardId` — it sets only `drewFromDiscardId` (no re-discard same turn). The "unified obligation" house rule (rules.md A.4.4) that would extend must-use to top-card draws is **NOT currently enforced**. `GameState.meldedBy: Map<cardId, PlayerId>` credits layoff points to the placer, not the meld's original owner. Ace direction in runs is derived per meld from `runAceDirection`: A-2-3 → low (1 pt), Q-K-A → high (15 pts). Sets of aces always 15 pt; aces in hand always 15 pt.
-- `PublicState.discardPile: Card[]` is always populated (full visible pile) — basic clients ignore it; 500 Rum pile-dive UI reads it.
+- Gin (rules.md A.2) — 2P only, ace low only. Hand opens at phase `firstUpcardOffer` (rules.md A.2.2): non-dealer offered the initial upcard first, then dealer; both decline → phase becomes `draw` with non-dealer playing first. C2S `passUpcard` declines. **No mid-turn melding** — `applyMeld`/`applyLayoff` always throw `ERR_NOT_SUPPORTED`; melds are declared at knock time via `applyKnock(state, pid, melds?, discardId)`. `discardId` is required: the knocked card is removed from hand and pushed to discard pile before deadwood is computed from the remaining 10 cards (rules.md A.2.4). Card must not be in any declared meld (`ERR_CANNOT_DISCARD_MELDED_CARD`). After a non-gin knock, phase = `layoff` and turn switches to the defender, who submits `ginLayoff` to declare own melds (`ownMelds?: string[][]`) and lay off onto knocker's melds (rules.md A.2.4 step 3). `applyGinLayoff` validates and applies `ownMelds` first, then `layoffs`; `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. Gin (0 deadwood) skips the layoff phase. `GameState.ginKnockerId` records the knocker (needed because `turnPlayerId` switches to defender). `GameState.cancelledHand` is set when `applyDiscard` reduces stock to ≤2 without a knock (rules.md A.2.3 stock-depletion); the WS layer emits `handCancelled` and the next `start` re-deals with the same dealer. Re-deal first-player rotation in `ws.ts`: Gin winner deals next hand → loser plays first (rules.md A.2.2); cancelled hand keeps same dealer. Scoring (`ginVariant.scoreHand`) covers gin/regular knock/undercut + box (+20) + game bonus (+100 at cumulative ≥100) + shutout (+100 `[BIC-G]`).
+- `PublicState.discardPile: Card[]` is always populated (full visible pile) — basic clients ignore it; 500 Rum pile-dive UI reads it. `PublicState.ginKnockerId` mirrors `GameState.ginKnockerId` for the client (used during `layoff` phase + score overlay).
 
 ## Milestones
 
@@ -138,6 +141,6 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | M4 | Done | React client: hand fan, drag-drop, discard, meld zone, chat, score overlay |
 | M4.5 | Done | Re-deal, first-player rotation, How to Play modal (Basic), bug fixes |
 | M5 | Done | 500 Rum variant — pile-dive UX, ace-either-end melds, multi-meld turns, layoff credit, How to Play |
-| M6 | Not started | Gin variant |
+| M6 | Done | Gin variant |
 | M7 | Not started | Deploy, structured logs, metrics |
 | M8 | Not started | PixiJS card layer |

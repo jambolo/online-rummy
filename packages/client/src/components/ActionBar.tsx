@@ -1,21 +1,66 @@
-import type { Suit } from "@online-rummy/shared";
+import type { Card, Rank, Suit } from "@online-rummy/shared";
+import { RANK_INDEX } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
 
+const RANK_PTS_GIN: Record<Rank, number> = {
+  A: 1, "2": 2, "3": 3, "4": 4, "5": 5,
+  "6": 6, "7": 7, "8": 8, "9": 9,
+  "10": 10, J: 10, Q: 10, K: 10,
+};
+
 const PHASE_LABEL: Record<string, string> = {
+  firstUpcardOffer: "Take upcard or pass",
   draw: "Draw a card",
   meld: "Meld or discard",
-  discard: "Discard a card",
+  discard: "Discard or knock",
+  layoff: "Lay off on melds",
   ended: "Hand over",
 };
 
+// Client-side meld validation for Gin (ace low only — rules.md A.2 house rule).
+function isGinSet(cards: Card[]): boolean {
+  if (cards.length < 3 || cards.length > 4) return false;
+  const rank = cards[0]?.rank;
+  return cards.every((c) => c.rank === rank);
+}
+function isGinRun(cards: Card[]): boolean {
+  if (cards.length < 3) return false;
+  const suit = cards[0]?.suit;
+  if (!cards.every((c) => c.suit === suit)) return false;
+  const indices = cards.map((c) => RANK_INDEX[c.rank]).sort((a, b) => a - b);
+  for (let i = 1; i < indices.length; i++) {
+    if ((indices[i] as number) - (indices[i - 1] as number) !== 1) return false;
+  }
+  return true;
+}
+function isValidGinMeld(cards: Card[]): boolean {
+  return isGinSet(cards) || isGinRun(cards);
+}
+
+function cardLabel(c: Card): string {
+  return `${c.rank}${SUIT_SYMBOL[c.suit]}`;
+}
+
 export default function ActionBar() {
   const publicState = useAppStore((s) => s.publicState);
+  const privateState = useAppStore((s) => s.privateState);
   const myPlayerId = useAppStore((s) => s.myPlayerId);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
+  const knockMelds = useAppStore((s) => s.knockMelds);
+  const ginLayoffs = useAppStore((s) => s.ginLayoffs);
   const send = useAppStore((s) => s.send);
   const clearSelect = useAppStore((s) => s.clearSelect);
+  const addKnockMeld = useAppStore((s) => s.addKnockMeld);
+  const removeKnockMeld = useAppStore((s) => s.removeKnockMeld);
+  const clearKnockMelds = useAppStore((s) => s.clearKnockMelds);
+  const ginDefenderMelds = useAppStore((s) => s.ginDefenderMelds);
+  const addGinDefenderMeld = useAppStore((s) => s.addGinDefenderMeld);
+  const removeGinDefenderMeld = useAppStore((s) => s.removeGinDefenderMeld);
+  const clearGinDefenderMelds = useAppStore((s) => s.clearGinDefenderMelds);
+  const removeGinLayoff = useAppStore((s) => s.removeGinLayoff);
+  const clearGinLayoffs = useAppStore((s) => s.clearGinLayoffs);
 
   if (!publicState) return null;
 
@@ -23,6 +68,7 @@ export default function ActionBar() {
   const phase = publicState.phase;
   const sel = selectedCardIds;
   const is500 = publicState.variant === "rum500";
+  const isGin = publicState.variant === "gin";
   const mustMeldCardId = publicState.mustMeldCardId;
   const mustMeldBlock = isMyTurn && mustMeldCardId !== null;
 
@@ -41,6 +87,32 @@ export default function ActionBar() {
     const cardId = sel[0];
     if (!cardId) return;
     send({ t: "discard", cardId });
+    clearSelect();
+  }
+
+  // ── Gin: compute deadwood relative to declared knock meld groups ──
+  const knockMeldedIds = new Set(knockMelds.flat());
+  const hand = privateState?.hand ?? [];
+
+  // The knock discard: exactly 1 non-melded card selected — will be discarded face-down
+  // as the knock signal (rules.md A.2.4). Deadwood is computed from remaining cards after
+  // that discard, so deadwoodValue reflects the true post-discard count.
+  const knockDiscardId = sel.length === 1 && !knockMeldedIds.has(sel[0]!) ? sel[0]! : null;
+  const deadwoodCards = hand.filter(
+    (c) => !knockMeldedIds.has(c.id) && c.id !== knockDiscardId,
+  );
+  const deadwoodValue = deadwoodCards.reduce((s, c) => s + RANK_PTS_GIN[c.rank], 0);
+
+  const selCards = sel.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined);
+  const selAlreadyMelded = sel.some((id) => knockMeldedIds.has(id));
+  const canAddKnockMeld = isGin && isMyTurn && sel.length >= 3 && !selAlreadyMelded && isValidGinMeld(selCards);
+  // Knock requires 1 card selected as face-down discard AND remaining deadwood ≤ 10.
+  const canKnock = isGin && isMyTurn && phase === "discard" && knockDiscardId !== null && deadwoodValue <= 10;
+
+  function doKnock() {
+    if (!knockDiscardId) return;
+    send({ t: "knock", melds: knockMelds, discardId: knockDiscardId });
+    clearKnockMelds();
     clearSelect();
   }
 
@@ -65,9 +137,26 @@ export default function ActionBar() {
         }}
       >
         {isMyTurn
-          ? PHASE_LABEL[phase] ?? phase
+          ? (isGin && phase === "discard" ? "Discard or knock" : PHASE_LABEL[phase] ?? phase)
           : `${turnPlayerName}: ${PHASE_LABEL[phase] ?? phase}`}
       </div>
+
+      {/* ── First-upcard offer (Gin only, rules.md A.2.2) ── */}
+      {isGin && isMyTurn && phase === "firstUpcardOffer" && publicState.discardTop && (
+        <>
+          <button
+            className="primary"
+            onClick={() => send({ t: "draw", from: "discard" })}
+          >
+            Take {publicState.discardTop.rank}
+            {SUIT_SYMBOL[publicState.discardTop.suit]}
+          </button>
+          <button onClick={() => send({ t: "passUpcard" })}>Pass</button>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+            Opening upcard offer — take it or pass to opponent.
+          </span>
+        </>
+      )}
 
       {/* ── Draw phase ── */}
       {isMyTurn && phase === "draw" && (
@@ -88,29 +177,268 @@ export default function ActionBar() {
         </>
       )}
 
-      {/* ── Meld / discard phase ── */}
-      {isMyTurn && (phase === "meld" || phase === "discard") && (
+      {/* ── Gin discard phase: knock meld builder ── */}
+      {isGin && isMyTurn && phase === "discard" && (
+        <>
+          {/* Declared knock meld groups */}
+          {knockMelds.length > 0 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {knockMelds.map((group, i) => {
+                const groupCards = group.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined);
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      background: "rgba(127,255,127,0.15)",
+                      border: "1px solid rgba(127,255,127,0.4)",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                      fontSize: 12,
+                      display: "flex",
+                      gap: 4,
+                      alignItems: "center",
+                    }}
+                  >
+                    {groupCards.map(cardLabel).join(" ")}
+                    <button
+                      onClick={() => removeKnockMeld(i)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "rgba(255,255,255,0.5)",
+                        cursor: "pointer",
+                        padding: "0 2px",
+                        fontSize: 13,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Deadwood indicator */}
+          <span
+            style={{
+              fontSize: 12,
+              color: deadwoodValue <= 10 ? "#7fff7f" : "rgba(255,255,255,0.55)",
+              fontWeight: deadwoodValue <= 10 ? "bold" : "normal",
+            }}
+          >
+            Deadwood: {deadwoodValue}{deadwoodValue <= 10 ? " ✓" : ` (need ≤10)`}
+          </span>
+
+          {/* Add group button */}
+          {canAddKnockMeld && (
+            <button
+              className="primary"
+              onClick={() => addKnockMeld(sel)}
+            >
+              Group {sel.length} cards
+            </button>
+          )}
+
+          {/* Knock button */}
+          {canKnock && (
+            <button
+              className="primary"
+              onClick={doKnock}
+              style={{ background: deadwoodValue === 0 ? "#6a0dad" : undefined }}
+            >
+              {deadwoodValue === 0 ? "Gin!" : `Knock`}
+            </button>
+          )}
+
+          {/* Discard — not a card that's already in a declared knock meld */}
+          {sel.length === 1 && !knockMeldedIds.has(sel[0]!) && (
+            <button className="danger" onClick={doDiscard}>
+              Discard selected
+            </button>
+          )}
+
+          {/* Guidance */}
+          {sel.length === 0 && knockMelds.length === 0 && (
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+              Select 3+ cards to group as a meld, then select 1 card to discard or knock
+            </span>
+          )}
+          {sel.length === 0 && knockMelds.length > 0 && (
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+              Select 1 card to discard{deadwoodValue <= 10 ? " — or knock with it" : " (group more melds to reduce deadwood)"}
+            </span>
+          )}
+        </>
+      )}
+
+      {/* ── Gin layoff phase (defender: declare own melds + lay off onto knocker's melds) ── */}
+      {/* rules.md A.2.4 step 3: opponent separates own melds from deadwood, then may lay off */}
+      {isGin && phase === "layoff" && (
+        <>
+          {isMyTurn && (() => {
+            const ginDefenderMeldedIds = new Set(ginDefenderMelds.flat());
+            const defSelCards = sel
+              .map((id) => hand.find((c) => c.id === id))
+              .filter((c): c is Card => c !== undefined);
+            const defSelAlreadyMelded = sel.some((id) => ginDefenderMeldedIds.has(id));
+            const canAddDefenderMeld =
+              sel.length >= 3 && !defSelAlreadyMelded && isValidGinMeld(defSelCards);
+
+            const totalActions = ginDefenderMelds.length + ginLayoffs.length;
+            const submitLabel =
+              totalActions === 0
+                ? "Done (no melds or layoffs)"
+                : [
+                    ginDefenderMelds.length > 0
+                      ? `${ginDefenderMelds.length} meld${ginDefenderMelds.length > 1 ? "s" : ""}`
+                      : null,
+                    ginLayoffs.length > 0
+                      ? `${ginLayoffs.length} layoff${ginLayoffs.length > 1 ? "s" : ""}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" + ");
+
+            return (
+              <>
+                {/* Declared own meld groups */}
+                {ginDefenderMelds.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    {ginDefenderMelds.map((group, i) => {
+                      const groupCards = group
+                        .map((id) => hand.find((c) => c.id === id))
+                        .filter((c): c is Card => c !== undefined);
+                      return (
+                        <span
+                          key={i}
+                          style={{
+                            background: "rgba(127,255,127,0.15)",
+                            border: "1px solid rgba(127,255,127,0.4)",
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                            fontSize: 12,
+                            display: "flex",
+                            gap: 4,
+                            alignItems: "center",
+                          }}
+                        >
+                          {groupCards.map(cardLabel).join(" ")}
+                          <button
+                            onClick={() => removeGinDefenderMeld(i)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "rgba(255,255,255,0.5)",
+                              cursor: "pointer",
+                              padding: "0 2px",
+                              fontSize: 13,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Staged layoffs — one chip per entry with × to remove */}
+                {ginLayoffs.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    {ginLayoffs.map((layoff, i) => {
+                      const card = hand.find((c) => c.id === layoff.cardId);
+                      return (
+                        <span
+                          key={i}
+                          style={{
+                            background: "rgba(100,160,255,0.15)",
+                            border: "1px solid rgba(100,160,255,0.4)",
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                            fontSize: 12,
+                            display: "flex",
+                            gap: 4,
+                            alignItems: "center",
+                          }}
+                        >
+                          {card ? cardLabel(card) : layoff.cardId} → meld
+                          <button
+                            onClick={() => removeGinLayoff(i)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "rgba(255,255,255,0.5)",
+                              cursor: "pointer",
+                              padding: "0 2px",
+                              fontSize: 13,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Declare own meld button */}
+                {canAddDefenderMeld && (
+                  <button className="primary" onClick={() => addGinDefenderMeld(sel)}>
+                    Declare meld ({sel.length} cards)
+                  </button>
+                )}
+
+                {/* Submit */}
+                <button
+                  className="primary"
+                  onClick={() => {
+                    send({ t: "ginLayoff", ownMelds: ginDefenderMelds, layoffs: ginLayoffs });
+                    clearGinDefenderMelds();
+                    clearGinLayoffs();
+                    clearSelect();
+                  }}
+                >
+                  {submitLabel}
+                </button>
+
+                {/* Guidance */}
+                {sel.length === 0 && totalActions === 0 && (
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                    Select 3+ cards to declare a meld, or select 1 card then click + on a meld to lay off
+                  </span>
+                )}
+              </>
+            );
+          })()}
+
+          {!isMyTurn && (
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+              Opponent is declaring melds and laying off…
+            </span>
+          )}
+        </>
+      )}
+
+      {/* ── Non-gin meld / discard phase ── */}
+      {!isGin && isMyTurn && (phase === "meld" || phase === "discard") && (
         <>
           {/* 500 Rum mustMeldCardId notice (rules.md A.4.4) */}
           {mustMeldBlock && (
-            <span
-              style={{
-                fontSize: 12,
-                color: "#ffd166",
-                fontWeight: "bold",
-              }}
-            >
+            <span style={{ fontSize: 12, color: "#ffd166", fontWeight: "bold" }}>
               Must meld or lay off your dived card before discarding.
             </span>
           )}
 
           {/* Meld button: 500 Rum allows multiple melds per turn, basic only one */}
-          {(phase === "meld" || (is500 && phase === "discard")) &&
-            sel.length >= 2 && (
-              <button className="primary" onClick={doMeld}>
-                Meld {sel.length} cards
-              </button>
-            )}
+          {(phase === "meld" || (is500 && phase === "discard")) && sel.length >= 2 && (
+            <button className="primary" onClick={doMeld}>
+              Meld {sel.length} cards
+            </button>
+          )}
 
           {/* Discard — exactly 1 card; blocked in 500 Rum while a pile-dived card is unplaced */}
           {sel.length === 1 && (

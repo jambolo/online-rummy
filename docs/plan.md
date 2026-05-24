@@ -110,7 +110,9 @@ type C2S =
   | { t: 'meld'; cardIds: string[] }
   | { t: 'layoff'; meldId: string; cardId: string }
   | { t: 'discard'; cardId: string }
-  | { t: 'knock' }                          // gin only
+  | { t: 'knock'; melds?: string[][]; discardId: string }  // gin only
+  | { t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }  // gin layoff phase
+  | { t: 'passUpcard' }                     // gin firstUpcardOffer decline
   | { t: 'chat'; text: string };
 
 type LobbyPlayer = { id: string; name: string };
@@ -152,7 +154,7 @@ interface Variant {
 | Variant | rules.md sec | Key constraints |
 | --- | --- | --- |
 | Basic | A.1 | 2-7P (1 deck for 2-6P, 2 decks combined for 7P), deals {2:10,3:7,4:7,5:6,6:6,7:10}, ace low only, draw stock\|top-discard, multiple melds per turn allowed, drew-discard cannot re-discard same turn, layoff unrestricted (no prior-meld requirement), going-rummy = score×2 |
-| Gin | A.2 | 2P, 10 cards, knock at deadwood ≤10, gin = +20 + opp unmatched, undercut = opp +10+diff, box +20, game ≥100, shutout +100 |
+| Gin | A.2 | 2P, 10 cards, ace low; first-upcard offered non-dealer→dealer→stock (A.2.2); no mid-turn melding (melds revealed only at knock/gin); knock at deadwood ≤10; gin = +20 + opp deadwood (no layoff vs gin); non-gin knock = opp lays off onto knocker's melds, knocker scores `opp_dw − knocker_dw`; undercut (opp_dw ≤ knocker_dw after layoff) = opp +10 + diff; stock-depletion (stock ≤ 2 after a no-knock discard) = hand cancelled, same dealer re-deals (A.2.3); box +20 per hand won, game ≥100, shutout +100 (`[BIC-G]`); winner deals next hand (A.2.2) |
 | 500 Rum | A.4 | 2-8P (1 deck ≤4P, else 2 decks), deal 13 (2P) else 7, ace high or low not both, A=15 (1 in A-2-3), pile dive (take all above selected, must use selected), lay off others' melds → self credit, score=melds−hand, target ≥500 |
 
 Cite section IDs in code comments (e.g. `// rules.md A.1.6 step 4`).
@@ -176,15 +178,28 @@ Rules.md lists multiple options per house rule. Defaults for v1:
 
 ### Gin Rummy
 
-| Rule | Pick |
-| --- | --- |
-| Knock | Deadwood ≤ 10 |
-| Gin bonus | +20 + opp unmatched (NOT +25 variant) |
-| Undercut | Opp +10 + difference |
-| Box bonus | +20 per hand won |
-| Game bonus | +100 at ≥100 cumulative |
-| Shutout bonus | +100 (`[BIC-G]`, NOT +200 `[PG-G]`) |
-| Ace | Low only |
+Canonical rules only. No house-rule variants are in scope.
+
+| Rule | Pick | Source |
+| --- | --- | --- |
+| Players | 2 only | A.2.1 |
+| Deal | 10 each; 21st card flipped as initial upcard | A.2.2 |
+| First dealer | Random; subsequent hands winner deals | A.2.2 |
+| First-upcard offer | Non-dealer offered first; on pass dealer is offered; on both pass non-dealer draws normally. Phase `firstUpcardOffer`; C2S `passUpcard` declines | A.2.2 |
+| First dealer rotation | Winner deals next hand → loser plays first. Cancelled hand keeps same dealer | A.2.2 |
+| Mid-turn melding | Disallowed — melds revealed only at knock/gin | A.2.3 |
+| Re-discard drawn-discard card | Forbidden same turn | A.2.3 |
+| Stock depletion → cancelled hand | After any discard, if `stock.length ≤ 2` and the hand wasn't ended by a knock, hand is cancelled — no scoring; `GameState.cancelledHand=true`; server emits `handCancelled` event; host re-deals with same dealer | A.2.3 |
+| Knock threshold | Deadwood ≤ 10 | A.2.4 |
+| Layoff | Non-gin knock: opp lays off onto knocker's melds; no layoff against gin | A.2.4 |
+| Knock score | knocker scores `opp_dw − knocker_dw` | A.2.4 |
+| Gin bonus | +20 + opp deadwood | A.2.4 |
+| Undercut | tie or worse → opp scores `(knocker_dw − opp_dw) + 10`; tie favors defender | A.2.4 |
+| Box bonus | +20 per hand won | A.2.5 |
+| Game-winning bonus | +100 at cumulative ≥ 100 | A.2.5 |
+| Shutout bonus | +100 (`[BIC-G]`, NOT +200 `[PG-G]`) | A.2.5 |
+| Ace direction | Low only | A.2.7 |
+| Card scoring | A=1, 2-10=pip, JQK=10 | A.2.7 |
 
 ### 500 Rum
 
@@ -308,7 +323,20 @@ discard(cardId):
   else: advance turn, phase='draw'
 ```
 
-Gin FSM diverges: `knock` action allowed before discard when deadwood ≤10.
+Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
+
+- Hand opens at `phase = 'firstUpcardOffer'` (rules.md A.2.2). The non-dealer is offered the initial upcard.
+- `passUpcard()`: require `phase === 'firstUpcardOffer'`. If turnPlayerId === firstPlayerId (non-dealer), move turn to dealer (phase stays). If dealer also passes, phase = `'draw'`, turn returns to non-dealer.
+- `draw(from='discard')` during `firstUpcardOffer`: accept the upcard, set `drewFromDiscardId`, phase = `'discard'`. `from='stock'` is rejected with `ERR_WRONG_PHASE` during the offer.
+- No mid-turn meld phase. Normal turn goes `draw → discard` (or `draw → discard → knock`).
+- `draw(from)`: require `phase === 'draw'`; if `from === 'discard'` set `drewFromDiscardId`; phase = `'discard'`.
+- `discard(cardId)`: require `phase === 'discard'`, no re-discard of drawn card. After the discard, if `stock.length ≤ 2` (rules.md A.2.3 stock-depletion), set `phase = 'ended'`, `cancelledHand = true`, return `{ handEnded: true, cancelled: true }` so the WS layer emits a `handCancelled` event (no scoring; same dealer re-deals). Otherwise advance turn.
+- `knock(melds?, discardId)`: require `phase === 'discard'`. `discardId` required — card removed from hand and pushed to discard pile before deadwood is computed from remaining 10 cards (rules.md A.2.4). Card must not be in any declared meld (`ERR_CANNOT_DISCARD_MELDED_CARD`). Deadwood = sum of unmelded cards (A=1); reject if deadwood > 10. Apply melds, set `ginKnockerId`.
+  - If deadwood === 0 → gin: phase = `'ended'`, defender cannot lay off.
+  - Else: phase = `'layoff'`, `turnPlayerId` switches to defender for layoff phase.
+- `ginLayoff(layoffs[], ownMelds?)`: defender first declares `ownMelds` (validated, applied to `defender.melds`), then lays off `layoffs` onto knocker's melds. `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. Phase = `'ended'`.
+- `scoreHand`: knock → knocker `opp_dw − knocker_dw`; gin → knocker `+20 + opp_dw`; undercut (`opp_dw ≤ knocker_dw`) → defender `(knocker_dw − opp_dw) + 10`. Per-hand box +20 added to winner. At game crossover (cumulative ≥ 100) winner gains +100; +100 more if loser totals 0.
+- Re-deal first-player selection: gin **winner deals** next hand → loser plays first. Cancelled hand keeps the same dealer (rules.md A.2.2 + A.2.3). Logic lives in `ws.ts` start handler; cancelled flag carried on the previous `GameState`.
 
 ## Test strategy
 
@@ -337,7 +365,6 @@ v1 = M1-M7. M8 after.
 
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
 - Hosting decision needed before M7.
-- How to Play modal for Gin (M6) not yet implemented — content stub present in the modal, full content deferred to M6.
 
 ## How to Play implementation notes
 
@@ -399,6 +426,18 @@ v1 = M1-M7. M8 after.
 - **Pile-dive picker (`PileDiveModal.tsx`)** renders the discardPile top-first. Hovering a card highlights every card that will be taken (selected card + everything above it in the pile). Click sends `{ t: 'drawFromPile', cardId }`.
 - **Multi-crossover game-over rule** (rules.md A.4.7: highest at crossover wins). Already handled by `handleHandEnd` — it picks the player with the highest cumulative `score` after the hand is scored, so two players crossing 500 in the same hand resolve correctly.
 
+## M6 implementation notes
+
+- **Knock requires face-down discard.** `applyKnock(state, pid, melds?, discardId)` receives `discardId` as a required parameter (rules.md A.2.4). The discard is processed before deadwood computation: card removed from hand, pushed to discard pile; deadwood then computed from the remaining 10 cards. Card must not appear in any declared meld group (`ERR_CANNOT_DISCARD_MELDED_CARD`). Protocol: `{ t: 'knock'; melds?: string[][]; discardId: string }`.
+- **Defender declares own melds before layoff.** `ginLayoff` protocol extended: `{ t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }`. `applyGinLayoff` validates and applies `ownMelds` first (cards → `defender.melds`, removed from `defender.hand`), then validates and applies `layoffs` onto knocker's melds. Card appearing in both throws `ERR_CARD_IN_MULTIPLE_MELDS`.
+- **Client knock meld builder.** ActionBar tracks `knockMelds: string[][]` in Zustand store. User selects 3+ cards and clicks "Group N cards" to stage a meld group; each group renders as a chip with a × remove button. Deadwood indicator updates live, excluding the selected discard card. `canKnock` requires exactly 1 non-melded card selected and `deadwoodValue ≤ 10`.
+- **Client defender UI.** During `layoff` phase, `ginDefenderMelds: string[][]` accumulates own meld declarations (chips with × remove). `ginLayoffs: Array<{cardId,meldId}>` accumulates staged layoffs (chips with × remove via `removeGinLayoff`). Submit sends one `ginLayoff` message with both arrays.
+- **MeldZone pending preview.** During `layoff` phase, `ginDefenderMelds` render as dashed-border pending piles (lower opacity, "pending" label). Staged `ginLayoffs` render as semi-transparent cards appended to their target knocker meld pile — client-side preview before submission.
+- **Score strip shows all players.** `OpponentStrip` in Room.tsx was filtering out `myPlayerId` so the local player's score never appeared. Fixed by rendering all players with a blue "(you)" tag on the local player's chip.
+- **Per-entry layoff removal.** Store needed `removeGinLayoff(index)` (not just `clearGinLayoffs`) to match the ×-per-chip UX pattern used for `knockMelds` and `ginDefenderMelds`.
+- **`ERR_KNOCK_REQUIRES_DISCARD` / `ERR_CANNOT_DISCARD_MELDED_CARD`** added to client `ERROR_MESSAGES` map in `store.ts`.
+- **62 engine tests** cover gin/knock/undercut/layoff scoring, defender own-meld declaration, `ERR_CARD_IN_MULTIPLE_MELDS`, stock-depletion cancel, first-upcard offer flow, and scripted-player dispatch.
+
 ## Status
 
 - [x] Plan finalized
@@ -408,8 +447,9 @@ v1 = M1-M7. M8 after.
 - [x] M4 complete
 - [x] M4.5 complete
 - [x] M5 complete
-- [ ] M6-M8 not started
+- [x] M6 complete — Gin variant: engine, WS wiring, client UI, 62 engine tests, How-to-Play content
+- [ ] M7-M8 not started
 
 ## Next action
 
-Start M6: Gin Rummy variant (`packages/server/src/engine/variants/gin.ts`). See Rule mapping table for Gin constraints (2P, knock at deadwood ≤10, gin/undercut bonuses, +100 game / +100 shutout).
+Start M7: deploy (Docker image, GCE e2-micro or Cloudflare Tunnel), structured logs, room/player counters.

@@ -5,7 +5,7 @@ export type Card = { id: string; suit: Suit; rank: Rank };
 export type MeldKind = 'set' | 'run';
 export type Meld = { id: string; kind: MeldKind; cardIds: string[]; ownerId: string; cards?: Card[] };
 
-export type Phase = 'draw' | 'meld' | 'discard' | 'ended';
+export type Phase = 'firstUpcardOffer' | 'draw' | 'meld' | 'discard' | 'layoff' | 'ended';
 
 export type Variant = 'basic' | 'gin' | 'rum500';
 
@@ -37,6 +37,8 @@ export type PublicState = {
   // 500 Rum: the card a player picked from the pile this turn that must still be melded
   // or laid off before discarding. Null otherwise.
   mustMeldCardId: string | null;
+  // Gin: ID of player who knocked; present during 'layoff' phase and through scoring.
+  ginKnockerId: string | null;
 };
 
 export type PrivateState = { hand: Card[] };

@@ -136,6 +136,8 @@ export function createBasicGame(
     scoreSheet: new Map(players.map((p) => [p.id, []])),
     mustMeldCardId: null,
     meldedBy: new Map(),
+    ginKnockerId: null,
+    cancelledHand: false,
   };
 }
 
