@@ -83,7 +83,12 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           width: 360,
         }}
       >
-        <h2 style={{ fontSize: 20, marginBottom: 4 }}>Room {roomCode}</h2>
+        <img
+          src="/rum-runner-logo.png"
+          alt="Rum Runner"
+          style={{ width: 72, height: 72, display: "block", margin: "0 auto 16px", borderRadius: "50%" }}
+        />
+        <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: "center" }}>Room {roomCode}</h2>
         <div
           style={{
             color: "rgba(255,255,255,0.6)",
@@ -561,8 +566,13 @@ export default function Room() {
         </div>
       )}
 
-      {/* Header row: opponents + How to Play */}
+      {/* Header row: logo + opponents + How to Play */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <img
+          src="/rum-runner-logo.png"
+          alt="Rum Runner"
+          style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0 }}
+        />
         <div style={{ flex: 1 }}>
           <OpponentStrip />
         </div>

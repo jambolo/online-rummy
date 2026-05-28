@@ -1,15 +1,15 @@
-# Online Rummy
+# Rum Runner: The Ultimate Rummy Club
 
 [![CI](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml/badge.svg)](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/jambolo/online-rummy/graph/badge.svg)](https://codecov.io/gh/jambolo/online-rummy)
 
-Browser-based multiplayer rummy supporting three variants: **Basic Rummy**, **Gin Rummy**, and **500 Rum**. No accounts — pick a nickname, create a room, share the code, play.
+Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **Gin Rummy**, and **500 Rum**. No accounts — pick a nickname, create a room, share the code, play.
 
 ---
 
 ## Variants
 
-### Basic Rummy
+### Classic Rummy
 
 2–6 players. Form sets (3–4 cards of the same rank) and runs (3+ consecutive cards of the same suit). Go out by melding, laying off, and discarding your last card. Ace is low (A-2-3 valid; Q-K-A invalid). At most one meld per turn. Going out without having melded before earns double score. First player to accumulate 100 points wins.
 

@@ -113,6 +113,20 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | `docs/rules.md` | Canonical game rules for all variants, with section IDs used in code comments |
 | `docs/plan.md` | Architecture decisions, house rule picks, milestone scope, open items |
 | `docs/client-server-protocol.md` | Complete WS protocol reference for client developers — all C2S/S2C messages, error codes, session management, turn flow examples |
+| `docs/branding.md` | Brand guidelines — colors, typography, logo usage |
+
+## Assets
+
+Source art lives in `assets/` (not served directly). Deployed copies in `packages/client/public/`.
+
+| Path | Purpose |
+| --- | --- |
+| `assets/rum-runner-banner.png` | Wide landscape banner — used at top of Home page |
+| `assets/rum-runner-logo.png` | Circular logo — used in Home card header, Lobby card, game header |
+| `assets/rum-runner-icon.png` | Square icon — source for favicon generation |
+| `assets/favicon/` | Generated favicon package (ico, svg, png 96px, apple-touch 180px, web-app-manifest 192/512px, site.webmanifest) |
+
+Favicon files are copied verbatim to `packages/client/public/` and linked in `packages/client/index.html`. When regenerating favicons, copy new files to both `assets/favicon/` and `packages/client/public/`.
 
 ## Key constraints
 

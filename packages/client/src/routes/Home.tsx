@@ -3,7 +3,7 @@ import type { Variant } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 
 const VARIANT_LABELS: Record<Variant, string> = {
-  basic: "Basic Rummy",
+  basic: "Classic Rummy",
   gin: "Gin Rummy",
   rum500: "500 Rum",
 };
@@ -35,14 +35,21 @@ export default function Home() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-      }}
-    >
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <img
+        src="/rum-runner-banner.png"
+        alt="Rum Runner: The Ultimate Rummy Club"
+        style={{ width: "100%", display: "block", maxHeight: 180, objectFit: "cover", objectPosition: "center" }}
+      />
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px 16px",
+        }}
+      >
       <div
         style={{
           background: "rgba(0,0,0,0.35)",
@@ -51,9 +58,11 @@ export default function Home() {
           width: 360,
         }}
       >
-        <h1 style={{ fontSize: 24, marginBottom: 24, textAlign: "center" }}>
-          Online Rummy
-        </h1>
+        <img
+          src="/rum-runner-logo.png"
+          alt="Rum Runner"
+          style={{ width: 96, height: 96, display: "block", margin: "0 auto 20px", borderRadius: "50%" }}
+        />
 
         {!connected && (
           <div
@@ -177,6 +186,7 @@ export default function Home() {
             </button>
           </form>
         )}
+      </div>
       </div>
     </div>
   );
