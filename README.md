@@ -34,11 +34,9 @@ Browser-based multiplayer rummy supporting three variants: **Basic Rummy**, **Gi
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `SESSION_SECRET` | Yes | HMAC signing key for session cookies. Minimum 32 characters. |
+| `SESSION_SECRET` | Yes | HMAC signing key for session tokens (delivered in the lobby broadcast, not HTTP cookies). Minimum 32 characters. |
 | `ALLOWED_ORIGINS` | Yes | Comma-separated list of browser origins allowed to connect (e.g. `https://yourdomain.com`). |
 | `PORT` | No | Port to listen on. Defaults to `8080`. |
-| `NODE_ENV` | No | Set to `production` to enable `Secure` and `SameSite=Strict` cookie flags. |
-| `LOG_LEVEL` | No | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`). Defaults to `info`. |
 
 `SESSION_SECRET` and `ALLOWED_ORIGINS` must be set before starting. The server refuses to boot without them.
 
@@ -50,7 +48,7 @@ docker build -t online-rummy .
 docker run -d \
   -p 8080:8080 \
   -e SESSION_SECRET=<your-secret-min-32-chars> \
-  -e ALLOWED_ORIGINS=http://localhost:8080 \
+  -e ALLOWED_ORIGINS=http://localhost:5173 \
   online-rummy
 ```
 
@@ -61,7 +59,7 @@ pnpm install
 pnpm build
 
 SESSION_SECRET=<your-secret-min-32-chars> \
-ALLOWED_ORIGINS=http://localhost:8080 \
+ALLOWED_ORIGINS=http://localhost:5173 \
 node packages/server/dist/index.js
 ```
 
@@ -69,13 +67,19 @@ On Windows (PowerShell):
 
 ```powershell
 $env:SESSION_SECRET = "<your-secret-min-32-chars>"
-$env:ALLOWED_ORIGINS = "http://localhost:8080"
+$env:ALLOWED_ORIGINS = "http://localhost:5173"
 node packages/server/dist/index.js
 ```
 
 ### Connecting
 
-Open your browser and navigate to the server's address (e.g. `http://localhost:8080`). No installation required on the client side — the server serves the web app directly.
+The server itself only handles WebSocket connections. Run the client separately and open it in your browser:
+
+```sh
+pnpm --filter @online-rummy/client dev
+```
+
+By default the client connects to `ws://<hostname>:8080`; override with the `VITE_WS_URL` env var.
 
 ---
 
@@ -93,9 +97,63 @@ Games are ephemeral — no accounts, no saved history. If you close the browser 
 
 ## Self-Hosting Notes
 
-- The server serves both the WebSocket endpoint and the static client bundle on the same port.
-- For HTTPS/WSS in production, place a reverse proxy (nginx, Caddy) in front and terminate TLS there, or use a Cloudflare Tunnel for automatic TLS without opening inbound ports.
+- The server exposes only the WebSocket endpoint (plain HTTP requests return `404`). The client is a separate static bundle built with `pnpm --filter @online-rummy/client build`; serve it yourself and point it at the server via the `VITE_WS_URL` build-time variable.
+- For HTTPS/WSS in production, place a reverse proxy (nginx, Caddy) in front of the server and terminate TLS there, or use a Cloudflare Tunnel for automatic TLS without opening inbound ports (see [Hosting on Cloudflare](#hosting-on-cloudflare)).
 - The server keeps all game state in memory. Restarting the process ends all active games.
+
+---
+
+## Hosting on Cloudflare
+
+To play with a remote friend without a permanent server, expose your two local processes (WebSocket server and client) through [Cloudflare quick tunnels](https://developers.cloudflare.com/cloudflare-tunnel/). This gives free TLS (`wss://`) with no account and temporary URLs. Your machine must stay on for the duration of the game.
+
+Install `cloudflared` once (Windows):
+
+```bash
+winget install --id Cloudflare.cloudflared
+```
+
+1. Build everything:
+
+   ```bash
+   pnpm install
+   pnpm build
+   ```
+
+2. Start both tunnels and note each `https://*.trycloudflare.com` URL printed. The backends need not be running yet — the URL is assigned when the tunnel starts.
+
+   ```bash
+   # Terminal A — server (WebSocket). URL -> SERVER_URL
+   cloudflared tunnel --url http://localhost:8080
+
+   # Terminal B — client. URL -> CLIENT_URL
+   cloudflared tunnel --url http://localhost:4173
+   ```
+
+3. Build the client pointing at the server tunnel. `VITE_WS_URL` is baked in at build time; swap `https` for `wss`:
+
+   ```bash
+   export VITE_WS_URL="wss://<SERVER_URL-host>.trycloudflare.com"
+   pnpm --filter @online-rummy/client build
+   ```
+
+4. Start the server, allowing the client tunnel origin (exact match, no trailing slash):
+
+   ```bash
+   export SESSION_SECRET="<your-secret-min-32-chars>"
+   export ALLOWED_ORIGINS="https://<CLIENT_URL-host>.trycloudflare.com"
+   node packages/server/dist/index.js
+   ```
+
+5. Serve the built client on port 4173 with a static server (`vite preview` rejects the tunnel's `Host` header):
+
+   ```bash
+   pnpm dlx serve packages/client/dist -l 4173
+   ```
+
+6. Send your friend the `CLIENT_URL`. Create a room and share the code.
+
+**Note:** quick-tunnel URLs change on every restart. If you restart the server tunnel, rebuild the client (step 3) with the new `wss://` URL. If you restart the client tunnel, update `ALLOWED_ORIGINS` and restart the server.
 
 ---
 

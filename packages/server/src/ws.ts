@@ -743,8 +743,6 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
         sendError(ws, 'ERR_INVALID_JSON', 'Invalid JSON');
         return;
       }
-      const who = ctx.player ? `${ctx.player.name}(${ctx.room?.code ?? '?'})` : `anon`;
-      console.log(`[ws] recv  ${who}  t=${msg.t}`);
       handleMessage(ws, ctx, msg);
     });
 
