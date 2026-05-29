@@ -51,7 +51,7 @@ Types only — no runtime logic. Consumed by both server and client.
 
 ### `packages/server`
 
-Node.js 20 + native `ws`. No ORM, no DB — all state in memory.
+Node.js 22 + native `ws`. No ORM, no DB — all state in memory.
 
 **Engine** (`src/engine/`) is purely functional — no I/O, no sockets. Tests cover it directly.
 
@@ -67,7 +67,7 @@ Node.js 20 + native `ws`. No ORM, no DB — all state in memory.
 | `rng.ts` | `RNG` type alias; wraps `node:crypto` `randomInt` |
 | `session.ts` | `makeSessionId`, `signSessionId`, `verifySessionId` — HMAC-SHA256 session tokens |
 | `room.ts` | `Room`/`Player` types (Room carries `gameState: GameState \| null`), Crockford base32 room codes, in-memory registry, `variantLimits` |
-| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/`knock`/`ginLayoff`/`passUpcard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. `handleHandCancelled` handles Gin stock-depletion (no scoring, same dealer re-deals). |
+| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`keepalive`/`leave`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/`knock`/`ginLayoff`/`passUpcard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. `handleHandCancelled` handles Gin stock-depletion (no scoring, same dealer re-deals). `keepalive` is relayed to the **other** room players (sender excluded) so their sockets stay warm. `leave` cancels the game: broadcasts `playerLeft`, detaches every player's socket context, clears timers, and deletes the room. |
 | `index.ts` | HTTP server, `SESSION_SECRET`/`ALLOWED_ORIGINS`/`PORT` env validation, startup |
 
 **`GameState` is mutated in place** by all `apply*` functions. Clone before passing to `runScript` if you need snapshot comparison.
@@ -86,8 +86,8 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 
 | File / dir | Purpose |
 | --- | --- |
-| `src/net/ws.ts` | `connect(url, callbacks)`, `send(msg)`, `disconnect()`. Epoch counter prevents stale socket events from React StrictMode double-mount. |
-| `src/store.ts` | Zustand store — all app state. `handleMessage(S2C)` is the single entry point for server messages. `cardCache` holds Card objects by id so melded cards (removed from hand) can still be rendered. Gin staging: `knockMelds`, `ginDefenderMelds`, `ginLayoffs` accumulate client-side declarations before submission; each has add/remove-by-index/clear actions. All three cleared on `draw` phase and `gameStarted`. |
+| `src/net/ws.ts` | `connect(url, callbacks)`, `send(msg)`, `disconnect()`. Epoch counter prevents stale socket events from React StrictMode double-mount. Keep-alive: emits `{ t: 'keepalive' }` when nothing has been **sent** for 30s (keyed off last-sent, not last-received — so a receive-only player still emits, which the other side needs for silent-drop detection). |
+| `src/store.ts` | Zustand store — all app state. `handleMessage(S2C)` is the single entry point for server messages. `cardCache` holds Card objects by id so melded cards (removed from hand) can still be rendered. Gin staging: `knockMelds`, `ginDefenderMelds`, `ginLayoffs` accumulate client-side declarations before submission; each has add/remove-by-index/clear actions. All three cleared on `draw` phase and `gameStarted`. `playerLastSeen` tracks each player's last-heard time (refreshed by keepalive/event/chat and by every `state` broadcast for all non-self players); `checkDisconnects` (run every 30s from App) flags a non-forfeited player silent for >5min via `disconnectWarning`, cleared on the player's `forfeit`/`gameOver` or by dismiss. `leaveGame` sends `{ t: 'leave' }` and resets to the start page. |
 | `src/routes/Home.tsx` | Create/join forms. Shows error banner for pre-join errors. |
 | `src/routes/Room.tsx` | Lobby view (while `publicState === null`) or game view. Contains `ScoreOverlay` (hand-end modal with per-player card breakdown). |
 | `src/components/Card.tsx` | Playing card. `compact` prop hides center symbol and bottom corner for small meld-zone cards. Always sets `textAlign: left` to override inherited centering from Table wrappers. |
@@ -104,7 +104,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 
 **Selector rule:** never pass an object literal to `useAppStore` — it creates a new ref every render and causes an infinite loop with React 18's `useSyncExternalStore`. Use one hook call per value.
 
-**WS URL:** defaults to `ws://${hostname}:8080`. Override with `VITE_WS_URL` env var. No Vite proxy — client connects directly to the server port; `ALLOWED_ORIGINS` on the server permits the Vite dev origin.
+**WS URL:** `App.tsx` derives it as `VITE_WS_URL` if set, else `wss://<hostname>` when the page is served over HTTPS, otherwise `ws://<hostname>:8080`. No Vite proxy — client connects directly to the server port; `ALLOWED_ORIGINS` on the server permits the Vite dev origin.
 
 ## Docs
 
@@ -113,6 +113,20 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | `docs/rules.md` | Canonical game rules for all variants, with section IDs used in code comments |
 | `docs/plan.md` | Architecture decisions, house rule picks, milestone scope, open items |
 | `docs/client-server-protocol.md` | Complete WS protocol reference for client developers — all C2S/S2C messages, error codes, session management, turn flow examples |
+| `docs/branding.md` | Brand guidelines — colors, typography, logo usage |
+
+## Assets
+
+Source art lives in `assets/` (not served directly). Deployed copies in `packages/client/public/`.
+
+| Path | Purpose |
+| --- | --- |
+| `assets/rum-runner-banner.png` | Wide landscape banner — used at top of Home page |
+| `assets/rum-runner-logo.png` | Circular logo — used in Home card header, Lobby card, game header |
+| `assets/rum-runner-icon.png` | Square icon — source for favicon generation |
+| `assets/favicon/` | Generated favicon package (ico, svg, png 96px, apple-touch 180px, web-app-manifest 192/512px, site.webmanifest) |
+
+Favicon files are copied verbatim to `packages/client/public/` and linked in `packages/client/index.html`. When regenerating favicons, copy new files to both `assets/favicon/` and `packages/client/public/`.
 
 ## Key constraints
 
@@ -121,9 +135,9 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 - All imports within the monorepo use `.js` extensions (NodeNext resolution).
 - Server shuffles with `node:crypto` only — never `Math.random`.
 - All rule citations in code use `// rules.md A.x.y` section IDs.
-- Engine errors are thrown as `Error` with `ERR_*` prefixed messages (e.g. `ERR_NOT_YOUR_TURN`, `ERR_WRONG_PHASE`). The WS layer (M2) will translate these to `{ t: 'error', code, msg }`.
+- Engine errors are thrown as `Error` with `ERR_*` prefixed messages (e.g. `ERR_NOT_YOUR_TURN`, `ERR_WRONG_PHASE`). The WS layer translates these to `{ t: 'error', code, msg }`.
 - `GameState.drewFromDiscardId` enforces the basic-rummy rule "no re-discard of drawn discard card" (rules.md A.1.6 step 4; 500 Rum behavior differs — see below).
-- `GameState.hasMeldedEver` exists for the **layoff-requires-prior-meld** house rule (rules.md A.1.6 step 3). This house rule is **NOT currently enforced** — it is host-configurable and defaults to off. Field/field-update code may remain in the engine for future toggling, but `applyLayoff` must not gate on it.
+- **Going Rummy detection** (rules.md A.1.7) uses `state.meldedBy` — if no entry maps to the winner's id, the winner placed no card all hand → score × 2. The previous `hasMeldedEver` flag has been removed (Phase 0 refactor). The "layoff-requires-prior-meld" house rule (rules.md A.1.6 step 3) is documented but not scaffolded; add it when first needed.
 - Going-rummy bonus = doubled per-opponent contribution (basic rules.md A.1.7), implemented as score×2 on the winner's hand-end credit.
 - `GameState.firstPlayerId` records who went first each hand; re-deal path in `ws.ts` uses it to rotate the starting player clockwise.
 - `createBasicGame` / `createRum500Game` take optional `firstPlayerIndex?: number`. When omitted, calls `rng(0, players.length)` (exclusive hi). Pass it explicitly in tests to skip the RNG call and preserve the pre-existing deck order.
@@ -142,5 +156,5 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | M4.5 | Done | Re-deal, first-player rotation, How to Play modal (Basic), bug fixes |
 | M5 | Done | 500 Rum variant — pile-dive UX, ace-either-end melds, multi-meld turns, layoff credit, How to Play |
 | M6 | Done | Gin variant |
-| M7 | Not started | Deploy, structured logs, metrics |
+| M7 | Done | Deploy via Cloudflare Tunnel + manual local host (no structured logs, no metrics) |
 | M8 | Not started | PixiJS card layer |

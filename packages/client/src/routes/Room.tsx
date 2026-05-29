@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Card, Rank } from "@online-rummy/shared";
-import { RANK_INDEX } from "@online-rummy/shared";
+import type { Card } from "@online-rummy/shared";
+import { RANK_INDEX, cardPoints } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "../components/Card";
 import Hand from "../components/Hand";
@@ -9,6 +9,133 @@ import MeldZone from "../components/MeldZone";
 import ActionBar from "../components/ActionBar";
 import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
+
+// Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
+function ConfirmModal({
+  message,
+  confirmLabel,
+  cancelLabel = "Cancel",
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 200,
+      }}
+    >
+      <div
+        style={{
+          background: "#1a4a1a",
+          border: "2px solid rgba(255,255,255,0.2)",
+          borderRadius: 12,
+          padding: 28,
+          width: 320,
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 14, marginBottom: 20 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              color: "#fff",
+              padding: "8px 0",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1,
+              background: "rgba(174,42,26,0.85)",
+              border: "1px solid rgba(174,42,26,1)",
+              color: "#fff",
+              padding: "8px 0",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Leave-game button with a confirmation step. Leaving cancels the game for everyone.
+function LeaveButton({ style }: { style?: React.CSSProperties }) {
+  const leaveGame = useAppStore((s) => s.leaveGame);
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        style={{
+          background: "transparent",
+          border: "1px solid rgba(255,127,127,0.4)",
+          color: "rgba(255,127,127,0.85)",
+          fontSize: 12,
+          padding: "4px 10px",
+          borderRadius: 5,
+          cursor: "pointer",
+          flexShrink: 0,
+          ...style,
+        }}
+      >
+        Leave Game
+      </button>
+      {confirming && (
+        <ConfirmModal
+          message="Leave the game? This cancels the game for everyone and returns all players to the start page."
+          confirmLabel="Leave Game"
+          onConfirm={leaveGame}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// Prompt shown when another player has gone silent past the disconnect threshold.
+// "Cancel Game" tears the game down for everyone; "Keep Waiting" snoozes the warning.
+function DisconnectWarningModal() {
+  const warning = useAppStore((s) => s.disconnectWarning);
+  const leaveGame = useAppStore((s) => s.leaveGame);
+  const dismiss = useAppStore((s) => s.dismissDisconnectWarning);
+
+  if (!warning) return null;
+
+  return (
+    <ConfirmModal
+      message={`${warning.name} hasn't sent any messages in over 5 minutes and has probably disconnected. Do you want to cancel the game?`}
+      confirmLabel="Cancel Game"
+      cancelLabel="Keep Waiting"
+      onConfirm={leaveGame}
+      onCancel={dismiss}
+    />
+  );
+}
 
 // Compact opponent info strip shown above the table
 function OpponentStrip() {
@@ -83,7 +210,12 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           width: 360,
         }}
       >
-        <h2 style={{ fontSize: 20, marginBottom: 4 }}>Room {roomCode}</h2>
+        <img
+          src="/rum-runner-logo.png"
+          alt="Rum Runner"
+          style={{ width: 72, height: 72, display: "block", margin: "0 auto 16px", borderRadius: "50%" }}
+        />
+        <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: "center" }}>Room {roomCode}</h2>
         <div
           style={{
             color: "rgba(255,255,255,0.6)",
@@ -154,23 +286,19 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         >
           How to Play
         </button>
+
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <LeaveButton style={{ width: "100%" }} />
+        </div>
       </div>
     </div>
   );
 }
 
-// Card point values per variant. Basic: rules.md A.1.8. 500 Rum: rules.md A.4.2 (ace in
-// hand always 15 per locked house rule simplification).
-const RANK_PTS_BASIC: Record<Rank, number> = {
-  A: 1, "2": 2, "3": 3, "4": 4, "5": 5,
-  "6": 6, "7": 7, "8": 8, "9": 9,
-  "10": 10, J: 10, Q: 10, K: 10,
-};
-function cardPtsBasic(c: Card): number { return RANK_PTS_BASIC[c.rank]; }
-function cardPts500(c: Card): number {
-  if (c.rank === "A") return 15;
-  return RANK_PTS_BASIC[c.rank];
-}
+// Card point values per variant. Basic / Gin: rules.md A.1.8 (ace = 1).
+// 500 Rum: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
+function cardPtsBasic(c: Card): number { return cardPoints(c, 1); }
+function cardPts500(c: Card): number { return cardPoints(c, 15); }
 function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
   return cards.reduce((s, c) => s + ptsFn(c), 0);
 }
@@ -273,6 +401,9 @@ function ScoreOverlay() {
               Waiting for host…
             </div>
           )}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+            <LeaveButton />
+          </div>
         </div>
       </div>
     );
@@ -505,6 +636,9 @@ function ScoreOverlay() {
             Waiting for host…
           </div>
         )}
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <LeaveButton />
+        </div>
       </div>
     </div>
   );
@@ -526,6 +660,7 @@ export default function Room() {
       {showHelp && helpVariant && (
         <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
       )}
+      <DisconnectWarningModal />
     </>
   );
 
@@ -543,6 +678,7 @@ export default function Room() {
       {showHelp && helpVariant && (
         <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
       )}
+      <DisconnectWarningModal />
       <ScoreOverlay />
 
       {/* Error banner */}
@@ -569,8 +705,13 @@ export default function Room() {
         </div>
       )}
 
-      {/* Header row: opponents + How to Play */}
+      {/* Header row: logo + opponents + How to Play */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <img
+          src="/rum-runner-logo.png"
+          alt="Rum Runner"
+          style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0 }}
+        />
         <div style={{ flex: 1 }}>
           <OpponentStrip />
         </div>
@@ -589,6 +730,7 @@ export default function Room() {
         >
           How to Play
         </button>
+        <LeaveButton />
       </div>
 
       {/* Main area */}

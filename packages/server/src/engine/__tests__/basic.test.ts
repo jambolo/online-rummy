@@ -198,7 +198,7 @@ describe('applyMeld', () => {
     expect(state.phase).toBe('meld');
   });
 
-  it('marks hasMeldedEver for player', () => {
+  it('records meldedBy for each placed card', () => {
     const state = twoPlayerGame();
     applyDraw(state, 'p1', 'stock');
     const set = [c('Q', 'C', 'q1'), c('Q', 'D', 'q2'), c('Q', 'H', 'q3')];
@@ -207,7 +207,9 @@ describe('applyMeld', () => {
       state.cardRegistry.set(card.id, card);
     });
     applyMeld(state, 'p1', ['q1', 'q2', 'q3']);
-    expect(state.hasMeldedEver.get('p1')).toBe(true);
+    expect(state.meldedBy.get('q1')).toBe('p1');
+    expect(state.meldedBy.get('q2')).toBe('p1');
+    expect(state.meldedBy.get('q3')).toBe('p1');
   });
 
   it('allows multiple melds per turn', () => {
@@ -627,7 +629,7 @@ describe('forfeit handling', () => {
     state.players[1]!.hand = [c('5', 'H', 'h1'), c('K', 'D', 'h2')]; // 15
     state.players[2]!.status = 'forfeited';
     state.players[2]!.hand = [c('Q', 'S', 'h3')]; // forfeit hand ignored
-    state.hasMeldedEver.set('p1', true);
+    state.meldedBy.set('some-card', 'p1'); // p1 placed something earlier — not going rummy
     const scores = basicVariant.scoreHand(state);
     expect(scores.get('p1')).toBe(15); // only p2's deadwood credited
   });
@@ -682,7 +684,7 @@ describe('scoreHand', () => {
     state.players[0]!.hand = [];
     // p2 holds 5H + KD = 5 + 10 = 15
     state.players[1]!.hand = [c('5', 'H', 'x'), c('K', 'D', 'y')];
-    state.hasMeldedEver.set('p1', true); // did meld before going out
+    state.meldedBy.set('some-card', 'p1'); // p1 placed a card earlier — not going rummy
 
     const scores = basicVariant.scoreHand(state);
     expect(scores.get('p1')).toBe(15);
@@ -690,11 +692,11 @@ describe('scoreHand', () => {
   });
 
   it('going-rummy doubles the score', () => {
-    // rules.md A.1.7: score × 2 if winner never melded before going out
+    // rules.md A.1.7: score × 2 if winner never melded/laid-off before going out
     const state = twoPlayerGame();
     state.players[0]!.hand = [];
     state.players[1]!.hand = [c('5', 'H', 'x'), c('K', 'D', 'y')]; // 15
-    state.hasMeldedEver.set('p1', false); // never melded
+    // meldedBy stays empty for p1 — no placement, went rummy
 
     const scores = basicVariant.scoreHand(state);
     expect(scores.get('p1')).toBe(30); // 15 × 2

@@ -90,7 +90,7 @@ describe('createRum500Game', () => {
     const state = twoPlayerGame();
     expect(state.discardPile).toHaveLength(1);
     expect(state.phase).toBe('draw');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 });
 
@@ -168,13 +168,13 @@ describe('rum500Variant.validateMeld', () => {
     const state = twoPlayerGame();
     rum500Variant.onDrawFromDiscard(state, 'p1', 'someCardId');
     expect(state.drewFromDiscardId).toBe('someCardId');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 
   it('canDiscard returns false while mustMeldCardId is set', () => {
     // rules.md A.4.4 — pile dive obligation blocks discard
     const state = twoPlayerGame();
-    state.mustMeldCardId = 'somePileCard';
+    state.variantState.mustMeldCardId = 'somePileCard';
     expect(rum500Variant.canDiscard(state, 'p1', 'anyCard')).toBe(false);
   });
 
@@ -234,7 +234,7 @@ describe('applyDrawFromPile', () => {
     expect(taken.map((c) => c.id)).toEqual(['mid', 'top']);
     expect(state.players[0]!.hand).toHaveLength(before + 2);
     expect(state.discardPile.map((c) => c.id)).toEqual(['bot']);
-    expect(state.mustMeldCardId).toBe('mid');
+    expect(state.variantState.mustMeldCardId).toBe('mid');
     expect(state.phase).toBe('meld');
   });
 
@@ -258,7 +258,7 @@ describe('applyDrawFromPile', () => {
       state.cardRegistry.set(card.id, card);
     });
     applyDrawFromPile(state, 'p1', 'divTarget');
-    expect(state.mustMeldCardId).toBe('divTarget');
+    expect(state.variantState.mustMeldCardId).toBe('divTarget');
     const someCard = state.players[0]!.hand.find((c) => c.id !== 'divTarget')!;
     expect(() => applyDiscard(state, 'p1', someCard.id)).toThrow('ERR_MUST_USE_PILE_CARD');
   });
@@ -267,7 +267,7 @@ describe('applyDrawFromPile', () => {
     // rules.md A.4.4: no must-meld obligation for a simple top draw
     const state = twoPlayerGame();
     applyDraw(state, 'p1', 'discard');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
     expect(state.drewFromDiscardId).not.toBeNull();
   });
 
@@ -302,10 +302,10 @@ describe('applyDrawFromPile', () => {
     state.cardRegistry.set(must.id, must);
     state.cardRegistry.set(filler.id, filler);
     applyDrawFromPile(state, 'p1', 'must');
-    expect(state.mustMeldCardId).toBe('must');
+    expect(state.variantState.mustMeldCardId).toBe('must');
 
     applyMeld(state, 'p1', ['must', 'q1', 'q2']);
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 
   it('applyDraw {from:"discard"} on empty pile throws ERR_DISCARD_EMPTY', () => {
@@ -349,9 +349,9 @@ describe('applyDrawFromPile', () => {
     state.cardRegistry.set(div.id, div);
     state.cardRegistry.set(filler.id, filler);
     applyDrawFromPile(state, 'p1', 'div');
-    expect(state.mustMeldCardId).toBe('div');
+    expect(state.variantState.mustMeldCardId).toBe('div');
     applyLayoff(state, 'p1', meldId, 'div');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 });
 
@@ -412,10 +412,10 @@ describe('rum500 turn flow', () => {
     state.cardRegistry.set(must.id, must);
     state.cardRegistry.set(filler.id, filler);
     applyDrawFromPile(state, 'p1', 'must5');
-    expect(state.mustMeldCardId).toBe('must5');
+    expect(state.variantState.mustMeldCardId).toBe('must5');
     // Lay off onto p2's set; obligation should clear.
     applyLayoff(state, 'p1', 'pileLayMeld', 'must5');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
     expect(state.meldedBy.get('must5')).toBe('p1');
   });
 
@@ -426,7 +426,7 @@ describe('rum500 turn flow', () => {
     applyDiscard(state, 'p1', card.id);
     expect(state.turnPlayerId).toBe('p2');
     expect(state.phase).toBe('draw');
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 
   it('layoff: ERR_CARD_NOT_IN_HAND when card belongs to another player', () => {
@@ -854,7 +854,7 @@ describe('rum500 pile dive edge cases', () => {
     const { taken } = applyDrawFromPile(state, 'p1', 'top');
     expect(taken.map((c) => c.id)).toEqual(['top']);
     expect(state.discardPile.map((c) => c.id)).toEqual(['bot']);
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
     expect(state.drewFromDiscardId).toBe('top');
   });
 
@@ -872,7 +872,7 @@ describe('rum500 pile dive edge cases', () => {
     const { taken } = applyDrawFromPile(state, 'p1', 'p0');
     expect(taken.map((c) => c.id)).toEqual(['p0', 'p1', 'p2']);
     expect(state.discardPile).toHaveLength(0);
-    expect(state.mustMeldCardId).toBe('p0');
+    expect(state.variantState.mustMeldCardId).toBe('p0');
   });
 
   it('preflight rejects a dive whose selected card has no legal placement', () => {
@@ -888,7 +888,7 @@ describe('rum500 pile dive edge cases', () => {
     expect(() => applyDrawFromPile(state, 'p1', 'noLegal')).toThrow('ERR_NO_LEGAL_DIVE');
     // State unchanged.
     expect(state.discardPile.map((c) => c.id)).toEqual(['noLegal', 'noLegalFiller']);
-    expect(state.mustMeldCardId).toBeNull();
+    expect(state.variantState.mustMeldCardId).toBeNull();
   });
 });
 

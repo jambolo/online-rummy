@@ -10,14 +10,14 @@ Compressed reference. Reload before resuming work.
 | Scale | Hobby <50 concurrent |
 | Auth | Guest nickname + 5-letter room code, signed cookie session id |
 | Transport | WebSocket, JSON, native `ws` lib (not socket.io) |
-| Server | TypeScript + Node.js 20 LTS |
+| Server | TypeScript + Node.js 22.13 |
 | Package manager | pnpm workspaces (monorepo) |
 | Client | React + Vite + TS, Zustand state, dnd-kit drag |
 | Card render v1 | CSS/HTML |
 | Card render v2 | PixiJS swap after playability confirmed |
 | Persistence | None, in-memory room registry |
-| Hosting | Deferred. GCE e2-micro free tier OR Cloudflare Tunnel self-host. Same Node process either way |
-| Deploy artifact | Docker image (multi-stage), PM2 fallback if no container runtime |
+| Hosting | Cloudflare Tunnel + manual local host (run `node dist/index.js` on a dev machine). No dedicated server |
+| Deploy artifact | None — built server run locally; `cloudflared` exposes it |
 | Bots | None v1 |
 | Disconnect | Instant forfeit (no reconnect mid-game; lobby reconnect 60s via sessionId cookie) |
 | Forfeit disposition | Hand + melds out of play (NOT returned to stock). Stock + discard pile untouched |
@@ -47,12 +47,12 @@ online-rummy/
         engine/
           types.ts        # GameState, GamePlayer, VariantEngine interface, ScoreSheet (server-only)
           deck.ts         # buildDeck, buildShuffledDeck, shuffle, dealN
-          meld.ts         # validateMeld(cards, opts), cardPoints
+          meld.ts         # validateMeld(cards, opts), cardPoints, runAceDirection, score500MeldCard
           scripted-player.ts  # runScript(state, C2S[]) → ActionResult[] (engine-level, no WS)
           variants/
             basic.ts      # basicVariant, createBasicGame, applyDraw/Meld/Layoff/Discard
-            gin.ts        # M6
-            rum500.ts     # M5
+            gin.ts        # ginVariant, createGinGame, applyDraw/PassUpcard/Discard/Knock/GinLayoff
+            rum500.ts     # rum500Variant, createRum500Game, applyDraw/DrawFromPile/Meld/Layoff/Discard
     client/
       src/
         main.tsx
@@ -78,7 +78,9 @@ type Card = { id: string; suit: Suit; rank: Rank };  // server-generated id, sta
 type MeldKind = 'set' | 'run';
 type Meld = { id: string; kind: MeldKind; cardIds: string[]; ownerId: string };
 
-type Phase = 'draw' | 'meld' | 'discard' | 'ended';
+type Phase = 'firstUpcardOffer' | 'draw' | 'meld' | 'discard' | 'layoff' | 'ended';
+// Phase values are per-variant subsets: basic/500 use draw|meld|discard|ended;
+// gin uses firstUpcardOffer|draw|discard|layoff|ended (no `meld` phase).
 
 type PublicState = {
   roomId: string;
@@ -92,7 +94,8 @@ type PublicState = {
   discardTop: Card | null;
   discardPile: Card[];          // full pile bottom-to-top; basic ignores, 500 Rum pile-dive reads it
   stockSize: number;
-  mustMeldCardId: string | null; // 500 Rum: pile-dive obligation; null = no obligation
+  mustMeldCardId: string | null;  // 500 Rum: pile-dive obligation; null otherwise
+  ginKnockerId: string | null;    // Gin: knocker id during layoff phase / scoring; null otherwise
 };
 
 type PrivateState = { hand: Card[] };  // owner-only
@@ -120,7 +123,7 @@ type LobbyPlayer = { id: string; name: string };
 type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
   | { t: 'lobby'; roomCode: string; variant: Variant; hostId: string; players: LobbyPlayer[]; sessionId: string }
-  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'forfeit'|'gameOver'|'gameStarted';
+  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'handCancelled'|'forfeit'|'gameOver'|'gameStarted';
       playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
@@ -132,22 +135,29 @@ Server validates every action. Pessimistic UI v1 (wait for server `state` before
 
 ## Variant strategy interface
 
+Canonical definition lives in `packages/server/src/engine/types.ts` (`VariantEngine`). Skeleton:
+
 ```ts
-interface Variant {
+interface VariantEngine {
   id: 'basic' | 'gin' | 'rum500';
   minPlayers: number;
   maxPlayers: number;
-  deal(playerCount: number, rng: RNG): { hands: Card[][]; stock: Card[]; discard: Card[] };
-  validateMeld(cards: Card[]): boolean;        // set or run check
-  canDrawFromDiscard(state: GameState, playerId: string, cardId?: string): boolean;
-  onDiscardDraw(state: GameState, playerId: string, cardId: string): void;  // 500 rum dive logic
-  canDiscard(state: GameState, playerId: string, cardId: string): boolean;  // basic: not same as drew from discard
-  scoreHand(state: GameState): Map<PlayerId, number>;
-  isGameOver(scoreSheet: ScoreSheet): boolean;
   aceHigh: boolean;
   roundTheCorner: boolean;
+  deal(playerCount, rng): { hands; stock; discard };
+  validateMeld(cards): boolean;
+  canDrawFromDiscard(state, playerId, cardId?): boolean;
+  onDrawFromDiscard(state, playerId, cardId): void;
+  canDiscard(state, playerId, cardId): boolean;
+  scoreHand(state): Map<PlayerId, number>;
+  isGameOver(scoreSheet): boolean;
 }
 ```
+
+Engine action handlers (`applyDraw`/`applyMeld`/`applyLayoff`/`applyDiscard` + variant-specific
+`applyDrawFromPile`/`applyKnock`/`applyGinLayoff`/`applyPassUpcard`) are currently free function
+exports from each variant module — refactor in `docs/refactor-plan.md` Phase 3 promotes them onto
+the interface.
 
 ## Rule mapping (rules.md → variant impl)
 
@@ -224,7 +234,7 @@ Canonical rules only. No house-rule variants are in scope.
 - Cards get server-assigned UUIDv4 ids per game.
 - Server never sends other players' hands or stock order.
 - Audit every S2C path to confirm no info leak.
-- WSS in production via reverse proxy (nginx/Caddy + Let's Encrypt) or Cloudflare Tunnel (auto-TLS).
+- WSS in production via Cloudflare Tunnel (auto-TLS); local host stays plain `ws` behind the tunnel.
 - Session cookie: signed with HMAC via `cookie-signature` lib (or built-in `crypto.createHmac`). Secret from env var `SESSION_SECRET` (required, min 32 chars, fail boot if missing).
 - WS origin allowlist: env var `ALLOWED_ORIGINS` (comma-separated). Reject WS upgrade if `Origin` header not in list. Dev default = `http://localhost:5173`.
 - Rate limit: per-IP connection cap (10) + per-socket message rate (20/sec) to deter spam.
@@ -237,7 +247,6 @@ Canonical rules only. No house-rule variants are in scope.
 | `ALLOWED_ORIGINS` | yes | Comma-separated WS upgrade allowlist |
 | `PORT` | no (default 8080) | HTTP+WS listen port |
 | `NODE_ENV` | no | `production` enables stricter cookie flags (Secure, SameSite=Strict) |
-| `LOG_LEVEL` | no (default `info`) | pino log level |
 
 ## Room lifecycle
 
@@ -276,7 +285,7 @@ meld(cardIds):
   require phase==='meld' || 'discard'
   variant.validateMeld(cards, {aceHigh:false, roundTheCorner:false})
   remove from hand, append to melds, record meldedBy
-  phase = 'discard'  ← basic: exactly 1 meld per turn
+  phase = 'meld'  ← multiple melds allowed per turn (max-one-meld HR off)
 
 layoff(meldId, cardId):
   (no hasMeldedEver check — house rule is off by default)
@@ -356,7 +365,7 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 | M4.5 | Re-deal (multi-hand game); How to Play modal for Basic Rummy | 1-2d |
 | M5 | 500 Rum variant (pile dive UX); How to Play modal for 500 Rum | 3-4d |
 | M6 | Gin variant; How to Play modal for Gin | 2-3d |
-| M7 | Deploy + structured logs + room/player counters | 1-2d |
+| M7 | Deploy: Cloudflare Tunnel + manual local host (no structured logs, no metrics) | <1d |
 | M8 | PixiJS card layer | 1-2w |
 
 v1 = M1-M7. M8 after.
@@ -364,7 +373,7 @@ v1 = M1-M7. M8 after.
 ## Open items
 
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
-- Hosting decision needed before M7.
+- Hosting: Cloudflare Tunnel + manual local host (decided 2026-05-28). No dedicated server, no structured logs, no metrics.
 
 ## How to Play implementation notes
 
@@ -375,7 +384,7 @@ v1 = M1-M7. M8 after.
   - Turn flow — draw → meld/layoff (optional) → discard; note variant deviations
   - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rum: pile dive
   - Scoring — point values per card, how hand score is computed, game target
-  - Active house rules — list only the locked picks from plan.md (e.g. ace low, ≤1 meld/turn, going-rummy ×2)
+  - Active house rules — list only the locked picks from plan.md (e.g. ace low, layoff unrestricted, going-rummy ×2)
 - **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rum) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
 - **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
 - **No protocol change needed** — variant is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
@@ -420,7 +429,7 @@ v1 = M1-M7. M8 after.
 - **`MeldOptions.aceEitherEnd`** is the 500 Rum-specific knob in `meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap.
 - **`GameState.mustMeldCardId`** enforces rules.md A.4.4 pile-dive obligation: set to the selected card's id in `applyDrawFromPile`. `applyMeld`/`applyLayoff` clear it when the card is used. `applyDiscard` throws `ERR_MUST_USE_PILE_CARD` while non-null. **Distinct from simple top-discard draw:** `applyDraw {from:'discard'}` takes only the top card, sets `drewFromDiscardId` (cannot re-discard same turn), and does NOT set `mustMeldCardId` — matches standard rules.md A.4.4 (single top card has no must-use obligation). The unified-obligation house rule is host-configurable and currently off.
 - **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rum scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (harmless; its scoring doesn't read it).
-- **500 Rum allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` does not check `hasMeldedEver` (basic-only constraint, A.1.6 step 3 [WP]). Phase stays at `'meld'` after a 500 Rum meld so the player can keep melding/laying off until they discard.
+- **500 Rum allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` has no own-meld prerequisite (basic-only constraint, A.1.6 step 3 [WP], host-configurable house rule — currently off, no engine state needed). Phase stays at `'meld'` after a 500 Rum meld so the player can keep melding/laying off until they discard.
 - **PublicState gained `discardPile: Card[]` and `mustMeldCardId: string | null`.** Pile is always populated bottom-to-top; basic clients ignore it, 500 Rum reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak.
 - **`variantFns(v)` in `ws.ts`** routes per-variant engine fns. Replaces direct `basic.*` imports in handlers. `scripted-player.ts` dispatches the same way via `state.variant`. Adding Gin will only require a third branch in both files.
 - **Pile-dive picker (`PileDiveModal.tsx`)** renders the discardPile top-first. Hovering a card highlights every card that will be taken (selected card + everything above it in the pile). Click sends `{ t: 'drawFromPile', cardId }`.
@@ -448,8 +457,9 @@ v1 = M1-M7. M8 after.
 - [x] M4.5 complete
 - [x] M5 complete
 - [x] M6 complete — Gin variant: engine, WS wiring, client UI, 62 engine tests, How-to-Play content
-- [ ] M7-M8 not started
+- [x] M7 complete — Deploy: server serves client bundle; single Cloudflare Tunnel + manual local host (`scripts/launch-in-tmux-window.sh`). No structured logs, no metrics
+- [ ] M8 not started — PixiJS card layer
 
 ## Next action
 
-Start M7: deploy (Docker image, GCE e2-micro or Cloudflare Tunnel), structured logs, room/player counters.
+M1-M7 complete (v1 done): structural refactor landed (commit d053563); M7 deploy = server serves client bundle, single Cloudflare Tunnel + manual local host. No dedicated server, no structured logs, no metrics. M8 (PixiJS card layer) is the only remaining milestone, post-v1.

@@ -14,6 +14,8 @@ export type C2S =
   | { t: 'knock'; melds?: string[][]; discardId: string }  // gin only — melds declared at knock; discardId = face-down discard (rules.md A.2.4)
   | { t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }  // gin only — defender declares own melds + lays off onto knocker's melds (rules.md A.2.4)
   | { t: 'passUpcard' }                   // gin only — decline initial upcard offer (rules.md A.2.2)
+  | { t: 'keepalive' }                     // idle keep-alive; server relays to other room players (Cloudflare drops idle WS)
+  | { t: 'leave' }                         // leave the room; cancels the game and returns all players to the start page
   | { t: 'chat'; text: string };
 
 export type EventKind =
@@ -23,6 +25,7 @@ export type EventKind =
   | 'discarded'
   | 'wonHand'
   | 'handCancelled'  // gin only — stock-depletion cancelled hand (rules.md A.2.3)
+  | 'playerLeft'     // a player left the room via the leave button; game cancelled, all return to start page
   | 'forfeit'
   | 'gameOver'
   | 'gameStarted';
@@ -32,7 +35,5 @@ export type S2C =
   | { t: 'lobby'; roomCode: string; variant: Variant; hostId: PlayerId; players: LobbyPlayer[]; sessionId: string }
   | { t: 'event'; kind: EventKind; playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
+  | { t: 'keepalive'; from: PlayerId }     // relayed idle keep-alive from another room player
   | { t: 'chat'; from: string; text: string };
-
-// Convenience: cards present in drawFromPile response data
-export type PileSlice = { taken: Card[] };

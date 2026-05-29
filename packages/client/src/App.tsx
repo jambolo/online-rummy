@@ -6,11 +6,14 @@ import Room from "./routes/Room";
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
-  `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:8080`;
+  (window.location.protocol === "https:"
+    ? `wss://${window.location.hostname}`
+    : `ws://${window.location.hostname}:8080`);
 
 export default function App() {
   const setConnected = useAppStore((s) => s.setConnected);
   const handleMessage = useAppStore((s) => s.handleMessage);
+  const checkDisconnects = useAppStore((s) => s.checkDisconnects);
   const roomCode = useAppStore((s) => s.roomCode);
   const sessionId = useAppStore((s) => s.sessionId);
 
@@ -37,6 +40,12 @@ export default function App() {
     // Only run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Periodically check whether any other player has gone silent past the threshold.
+  useEffect(() => {
+    const id = setInterval(checkDisconnects, 30_000);
+    return () => clearInterval(id);
+  }, [checkDisconnects]);
 
   return roomCode !== null ? <Room /> : <Home />;
 }

@@ -9,7 +9,7 @@ interface Props {
 }
 
 const TITLES: Record<Variant, string> = {
-  basic: "Basic Rummy",
+  basic: "Classic Rummy",
   gin: "Gin Rummy",
   rum500: "500 Rum",
 };

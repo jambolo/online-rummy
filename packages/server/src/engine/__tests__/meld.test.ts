@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '@online-rummy/shared';
-import { cardPoints, validateMeld } from '../meld.js';
+import { cardPoints, validateMeld } from '@online-rummy/shared';
 
 const ACE_LOW = { aceHigh: false, roundTheCorner: false };
 const ACE_HIGH = { aceHigh: true, roundTheCorner: false };

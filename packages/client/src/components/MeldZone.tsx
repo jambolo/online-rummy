@@ -1,23 +1,13 @@
 import type { Card, Meld } from "@online-rummy/shared";
-import { RANK_INDEX } from "@online-rummy/shared";
+import { validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
 
-// Client-side check: can `newCard` extend `meld`? (gin ace low only)
+// Can `newCard` extend `meld`? Uses shared validateMeld with gin opts (ace low only).
 function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
   const meldCards = meld.cards ?? [];
   if (meldCards.length === 0) return false;
-  const all = [...meldCards, newCard];
-  // Set: same rank, max 4 cards total
-  if (all.every(c => c.rank === all[0]!.rank)) return all.length <= 4;
-  // Run: same suit, consecutive
-  if (!all.every(c => c.suit === all[0]!.suit)) return false;
-  if (all.length < 3) return false;
-  const indices = all.map(c => RANK_INDEX[c.rank]).sort((a, b) => a - b);
-  for (let i = 1; i < indices.length; i++) {
-    if ((indices[i] as number) - (indices[i - 1] as number) !== 1) return false;
-  }
-  return true;
+  return validateMeld([...meldCards, newCard], { aceHigh: false, roundTheCorner: false });
 }
 
 interface MeldPileProps {

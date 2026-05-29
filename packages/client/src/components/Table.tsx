@@ -1,13 +1,16 @@
 import { useState } from "react";
 import type { Card } from "@online-rummy/shared";
-import { RANK_INDEX } from "@online-rummy/shared";
+import { RANK_INDEX, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
 import PileDiveModal from "./PileDiveModal";
 
-// Client-side mirror of server canUseSelectedInMeldOrLayoff (packages/server/src/engine/
-// variants/rum500.ts) — used for pre-flight greying in the pile-dive modal. Server is
-// authoritative; this is a UX hint only. Keep in sync.
+// 500 Rum meld options: ace-either-end (rules.md A.4.3).
+const RUM500_OPTS = { aceHigh: false, roundTheCorner: false, aceEitherEnd: true } as const;
+
+// 500 Rum pile-dive preflight — checks if `selected` could anchor a run given the
+// other same-suit cards available. Mirror of server canUseSelectedInMeldOrLayoff
+// (packages/server/src/engine/variants/rum500.ts). UX hint only; server is authoritative.
 function canFormRunWith(others: Card[], selected: Card): boolean {
   const sameSuit = others.filter((c) => c.suit === selected.suit);
   for (const aceHigh of [false, true]) {
@@ -24,32 +27,8 @@ function canFormRunWith(others: Card[], selected: Card): boolean {
   return false;
 }
 
-function isRunValid(cards: Card[]): boolean {
-  if (cards.length < 3) return false;
-  const suit = cards[0]?.suit;
-  if (!cards.every((c) => c.suit === suit)) return false;
-  for (const aceHigh of [false, true]) {
-    const idxOf = (c: Card) =>
-      c.rank === "A" ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank];
-    const idxs = [...cards.map(idxOf)].sort((a, b) => a - b);
-    let ok = true;
-    for (let i = 1; i < idxs.length; i++) {
-      if ((idxs[i] ?? 0) - (idxs[i - 1] ?? 0) !== 1) { ok = false; break; }
-    }
-    if (ok) return true;
-  }
-  return false;
-}
-
-function isSetValid(cards: Card[]): boolean {
-  if (cards.length < 3 || cards.length > 4) return false;
-  const r = cards[0]?.rank;
-  return cards.every((c) => c.rank === r);
-}
-
 function canLayoffOnto(meldCards: Card[], selected: Card): boolean {
-  const ext = [...meldCards, selected];
-  return isSetValid(ext) || isRunValid(ext);
+  return validateMeld([...meldCards, selected], RUM500_OPTS);
 }
 
 export default function Table() {

@@ -73,7 +73,10 @@ export default function Hand() {
   const handOrder = useAppStore((s) => s.handOrder);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const setHandOrder = useAppStore((s) => s.setHandOrder);
-  const mustMeldCardId = publicState?.mustMeldCardId ?? null;
+  const mustMeldCardId =
+    publicState?.variantPublic.variant === 'rum500'
+      ? publicState.variantPublic.data.mustMeldCardId
+      : null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
