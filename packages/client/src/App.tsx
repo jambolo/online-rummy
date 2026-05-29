@@ -6,7 +6,9 @@ import Room from "./routes/Room";
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
-  `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:8080`;
+  (window.location.protocol === "https:"
+    ? `wss://${window.location.hostname}`
+    : `ws://${window.location.hostname}:8080`);
 
 export default function App() {
   const setConnected = useAppStore((s) => s.setConnected);

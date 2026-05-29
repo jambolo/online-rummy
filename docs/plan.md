@@ -10,14 +10,14 @@ Compressed reference. Reload before resuming work.
 | Scale | Hobby <50 concurrent |
 | Auth | Guest nickname + 5-letter room code, signed cookie session id |
 | Transport | WebSocket, JSON, native `ws` lib (not socket.io) |
-| Server | TypeScript + Node.js 20 LTS |
+| Server | TypeScript + Node.js 22.13 |
 | Package manager | pnpm workspaces (monorepo) |
 | Client | React + Vite + TS, Zustand state, dnd-kit drag |
 | Card render v1 | CSS/HTML |
 | Card render v2 | PixiJS swap after playability confirmed |
 | Persistence | None, in-memory room registry |
-| Hosting | Deferred. GCE e2-micro free tier OR Cloudflare Tunnel self-host. Same Node process either way |
-| Deploy artifact | Docker image (multi-stage), PM2 fallback if no container runtime |
+| Hosting | Cloudflare Tunnel + manual local host (run `node dist/index.js` on a dev machine). No dedicated server |
+| Deploy artifact | None — built server run locally; `cloudflared` exposes it |
 | Bots | None v1 |
 | Disconnect | Instant forfeit (no reconnect mid-game; lobby reconnect 60s via sessionId cookie) |
 | Forfeit disposition | Hand + melds out of play (NOT returned to stock). Stock + discard pile untouched |
@@ -234,7 +234,7 @@ Canonical rules only. No house-rule variants are in scope.
 - Cards get server-assigned UUIDv4 ids per game.
 - Server never sends other players' hands or stock order.
 - Audit every S2C path to confirm no info leak.
-- WSS in production via reverse proxy (nginx/Caddy + Let's Encrypt) or Cloudflare Tunnel (auto-TLS).
+- WSS in production via Cloudflare Tunnel (auto-TLS); local host stays plain `ws` behind the tunnel.
 - Session cookie: signed with HMAC via `cookie-signature` lib (or built-in `crypto.createHmac`). Secret from env var `SESSION_SECRET` (required, min 32 chars, fail boot if missing).
 - WS origin allowlist: env var `ALLOWED_ORIGINS` (comma-separated). Reject WS upgrade if `Origin` header not in list. Dev default = `http://localhost:5173`.
 - Rate limit: per-IP connection cap (10) + per-socket message rate (20/sec) to deter spam.
@@ -247,7 +247,6 @@ Canonical rules only. No house-rule variants are in scope.
 | `ALLOWED_ORIGINS` | yes | Comma-separated WS upgrade allowlist |
 | `PORT` | no (default 8080) | HTTP+WS listen port |
 | `NODE_ENV` | no | `production` enables stricter cookie flags (Secure, SameSite=Strict) |
-| `LOG_LEVEL` | no (default `info`) | pino log level |
 
 ## Room lifecycle
 
@@ -286,7 +285,7 @@ meld(cardIds):
   require phase==='meld' || 'discard'
   variant.validateMeld(cards, {aceHigh:false, roundTheCorner:false})
   remove from hand, append to melds, record meldedBy
-  phase = 'discard'  ← basic: exactly 1 meld per turn
+  phase = 'meld'  ← multiple melds allowed per turn (max-one-meld HR off)
 
 layoff(meldId, cardId):
   (no hasMeldedEver check — house rule is off by default)
@@ -366,7 +365,7 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 | M4.5 | Re-deal (multi-hand game); How to Play modal for Basic Rummy | 1-2d |
 | M5 | 500 Rum variant (pile dive UX); How to Play modal for 500 Rum | 3-4d |
 | M6 | Gin variant; How to Play modal for Gin | 2-3d |
-| M7 | Deploy + structured logs + room/player counters | 1-2d |
+| M7 | Deploy: Cloudflare Tunnel + manual local host (no structured logs, no metrics) | <1d |
 | M8 | PixiJS card layer | 1-2w |
 
 v1 = M1-M7. M8 after.
@@ -374,7 +373,7 @@ v1 = M1-M7. M8 after.
 ## Open items
 
 - Mobile drag: dnd-kit touch OK, tap-select fallback essential at small viewport.
-- Hosting decision needed before M7.
+- Hosting: Cloudflare Tunnel + manual local host (decided 2026-05-28). No dedicated server, no structured logs, no metrics.
 
 ## How to Play implementation notes
 
@@ -385,7 +384,7 @@ v1 = M1-M7. M8 after.
   - Turn flow — draw → meld/layoff (optional) → discard; note variant deviations
   - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rum: pile dive
   - Scoring — point values per card, how hand score is computed, game target
-  - Active house rules — list only the locked picks from plan.md (e.g. ace low, ≤1 meld/turn, going-rummy ×2)
+  - Active house rules — list only the locked picks from plan.md (e.g. ace low, layoff unrestricted, going-rummy ×2)
 - **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rum) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
 - **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
 - **No protocol change needed** — variant is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
@@ -458,8 +457,9 @@ v1 = M1-M7. M8 after.
 - [x] M4.5 complete
 - [x] M5 complete
 - [x] M6 complete — Gin variant: engine, WS wiring, client UI, 62 engine tests, How-to-Play content
-- [ ] M7-M8 not started
+- [x] M7 complete — Deploy: server serves client bundle; single Cloudflare Tunnel + manual local host (`scripts/launch-in-tmux-window.sh`). No structured logs, no metrics
+- [ ] M8 not started — PixiJS card layer
 
 ## Next action
 
-Execute structural refactor before M7. See `docs/refactor-plan.md` — bottom-up phases land directly on `develop`. After all phases green, start M7 (deploy + structured logs + room/player counters).
+M1-M7 complete (v1 done): structural refactor landed (commit d053563); M7 deploy = server serves client bundle, single Cloudflare Tunnel + manual local host. No dedicated server, no structured logs, no metrics. M8 (PixiJS card layer) is the only remaining milestone, post-v1.

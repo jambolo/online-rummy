@@ -13,24 +13,27 @@ let _cb: WsCallbacks | null = null;
 // events from a previous socket (e.g. React StrictMode double-mount) are ignored.
 let epoch = 0;
 
-// Keep-alive: Cloudflare drops idle WS connections. When nothing has been sent
-// or received for KEEPALIVE_IDLE_MS, emit a keepalive frame; the server relays it
-// to the other room players, keeping their sockets warm too.
+// Keep-alive: Cloudflare drops idle WS connections, and the other players use our
+// frames as a liveness signal (silent-drop detection). Emit a keepalive whenever we
+// haven't *sent* anything for KEEPALIVE_IDLE_MS. Keyed off last-sent, NOT last-received
+// on purpose: if an incoming frame reset the timer, a player who only receives (the
+// opponent's relayed keepalives, state broadcasts on the opponent's turn, or an idle
+// lobby) would never emit, and the opponent would falsely flag them as disconnected.
 const KEEPALIVE_IDLE_MS = 30_000;
 const KEEPALIVE_CHECK_MS = 5_000;
-let lastActivity = 0;
+let lastSent = 0;
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
-function touch(): void {
-  lastActivity = Date.now();
+function markSent(): void {
+  lastSent = Date.now();
 }
 
 function startKeepAlive(): void {
   stopKeepAlive();
-  touch();
+  markSent();
   keepAliveTimer = setInterval(() => {
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (Date.now() - lastActivity >= KEEPALIVE_IDLE_MS) send({ t: "keepalive" });
+    if (Date.now() - lastSent >= KEEPALIVE_IDLE_MS) send({ t: "keepalive" });
   }, KEEPALIVE_CHECK_MS);
 }
 
@@ -83,7 +86,6 @@ function _open(): void {
 
   ws.onmessage = (ev: MessageEvent<string>) => {
     if (epoch !== myEpoch) return;
-    touch();
     let msg: S2C;
     try {
       msg = JSON.parse(ev.data) as S2C;
@@ -99,7 +101,7 @@ function _open(): void {
 export function send(msg: C2S): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(msg));
-    touch();
+    markSent();
   }
 }
 

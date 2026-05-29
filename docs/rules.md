@@ -551,12 +551,12 @@ Source: gamerisms.com `[GT]`
 ```text
 # Based on primaries [BIC-*, PG-*]; secondary sources only fill gaps.
 if game == basic_rummy:
-    deck = 1*52, no jokers
-    players in [2,6]
-    deal = {2:10, 3:7, 4:7, 5:6, 6:6}
+    deck = 1*52 (2*52 for 7P), no jokers
+    players in [2,7]
+    deal = {2:10, 3:7, 4:7, 5:6, 6:6, 7:10}
     ace = low default (configurable high)
     melds: set(3-4 same rank) | run(3+ same suit sequential)
-    turn: draw(stock|top_discard) -> meld(<=1) -> lay_off? -> discard
+    turn: draw(stock|top_discard) -> meld(*) -> lay_off? -> discard
     constraint: if drew top_discard, cannot discard same card same turn
     going_rummy_bonus: score *= 2  (or +10 variant per PG-R)
     score: opp_unmelded; A=1, 2-10=pip, JQK=10

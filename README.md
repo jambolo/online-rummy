@@ -11,7 +11,7 @@ Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **
 
 ### Classic Rummy
 
-2–6 players. Form sets (3–4 cards of the same rank) and runs (3+ consecutive cards of the same suit). Go out by melding, laying off, and discarding your last card. Ace is low (A-2-3 valid; Q-K-A invalid). At most one meld per turn. Going out without having melded before earns double score. First player to accumulate 100 points wins.
+2–7 players. Form sets (3–4 cards of the same rank) and runs (3+ consecutive cards of the same suit). Go out by melding, laying off, and discarding your last card. Ace is low (A-2-3 valid; Q-K-A invalid). Going out without having melded before earns double score. First player to accumulate 100 points wins.
 
 ### Gin Rummy
 
@@ -40,19 +40,7 @@ Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **
 
 `SESSION_SECRET` and `ALLOWED_ORIGINS` must be set before starting. The server refuses to boot without them.
 
-### With Docker (recommended)
-
-```sh
-docker build -t online-rummy .
-
-docker run -d \
-  -p 8080:8080 \
-  -e SESSION_SECRET=<your-secret-min-32-chars> \
-  -e ALLOWED_ORIGINS=http://localhost:5173 \
-  online-rummy
-```
-
-### Without Docker
+### Build and start
 
 ```sh
 pnpm install
@@ -73,13 +61,15 @@ node packages/server/dist/index.js
 
 ### Connecting
 
-The server itself only handles WebSocket connections. Run the client separately and open it in your browser:
+After `pnpm build`, the server serves the built client bundle (`packages/client/dist`) on the same port as the WebSocket endpoint — open `http://localhost:8080` in your browser. Override the bundle location with `STATIC_DIR`. If no bundle is found, HTTP requests return `404` and the server runs WebSocket-only.
+
+For client development with hot reload, run the dev server instead:
 
 ```sh
 pnpm --filter @online-rummy/client dev
 ```
 
-By default the client connects to `ws://<hostname>:8080`; override with the `VITE_WS_URL` env var.
+The client derives its WebSocket URL from the page origin: `wss://<host>` when served over HTTPS, otherwise `ws://<hostname>:8080`. Override with the `VITE_WS_URL` build-time env var.
 
 ---
 
@@ -97,15 +87,17 @@ Games are ephemeral — no accounts, no saved history. If you close the browser 
 
 ## Self-Hosting Notes
 
-- The server exposes only the WebSocket endpoint (plain HTTP requests return `404`). The client is a separate static bundle built with `pnpm --filter @online-rummy/client build`; serve it yourself and point it at the server via the `VITE_WS_URL` build-time variable.
-- For HTTPS/WSS in production, place a reverse proxy (nginx, Caddy) in front of the server and terminate TLS there, or use a Cloudflare Tunnel for automatic TLS without opening inbound ports (see [Hosting on Cloudflare](#hosting-on-cloudflare)).
+- The server serves the built client bundle and the WebSocket endpoint on the same port, so a single origin (and a single tunnel) covers the whole app. If the bundle is absent, HTTP requests return `404` and only the WebSocket endpoint is live. Override the bundle path with `STATIC_DIR`.
+- For HTTPS/WSS without opening inbound ports, use a Cloudflare Tunnel for automatic TLS (see [Hosting on Cloudflare](#hosting-on-cloudflare)). The client auto-selects `wss://` when served over HTTPS, so no rebuild is needed.
 - The server keeps all game state in memory. Restarting the process ends all active games.
 
 ---
 
 ## Hosting on Cloudflare
 
-To play with a remote friend without a permanent server, expose your two local processes (WebSocket server and client) through [Cloudflare quick tunnels](https://developers.cloudflare.com/cloudflare-tunnel/). This gives free TLS (`wss://`) with no account and temporary URLs. Your machine must stay on for the duration of the game.
+To play with a remote friend without a permanent server, expose your local server through a single [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-tunnel/). This gives free TLS (`wss://`) with no account and a temporary URL. Your machine must stay on for the duration of the game.
+
+Because the server serves the built client on the same port as the WebSocket endpoint, **one tunnel covers both** — no separate client tunnel or rebuild is needed.
 
 Install `cloudflared` once (Windows):
 
@@ -113,47 +105,32 @@ Install `cloudflared` once (Windows):
 winget install --id Cloudflare.cloudflared
 ```
 
-1. Build everything:
+1. Build everything (produces `packages/client/dist`, which the server serves):
 
    ```bash
    pnpm install
    pnpm build
    ```
 
-2. Start both tunnels and note each `https://*.trycloudflare.com` URL printed. The backends need not be running yet — the URL is assigned when the tunnel starts.
+2. Start the tunnel and note the `https://*.trycloudflare.com` URL it prints. The server need not be running yet — the URL is assigned when the tunnel starts.
 
    ```bash
-   # Terminal A — server (WebSocket). URL -> SERVER_URL
    cloudflared tunnel --url http://localhost:8080
-
-   # Terminal B — client. URL -> CLIENT_URL
-   cloudflared tunnel --url http://localhost:4173
    ```
 
-3. Build the client pointing at the server tunnel. `VITE_WS_URL` is baked in at build time; swap `https` for `wss`:
-
-   ```bash
-   export VITE_WS_URL="wss://<SERVER_URL-host>.trycloudflare.com"
-   pnpm --filter @online-rummy/client build
-   ```
-
-4. Start the server, allowing the client tunnel origin (exact match, no trailing slash):
+3. Start the server, allowing the tunnel origin (exact match, no trailing slash):
 
    ```bash
    export SESSION_SECRET="<your-secret-min-32-chars>"
-   export ALLOWED_ORIGINS="https://<CLIENT_URL-host>.trycloudflare.com"
+   export ALLOWED_ORIGINS="https://<your-tunnel-host>.trycloudflare.com"
    node packages/server/dist/index.js
    ```
 
-5. Serve the built client on port 4173 with a static server (`vite preview` rejects the tunnel's `Host` header):
+4. Send your friend the tunnel URL. They open it in a browser, create a room, and share the code. The client auto-connects over `wss://` to the same origin.
 
-   ```bash
-   pnpm dlx serve packages/client/dist -l 4173
-   ```
+**Note:** quick-tunnel URLs change on every restart. After restarting the tunnel, update `ALLOWED_ORIGINS` to the new URL and restart the server. No client rebuild is required.
 
-6. Send your friend the `CLIENT_URL`. Create a room and share the code.
-
-**Note:** quick-tunnel URLs change on every restart. If you restart the server tunnel, rebuild the client (step 3) with the new `wss://` URL. If you restart the client tunnel, update `ALLOWED_ORIGINS` and restart the server.
+**Tip:** `scripts/launch-in-tmux-window.sh` automates steps 1–3 (build, start tunnel, generate a `SESSION_SECRET`, start the server) and prints the shareable URL.
 
 ---
 

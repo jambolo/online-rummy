@@ -269,12 +269,18 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const ginDefenderMelds = msg.public.phase === 'draw' ? [] : s.ginDefenderMelds;
           const ginLayoffs = msg.public.phase === 'draw' ? [] : s.ginLayoffs;
 
-          // Seed last-seen for any newly-appearing player (a state msg isn't attributable
-          // to a single actor, so we only seed — keepalive/event/chat refresh it).
+          // A state broadcast proves the server just processed a game action —
+          // refresh last-seen for all non-self players. Active gameplay suppresses
+          // keepalive pings (incoming state resets lastActivity), so without this,
+          // playerLastSeen goes stale and triggers false disconnect warnings.
+          // Silently-dropped players are handled by the server's forfeit path, which
+          // sets their status to 'forfeited' (excluded from checkDisconnects) before
+          // any subsequent state message arrives.
           const now = Date.now();
           const playerLastSeen = { ...s.playerLastSeen };
+          const me = s.myPlayerId;
           for (const p of msg.public.players) {
-            if (playerLastSeen[p.id] === undefined) playerLastSeen[p.id] = now;
+            if (p.id !== me) playerLastSeen[p.id] = now;
           }
 
           if (msg.private === undefined) {
@@ -368,7 +374,13 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             ginInfo: d.ginInfo ?? null,
           });
         } else if (msg.kind === "gameOver") {
-          set({ isGameOver: true });
+          set({ isGameOver: true, disconnectWarning: null });
+        } else if (msg.kind === "forfeit") {
+          // Server detected the player's socket close → any pending silent-drop warning
+          // for them is now redundant.
+          set((s) =>
+            s.disconnectWarning?.id === msg.playerId ? { disconnectWarning: null } : {},
+          );
         } else if (msg.kind === "handCancelled") {
           set({ handCancelled: true });
         } else if (msg.kind === "gameStarted") {

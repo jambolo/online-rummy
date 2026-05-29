@@ -413,7 +413,7 @@ Sends a chat message to all players in the room. The server trims `text` to 200 
 { "t": "keepalive" }
 ```
 
-Liveness ping. Cloudflare drops WebSocket connections that go idle, so the client sends this when nothing has been sent or received for ~30 seconds. The server relays it to the **other** players in the room (not the sender) as a [`keepalive`](#keepalive--relayed-keep-alive) message, keeping their sockets warm too. No effect on game state. Silently ignored if the socket is not in a room.
+Liveness ping. Cloudflare drops WebSocket connections that go idle, so the client sends this when it has not **sent** anything for ~30 seconds (keyed off last-sent, not last-received, so a player who is only receiving still emits — the other side relies on these frames to detect a silent drop). The server relays it to the **other** players in the room (not the sender) as a [`keepalive`](#keepalive--relayed-keep-alive) message, keeping their sockets warm too. No effect on game state. Silently ignored if the socket is not in a room.
 
 ---
 
@@ -664,7 +664,7 @@ Broadcast to all players in the room when any player sends a chat. `from` is the
 { "t": "keepalive", "from": "playerId" }
 ```
 
-Relayed to the other players in a room when one player sends a [`keepalive`](#keepalive--idle-keep-alive). `from` is the originating player's ID. Receiving any frame (including this one) counts as activity and resets the recipient's idle timer; the client otherwise ignores it.
+Relayed to the other players in a room when one player sends a [`keepalive`](#keepalive--idle-keep-alive). `from` is the originating player's ID. The recipient records `from`'s last-seen time (used for [silent-drop detection](#silent-drop-detection-client-side)) and otherwise ignores the frame. Receiving a frame does **not** suppress the recipient's own keepalive emission — that is keyed off when it last *sent*, so both players emit independently even when one is only listening.
 
 ---
 
@@ -889,3 +889,7 @@ When a player's socket closes during the game, the server immediately:
 If only one active player remains after the forfeit, that player wins and the server additionally broadcasts `kind: "gameOver"` before the final `state`.
 
 There is no reconnect window during play.
+
+### Silent-drop detection (client-side)
+
+A clean socket close triggers the server's forfeit path above. But an ungraceful drop (network partition, sleeping laptop) may leave the server's socket open with no `close` event, so no `forfeit` is ever sent. To cover this, each client tracks a per-player last-seen time, refreshed by any frame attributable to that player: a relayed [`keepalive`](#keepalive--relayed-keep-alive), an [`event`](#event--game-event), a [`chat`](#chat--chat-message), or a [`state`](#state--game-state) broadcast (a state broadcast proves the server just processed an action, so every non-self player was alive). If a player goes unheard for **5 minutes**, the client shows a "probably disconnected — cancel the game?" prompt; confirming sends [`leave`](#leave--leave-the-room). Because keepalives are emitted on a last-*sent* timer, both players keep emitting even during long idle stretches, so this threshold is only crossed by a genuine drop. A subsequent `forfeit` or `gameOver` for the warned player clears the prompt automatically.
