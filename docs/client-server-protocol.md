@@ -417,6 +417,24 @@ Liveness ping. Cloudflare drops WebSocket connections that go idle, so the clien
 
 ---
 
+### `leave` — Leave the room
+
+```json
+{ "t": "leave" }
+```
+
+Voluntarily leave the room from the lobby, an in-progress game, or the between-hands screen. The game is cancelled for everyone: the server broadcasts an [`event`](#event--game-event) with `kind: "playerLeft"` to the **other** players, detaches every player's socket (so they can immediately create or join a new room), and deletes the room. The leaving client returns itself to the start page locally; the others do so on receiving the `playerLeft` event.
+
+**Response:** A [`playerLeft`](#event--game-event) event to the other players. No response to the sender.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+
+---
+
 ### `knock` — Gin knock or go gin
 
 ```json
@@ -578,6 +596,7 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `gameStarted` | The host triggered game start | absent |
 | `wonHand` | Hand ended with a winner | `{ finalHands, meldCredits, handDeadwood, ginInfo? }` — see below |
 | `handCancelled` | Gin hand cancelled (stock-depletion, rules.md A.2.3) | absent |
+| `playerLeft` | A player left the room via the leave button; game cancelled | absent |
 | `forfeit` | A player disconnected during play | absent |
 | `gameOver` | The game-ending score threshold has been reached | absent |
 | `drew` | Reserved — defined but not yet emitted | — |

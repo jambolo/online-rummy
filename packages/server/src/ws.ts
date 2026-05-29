@@ -375,6 +375,26 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       break;
     }
 
+    case 'leave': {
+      const { player, room } = ctx;
+      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      // Tell the other players this player left and the game is cancelled.
+      broadcast(room, { t: 'event', kind: 'playerLeft', playerId: player.id }, player.id);
+      // Cancel the game and free everyone: cancel timers, detach each player's socket
+      // context (so they can immediately create/join again), then tear down the room.
+      clearIdleTimer(room.code);
+      for (const p of room.players) {
+        const t = reconnectTimers.get(p.id);
+        if (t !== undefined) { clearTimeout(t); reconnectTimers.delete(p.id); }
+        if (p.socket !== null) {
+          const pctx = socketContexts.get(p.socket);
+          if (pctx !== undefined) { pctx.player = null; pctx.room = null; }
+        }
+      }
+      deleteRoom(room.code);
+      break;
+    }
+
     case 'draw':
     case 'drawFromPile':
     case 'meld':

@@ -64,7 +64,7 @@ describe('applyAction — basic happy paths', () => {
     });
   });
 
-  it('non-engine actions (create/join/start/chat) return { kind: "noop" }', () => {
+  it('non-engine actions (create/join/start/chat/keepalive/leave) return { kind: "noop" }', () => {
     const state = basicGame();
     expect(applyAction(state, 'p1', { t: 'create', variant: 'basic', name: 'X' })).toEqual({
       kind: 'noop',
@@ -74,6 +74,8 @@ describe('applyAction — basic happy paths', () => {
     });
     expect(applyAction(state, 'p1', { t: 'start' })).toEqual({ kind: 'noop' });
     expect(applyAction(state, 'p1', { t: 'chat', text: 'hi' })).toEqual({ kind: 'noop' });
+    expect(applyAction(state, 'p1', { t: 'keepalive' })).toEqual({ kind: 'noop' });
+    expect(applyAction(state, 'p1', { t: 'leave' })).toEqual({ kind: 'noop' });
   });
 });
 

@@ -13,6 +13,8 @@ export default function Home() {
   const send = useAppStore((s) => s.send);
   const lastError = useAppStore((s) => s.lastError);
   const dismissError = useAppStore((s) => s.dismissError);
+  const notice = useAppStore((s) => s.notice);
+  const dismissNotice = useAppStore((s) => s.dismissNotice);
 
   const [name, setName] = useState("");
   const [variant, setVariant] = useState<Variant>("basic");
@@ -76,6 +78,30 @@ export default function Home() {
             }}
           >
             Connecting to server…
+          </div>
+        )}
+
+        {notice && (
+          <div
+            style={{
+              background: "rgba(40,90,160,0.35)",
+              border: "1px solid rgba(80,140,220,0.6)",
+              borderRadius: 6,
+              padding: "8px 12px",
+              marginBottom: 16,
+              fontSize: 13,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span>{notice}</span>
+            <button
+              onClick={dismissNotice}
+              style={{ background: "transparent", padding: "0 6px", fontSize: 16 }}
+            >
+              ×
+            </button>
           </div>
         )}
 

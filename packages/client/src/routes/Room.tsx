@@ -10,6 +10,133 @@ import ActionBar from "../components/ActionBar";
 import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
 
+// Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
+function ConfirmModal({
+  message,
+  confirmLabel,
+  cancelLabel = "Cancel",
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 200,
+      }}
+    >
+      <div
+        style={{
+          background: "#1a4a1a",
+          border: "2px solid rgba(255,255,255,0.2)",
+          borderRadius: 12,
+          padding: 28,
+          width: 320,
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 14, marginBottom: 20 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              color: "#fff",
+              padding: "8px 0",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1,
+              background: "rgba(174,42,26,0.85)",
+              border: "1px solid rgba(174,42,26,1)",
+              color: "#fff",
+              padding: "8px 0",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Leave-game button with a confirmation step. Leaving cancels the game for everyone.
+function LeaveButton({ style }: { style?: React.CSSProperties }) {
+  const leaveGame = useAppStore((s) => s.leaveGame);
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        style={{
+          background: "transparent",
+          border: "1px solid rgba(255,127,127,0.4)",
+          color: "rgba(255,127,127,0.85)",
+          fontSize: 12,
+          padding: "4px 10px",
+          borderRadius: 5,
+          cursor: "pointer",
+          flexShrink: 0,
+          ...style,
+        }}
+      >
+        Leave Game
+      </button>
+      {confirming && (
+        <ConfirmModal
+          message="Leave the game? This cancels the game for everyone and returns all players to the start page."
+          confirmLabel="Leave Game"
+          onConfirm={leaveGame}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// Prompt shown when another player has gone silent past the disconnect threshold.
+// "Cancel Game" tears the game down for everyone; "Keep Waiting" snoozes the warning.
+function DisconnectWarningModal() {
+  const warning = useAppStore((s) => s.disconnectWarning);
+  const leaveGame = useAppStore((s) => s.leaveGame);
+  const dismiss = useAppStore((s) => s.dismissDisconnectWarning);
+
+  if (!warning) return null;
+
+  return (
+    <ConfirmModal
+      message={`${warning.name} hasn't sent any messages in over 5 minutes and has probably disconnected. Do you want to cancel the game?`}
+      confirmLabel="Cancel Game"
+      cancelLabel="Keep Waiting"
+      onConfirm={leaveGame}
+      onCancel={dismiss}
+    />
+  );
+}
+
 // Compact opponent info strip shown above the table
 function OpponentStrip() {
   const publicState = useAppStore((s) => s.publicState);
@@ -159,6 +286,10 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         >
           How to Play
         </button>
+
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <LeaveButton style={{ width: "100%" }} />
+        </div>
       </div>
     </div>
   );
@@ -270,6 +401,9 @@ function ScoreOverlay() {
               Waiting for host…
             </div>
           )}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+            <LeaveButton />
+          </div>
         </div>
       </div>
     );
@@ -502,6 +636,9 @@ function ScoreOverlay() {
             Waiting for host…
           </div>
         )}
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <LeaveButton />
+        </div>
       </div>
     </div>
   );
@@ -523,6 +660,7 @@ export default function Room() {
       {showHelp && helpVariant && (
         <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
       )}
+      <DisconnectWarningModal />
     </>
   );
 
@@ -540,6 +678,7 @@ export default function Room() {
       {showHelp && helpVariant && (
         <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
       )}
+      <DisconnectWarningModal />
       <ScoreOverlay />
 
       {/* Error banner */}
@@ -591,6 +730,7 @@ export default function Room() {
         >
           How to Play
         </button>
+        <LeaveButton />
       </div>
 
       {/* Main area */}

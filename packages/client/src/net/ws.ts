@@ -90,7 +90,8 @@ function _open(): void {
     } catch {
       return; // ignore malformed frames
     }
-    if (msg.t === "keepalive") return; // relayed liveness ping; already counted as activity
+    // Keepalive frames are relayed liveness pings; forwarded so the store can record
+    // per-player last-seen (used to detect a silently-dropped opponent).
     cb.onMessage(msg);
   };
 }

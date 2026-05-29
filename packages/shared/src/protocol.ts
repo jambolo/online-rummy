@@ -15,6 +15,7 @@ export type C2S =
   | { t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }  // gin only — defender declares own melds + lays off onto knocker's melds (rules.md A.2.4)
   | { t: 'passUpcard' }                   // gin only — decline initial upcard offer (rules.md A.2.2)
   | { t: 'keepalive' }                     // idle keep-alive; server relays to other room players (Cloudflare drops idle WS)
+  | { t: 'leave' }                         // leave the room; cancels the game and returns all players to the start page
   | { t: 'chat'; text: string };
 
 export type EventKind =
@@ -24,6 +25,7 @@ export type EventKind =
   | 'discarded'
   | 'wonHand'
   | 'handCancelled'  // gin only — stock-depletion cancelled hand (rules.md A.2.3)
+  | 'playerLeft'     // a player left the room via the leave button; game cancelled, all return to start page
   | 'forfeit'
   | 'gameOver'
   | 'gameStarted';

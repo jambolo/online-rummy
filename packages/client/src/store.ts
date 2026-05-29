@@ -68,6 +68,14 @@ interface AppState {
   handOrder: string[];      // card IDs in display order (drag-to-reorder)
   chatMessages: ChatMessage[];
   lastError: string | null;
+  // Informational banner shown on the Home page (e.g. after leaving a game). Not an error.
+  notice: string | null;
+  // Last time (ms epoch) a message attributable to each player id was received.
+  // Fed by keepalive relays, events, and chat; used to flag a silently-dropped opponent.
+  playerLastSeen: Record<string, number>;
+  // Set when another player has been silent past the disconnect threshold; drives the
+  // "probably disconnected — cancel the game?" prompt. null when no warning pending.
+  disconnectWarning: { id: string; name: string } | null;
   // Cache of Card objects by id — populated from private state so we can
   // render meld cards after they leave the hand.
   cardCache: Record<string, Card>;
@@ -97,10 +105,14 @@ interface AppState {
   setConnected(v: boolean): void;
   send(msg: C2S): void;
   handleMessage(msg: S2C): void;
+  leaveGame(): void;
+  checkDisconnects(): void;
+  dismissDisconnectWarning(): void;
   toggleSelect(cardId: string): void;
   clearSelect(): void;
   setHandOrder(ids: string[]): void;
   dismissError(): void;
+  dismissNotice(): void;
   lookupCard(id: string): Card | undefined;
   addKnockMeld(cardIds: string[]): void;
   removeKnockMeld(index: number): void;
@@ -113,8 +125,13 @@ interface AppState {
   clearGinLayoffs(): void;
 }
 
-export const useAppStore = create<AppState>()((set, _get) => ({
-  connected: false,
+// A player whose messages we haven't seen for this long is treated as probably
+// disconnected (server hasn't fired a clean forfeit, e.g. ungraceful network drop).
+const DISCONNECT_TIMEOUT_MS = 5 * 60 * 1000;
+
+// State reset when returning to the start page (leaving a game). Keeps `connected`
+// and `notice` untouched — the caller sets `notice` to explain why they're home.
+const HOME_RESET = {
   myPlayerId: null,
   pendingName: null,
   sessionId: null,
@@ -139,6 +156,45 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   ginLayoffs: [],
   isGameOver: false,
   handCancelled: false,
+  playerLastSeen: {},
+  disconnectWarning: null,
+} satisfies Partial<AppState>;
+
+function clearSessionStorage(): void {
+  sessionStorage.removeItem("sessionId");
+  sessionStorage.removeItem("roomCode");
+  sessionStorage.removeItem("playerName");
+}
+
+export const useAppStore = create<AppState>()((set, _get) => ({
+  connected: false,
+  myPlayerId: null,
+  pendingName: null,
+  sessionId: null,
+  roomCode: null,
+  variant: null,
+  hostId: null,
+  lobbyPlayers: [],
+  publicState: null,
+  privateState: null,
+  selectedCardIds: [],
+  handOrder: [],
+  chatMessages: [],
+  lastError: null,
+  notice: null,
+  playerLastSeen: {},
+  disconnectWarning: null,
+  cardCache: {},
+  prevScores: {},
+  finalHands: {},
+  meldCredits: {},
+  handDeadwood: {},
+  ginInfo: null,
+  knockMelds: [],
+  ginDefenderMelds: [],
+  ginLayoffs: [],
+  isGameOver: false,
+  handCancelled: false,
 
   setConnected: (v) => set({ connected: v }),
 
@@ -150,6 +206,14 @@ export const useAppStore = create<AppState>()((set, _get) => ({
     wsSend(msg);
   },
 
+  // Player chose to leave: tell the server (which cancels the game and notifies the
+  // others), then drop all room/game state and return to the start page.
+  leaveGame: () => {
+    wsSend({ t: "leave" });
+    clearSessionStorage();
+    set({ ...HOME_RESET, notice: "You left the game." });
+  },
+
   handleMessage: (msg) => {
     switch (msg.t) {
       case "lobby":
@@ -158,6 +222,13 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             s.myPlayerId ??
             msg.players.find((p) => p.name === s.pendingName)?.id ??
             null;
+          // Seed last-seen for newly-known players so they don't trip the disconnect
+          // check before we've had a chance to hear from them.
+          const now = Date.now();
+          const playerLastSeen = { ...s.playerLastSeen };
+          for (const p of msg.players) {
+            if (playerLastSeen[p.id] === undefined) playerLastSeen[p.id] = now;
+          }
           return {
             roomCode: msg.roomCode,
             variant: msg.variant,
@@ -165,7 +236,9 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             lobbyPlayers: msg.players,
             sessionId: msg.sessionId,
             myPlayerId,
+            playerLastSeen,
             lastError: null, // clear pre-join errors (e.g. invalid room code)
+            notice: null,    // clear any "you left the game" banner once back in a room
           };
         });
         sessionStorage.setItem("sessionId", msg.sessionId);
@@ -196,8 +269,16 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const ginDefenderMelds = msg.public.phase === 'draw' ? [] : s.ginDefenderMelds;
           const ginLayoffs = msg.public.phase === 'draw' ? [] : s.ginLayoffs;
 
+          // Seed last-seen for any newly-appearing player (a state msg isn't attributable
+          // to a single actor, so we only seed — keepalive/event/chat refresh it).
+          const now = Date.now();
+          const playerLastSeen = { ...s.playerLastSeen };
+          for (const p of msg.public.players) {
+            if (playerLastSeen[p.id] === undefined) playerLastSeen[p.id] = now;
+          }
+
           if (msg.private === undefined) {
-            return { publicState: msg.public, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs };
+            return { publicState: msg.public, playerLastSeen, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
@@ -216,6 +297,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             handOrder: [...kept, ...added],
             selectedCardIds: s.selectedCardIds.filter((id) => newIds.has(id)),
             cardCache,
+            playerLastSeen,
             prevScores,
             finalHands,
             meldCredits,
@@ -228,13 +310,28 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         });
         break;
 
-      case "chat":
+      case "keepalive":
+        // Relayed liveness ping from another room player — refresh their last-seen.
         set((s) => ({
-          chatMessages: [
-            ...s.chatMessages,
-            { from: msg.from, text: msg.text },
-          ],
+          playerLastSeen: { ...s.playerLastSeen, [msg.from]: Date.now() },
         }));
+        break;
+
+      case "chat":
+        set((s) => {
+          // chat carries the sender's name; map it back to an id for last-seen.
+          const fromId =
+            s.publicState?.players.find((p) => p.name === msg.from)?.id ??
+            s.lobbyPlayers.find((p) => p.name === msg.from)?.id;
+          const playerLastSeen =
+            fromId !== undefined
+              ? { ...s.playerLastSeen, [fromId]: Date.now() }
+              : s.playerLastSeen;
+          return {
+            chatMessages: [...s.chatMessages, { from: msg.from, text: msg.text }],
+            playerLastSeen,
+          };
+        });
         break;
 
       case "error":
@@ -253,6 +350,10 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         break;
 
       case "event":
+        // Any event is attributable to the player who triggered it → refresh last-seen.
+        set((s) => ({
+          playerLastSeen: { ...s.playerLastSeen, [msg.playerId]: Date.now() },
+        }));
         if (msg.kind === "wonHand" && msg.data !== undefined) {
           const d = msg.data as {
             finalHands?: Record<string, Card[]>;
@@ -272,6 +373,20 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           set({ handCancelled: true });
         } else if (msg.kind === "gameStarted") {
           set({ isGameOver: false, handCancelled: false, knockMelds: [], ginDefenderMelds: [], ginLayoffs: [] });
+        } else if (msg.kind === "playerLeft") {
+          // Another player left → game cancelled for everyone. Resolve their name from
+          // current state before we reset, then return to the start page.
+          set((s) => {
+            const name =
+              s.publicState?.players.find((p) => p.id === msg.playerId)?.name ??
+              s.lobbyPlayers.find((p) => p.id === msg.playerId)?.name ??
+              "A player";
+            return {
+              ...HOME_RESET,
+              notice: `${name} left the game. The game has been cancelled.`,
+            };
+          });
+          clearSessionStorage();
         }
         break;
     }
@@ -287,6 +402,37 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   clearSelect: () => set({ selectedCardIds: [] }),
   setHandOrder: (ids) => set({ handOrder: ids }),
   dismissError: () => set({ lastError: null }),
+  dismissNotice: () => set({ notice: null }),
+
+  // Periodic sweep (driven by an interval in App): flag the first other player whose
+  // messages we haven't seen for DISCONNECT_TIMEOUT_MS. Only one warning at a time.
+  checkDisconnects: () => {
+    const s = _get();
+    if (s.disconnectWarning !== null) return;
+    const me = s.myPlayerId;
+    const others = s.publicState
+      ? s.publicState.players.filter((p) => p.id !== me && p.status !== "forfeited")
+      : s.lobbyPlayers.filter((p) => p.id !== me);
+    const now = Date.now();
+    for (const p of others) {
+      const seen = s.playerLastSeen[p.id];
+      if (seen !== undefined && now - seen > DISCONNECT_TIMEOUT_MS) {
+        set({ disconnectWarning: { id: p.id, name: p.name } });
+        return;
+      }
+    }
+  },
+
+  // "Keep waiting" — snooze the timer for that player so the prompt clears and would
+  // only re-appear after another full interval of silence.
+  dismissDisconnectWarning: () => {
+    const w = _get().disconnectWarning;
+    if (w === null) return;
+    set((s) => ({
+      disconnectWarning: null,
+      playerLastSeen: { ...s.playerLastSeen, [w.id]: Date.now() },
+    }));
+  },
   lookupCard: (id) => _get().cardCache[id],
   addKnockMeld: (cardIds) =>
     set((s) => ({ knockMelds: [...s.knockMelds, cardIds], selectedCardIds: [] })),
