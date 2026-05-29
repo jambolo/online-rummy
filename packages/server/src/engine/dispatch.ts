@@ -69,6 +69,7 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
     case 'join':
     case 'start':
     case 'chat':
+    case 'keepalive':
       return { kind: 'noop' };
   }
 }

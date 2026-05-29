@@ -366,6 +366,15 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       break;
     }
 
+    case 'keepalive': {
+      // Receiving this frame already kept the sender's socket warm. Relay to the
+      // other room players so their sockets stay warm too (Cloudflare drops idle WS).
+      const { player, room } = ctx;
+      if (player === null || room === null) return;
+      broadcast(room, { t: 'keepalive', from: player.id }, player.id);
+      break;
+    }
+
     case 'draw':
     case 'drawFromPile':
     case 'meld':

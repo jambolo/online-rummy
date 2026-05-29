@@ -13,6 +13,34 @@ let _cb: WsCallbacks | null = null;
 // events from a previous socket (e.g. React StrictMode double-mount) are ignored.
 let epoch = 0;
 
+// Keep-alive: Cloudflare drops idle WS connections. When nothing has been sent
+// or received for KEEPALIVE_IDLE_MS, emit a keepalive frame; the server relays it
+// to the other room players, keeping their sockets warm too.
+const KEEPALIVE_IDLE_MS = 30_000;
+const KEEPALIVE_CHECK_MS = 5_000;
+let lastActivity = 0;
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+function touch(): void {
+  lastActivity = Date.now();
+}
+
+function startKeepAlive(): void {
+  stopKeepAlive();
+  touch();
+  keepAliveTimer = setInterval(() => {
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    if (Date.now() - lastActivity >= KEEPALIVE_IDLE_MS) send({ t: "keepalive" });
+  }, KEEPALIVE_CHECK_MS);
+}
+
+function stopKeepAlive(): void {
+  if (keepAliveTimer !== null) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
 export function connect(url: string, cb: WsCallbacks): void {
   if (
     socket?.readyState === WebSocket.OPEN ||
@@ -35,39 +63,48 @@ function _open(): void {
 
   ws.onopen = () => {
     if (epoch !== myEpoch) return;
+    startKeepAlive();
     cb.onConnect();
   };
 
   ws.onclose = () => {
     if (epoch !== myEpoch) return;
+    stopKeepAlive();
     socket = null;
     cb.onDisconnect();
   };
 
   ws.onerror = () => {
     if (epoch !== myEpoch) return;
+    stopKeepAlive();
     socket = null;
     cb.onDisconnect();
   };
 
   ws.onmessage = (ev: MessageEvent<string>) => {
     if (epoch !== myEpoch) return;
+    touch();
+    let msg: S2C;
     try {
-      cb.onMessage(JSON.parse(ev.data) as S2C);
+      msg = JSON.parse(ev.data) as S2C;
     } catch {
-      // ignore malformed frames
+      return; // ignore malformed frames
     }
+    if (msg.t === "keepalive") return; // relayed liveness ping; already counted as activity
+    cb.onMessage(msg);
   };
 }
 
 export function send(msg: C2S): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(msg));
+    touch();
   }
 }
 
 export function disconnect(): void {
   epoch++; // invalidate all in-flight socket events
+  stopKeepAlive();
   _cb = null;
   socket?.close();
   socket = null;

@@ -407,6 +407,16 @@ Sends a chat message to all players in the room. The server trims `text` to 200 
 
 ---
 
+### `keepalive` — Idle keep-alive
+
+```json
+{ "t": "keepalive" }
+```
+
+Liveness ping. Cloudflare drops WebSocket connections that go idle, so the client sends this when nothing has been sent or received for ~30 seconds. The server relays it to the **other** players in the room (not the sender) as a [`keepalive`](#keepalive--relayed-keep-alive) message, keeping their sockets warm too. No effect on game state. Silently ignored if the socket is not in a room.
+
+---
+
 ### `knock` — Gin knock or go gin
 
 ```json
@@ -626,6 +636,16 @@ Global error codes (not tied to a specific action):
 ```
 
 Broadcast to all players in the room when any player sends a chat. `from` is the sender's display name.
+
+---
+
+### `keepalive` — Relayed keep-alive
+
+```json
+{ "t": "keepalive", "from": "playerId" }
+```
+
+Relayed to the other players in a room when one player sends a [`keepalive`](#keepalive--idle-keep-alive). `from` is the originating player's ID. Receiving any frame (including this one) counts as activity and resets the recipient's idle timer; the client otherwise ignores it.
 
 ---
 
