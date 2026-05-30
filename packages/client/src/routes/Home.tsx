@@ -166,7 +166,7 @@ export default function Home() {
         {mode === "create" && (
           <form onSubmit={handleCreate}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-              Variant
+              Game variation
             </label>
             <select
               value={variant}

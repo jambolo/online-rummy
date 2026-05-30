@@ -99,13 +99,13 @@ The state visible to all players.
 
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
 
-`discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rum uses this for the pile-dive picker and other variants may ignore it.
+`discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rum uses this for the pile-dive picker and other game variations may ignore it.
 
 `mustMeldCardId` is set in 500 Rum when the current turn player drew via pile dive and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
 
 `ginKnockerId` is set in Gin after a knock (during `layoff` phase and through scoring). Identifies the knocker so the client can distinguish knocker from defender. Always `null` in `basic` and `rum500`.
 
-**Phase values are per-variant subsets:**
+**Phase values are per-game-variation subsets:**
 
 - `basic` / `rum500`: `draw → meld → ended` (with `discard` reserved for the "max one meld per turn" house rule, currently unused).
 - `gin`: `firstUpcardOffer → draw → discard → layoff? → ended`. No `meld` phase — Gin reveals melds only at knock time.
@@ -165,7 +165,7 @@ Creates a new room and places the sender in it as the host. `name` is the player
 | `ERR_ALREADY_IN_ROOM` | This socket is already associated with a room |
 | `ERR_ROOM_NOT_FOUND` | No room exists with that code |
 | `ERR_GAME_IN_PROGRESS` | Room is not in lobby state (normal join); or room is not in lobby state (reconnect) |
-| `ERR_ROOM_FULL` | Room has reached the variant's maximum player count |
+| `ERR_ROOM_FULL` | Room has reached the game variation's maximum player count |
 | `ERR_INVALID_NAME` | `name` is empty after trimming (normal join only) |
 | `ERR_INVALID_SESSION` | `sessionId` failed signature verification |
 | `ERR_SESSION_NOT_FOUND` | `sessionId` is valid but the player or room is not found |
@@ -182,15 +182,15 @@ Only the host may send this. The room must be in `lobby` or `ended` state.
 
 **First start (`lobby` state):** creates a fresh game. First player is chosen randomly.
 
-**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. First-player rotation depends on variant:
+**Re-deal (`ended` state):** deals a new hand while preserving cumulative scores. Players who disconnected during the previous hand are removed. First-player rotation depends on game variation:
 
 - `basic` / `rum500`: rotates one seat clockwise from the previous hand's first player.
 - `gin` (normal end): winner deals next hand → **loser** plays first (rules.md A.2.2).
 - `gin` (cancelled hand from stock-depletion): same dealer re-deals → **same first player** (rules.md A.2.3).
 
-Player count requirements by variant:
+Player count requirements by game variation:
 
-| Variant | Minimum | Maximum |
+| Game variation | Minimum | Maximum |
 | --- | --- | --- |
 | `basic` | 2 | 7 |
 | `gin` | 2 | 2 |
@@ -208,7 +208,7 @@ Player count requirements by variant:
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
 | `ERR_WRONG_STATE` | Room is not in `lobby` or `ended` state (e.g. game is currently in progress) |
 | `ERR_NOT_HOST` | Sender is not the host |
-| `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the variant's minimum number of players (checked after removing disconnected players on re-deal) |
+| `ERR_NOT_ENOUGH_PLAYERS` | Fewer than the game variation's minimum number of players (checked after removing disconnected players on re-deal) |
 
 ---
 
@@ -222,7 +222,7 @@ Draws the top card from either the stock pile or the discard pile. Valid only on
 
 After a successful draw, `phase` advances to `"meld"`.
 
-**Variant rules:**
+**Game-variation rules:**
 
 - **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn.
 - **500 Rum:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
@@ -267,7 +267,7 @@ After any successful `drawFromPile`, `phase` advances to `"meld"`.
 | --- | --- |
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
 | `ERR_WRONG_STATE` | Game is not in progress |
-| `ERR_NOT_IMPLEMENTED` | Variant is not `rum500` |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `rum500` |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
 | `ERR_CARD_NOT_IN_PILE:<id>` | The specified card is not in the discard pile |
@@ -285,7 +285,7 @@ Places a new meld on the table using cards from your hand. Valid only on your tu
 
 A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive cards of the same suit. Minimum 3 cards in either case.
 
-Variant differences:
+Game-variation differences:
 
 - **Basic:** ace is low only; round-the-corner is disabled. Multiple melds per turn are allowed (the "maximum one meld per turn" rule is a host-configurable house rule, currently off). The phase stays at `"meld"` after a meld so the player can meld further before discarding.
 - **500 Rum:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
@@ -303,7 +303,7 @@ If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that fiel
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_NOT_SUPPORTED` | Variant is `gin` (melds declared at knock time) |
+| `ERR_NOT_SUPPORTED` | Game variation is `gin` (melds declared at knock time) |
 | `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn (only emitted when the host-configurable "maximum one meld per turn" rule is enabled; currently off in v1) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
@@ -319,7 +319,7 @@ If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that fiel
 
 Adds one card from your hand onto any meld already on the table (your own or another player's). Valid only on your turn when `phase` is `"meld"` or `"discard"`.
 
-Variant differences:
+Game-variation differences:
 
 - **Basic:** layoff is unrestricted. The "layoff requires prior meld" rule (rules.md A.1.6 step 3) is documented as a future host-configurable house rule; not currently scaffolded.
 - **500 Rum:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
@@ -337,7 +337,7 @@ The card must extend the target meld while keeping it valid. Multiple layoffs ar
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_NOT_SUPPORTED` | Variant is `gin` (use `ginLayoff` during `layoff` phase) |
+| `ERR_NOT_SUPPORTED` | Game variation is `gin` (use `ginLayoff` during `layoff` phase) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 | `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
@@ -382,7 +382,7 @@ If discarding empties your hand (basic / 500 Rum), the hand ends immediately.
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from the discard pile this turn (both basic and 500 Rum — applies to top-card draws in both variants) |
+| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from the discard pile this turn (both basic and 500 Rum — applies to top-card draws in both game variations) |
 | `ERR_MUST_USE_PILE_CARD` | Pile-dive obligation unmet: the selected card has not yet been melded or laid off (500 Rum true pile dives only) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
@@ -463,7 +463,7 @@ Else **regular knock**: `phase` advances to `"layoff"`; `turnPlayerId` switches 
 | --- | --- |
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
 | `ERR_WRONG_STATE` | Game is not in progress |
-| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `gin` |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"discard"` |
 | `ERR_KNOCK_REQUIRES_DISCARD` | `discardId` is missing |
@@ -503,7 +503,7 @@ Once processed, the server runs hand-end scoring. Defender's deadwood (post-layo
 | --- | --- |
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
 | `ERR_WRONG_STATE` | Game is not in progress |
-| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `gin` |
 | `ERR_NOT_YOUR_TURN` | Defender is not this player |
 | `ERR_WRONG_PHASE` | Current phase is not `"layoff"` |
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the defender's hand |
@@ -533,7 +533,7 @@ Gin only. Valid only during `phase = "firstUpcardOffer"` (rules.md A.2.2). The n
 | --- | --- |
 | `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
 | `ERR_WRONG_STATE` | Game is not in progress |
-| `ERR_NOT_IMPLEMENTED` | Variant is not `gin` |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `gin` |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"firstUpcardOffer"` |
 
@@ -610,7 +610,7 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 {
   "finalHands":   { "<playerId>": [Card, ...] },           // unmelded cards remaining
   "meldCredits":  { "<playerId>": [{ "card": Card, "pts": number }, ...] },  // cards placed by this player + per-card pts
-  "handDeadwood": { "<playerId>": number },                // sum of unmelded card values (variant-correct ace value)
+  "handDeadwood": { "<playerId>": number },                // sum of unmelded card values (game-variation-correct ace value)
   "ginInfo": {                                             // gin only
     "knockerId": "string",
     "knockerDeadwood": number,
@@ -763,7 +763,7 @@ Mid-game reconnect is not currently supported. If the game has already started w
 
 ### Phase Sequence
 
-`PublicState.phase` reflects the current phase. Variants differ:
+`PublicState.phase` reflects the current phase. Game variations differ:
 
 **Basic / 500 Rum:**
 

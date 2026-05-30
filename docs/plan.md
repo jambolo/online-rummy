@@ -6,7 +6,7 @@ Compressed reference. Reload before resuming work.
 
 | Area | Choice |
 | --- | --- |
-| Variants v1 | Basic Rummy, Gin Rummy, 500 Rum |
+| Game variations v1 | Basic Rummy, Gin Rummy, 500 Rum |
 | Scale | Hobby <50 concurrent |
 | Auth | Guest nickname + 5-letter room code, signed cookie session id |
 | Transport | WebSocket, JSON, native `ws` lib (not socket.io) |
@@ -23,7 +23,7 @@ Compressed reference. Reload before resuming work.
 | Forfeit disposition | Hand + melds out of play (NOT returned to stock). Stock + discard pile untouched |
 | Spectators | None v1 |
 | Devices | Desktop + mobile web responsive |
-| House rules | Fixed canonical per variant (rules.md primaries). See "House rule picks" below |
+| House rules | Fixed canonical per game variation (rules.md primaries). See "House rule picks" below |
 | Chat | Text in-room |
 | TS config | `strict: true`, ESLint + Prettier defaults, no `any` without comment |
 
@@ -133,7 +133,7 @@ type S2C =
 
 Server validates every action. Pessimistic UI v1 (wait for server `state` before showing change). Server broadcasts new `PublicState` to all + `PrivateState` to acting player on success.
 
-## Variant strategy interface
+## Game-variation strategy interface
 
 Canonical definition lives in `packages/server/src/engine/types.ts` (`VariantEngine`). Skeleton:
 
@@ -154,14 +154,14 @@ interface VariantEngine {
 }
 ```
 
-Engine action handlers (`applyDraw`/`applyMeld`/`applyLayoff`/`applyDiscard` + variant-specific
+Engine action handlers (`applyDraw`/`applyMeld`/`applyLayoff`/`applyDiscard` + game-variation-specific
 `applyDrawFromPile`/`applyKnock`/`applyGinLayoff`/`applyPassUpcard`) are currently free function
-exports from each variant module — refactor in `docs/refactor-plan.md` Phase 3 promotes them onto
+exports from each game-variation module — refactor in `docs/refactor-plan.md` Phase 3 promotes them onto
 the interface.
 
-## Rule mapping (rules.md → variant impl)
+## Rule mapping (rules.md → game-variation impl)
 
-| Variant | rules.md sec | Key constraints |
+| Game variation | rules.md sec | Key constraints |
 | --- | --- | --- |
 | Basic | A.1 | 2-7P (1 deck for 2-6P, 2 decks combined for 7P), deals {2:10,3:7,4:7,5:6,6:6,7:10}, ace low only, draw stock\|top-discard, multiple melds per turn allowed, drew-discard cannot re-discard same turn, layoff unrestricted (no prior-meld requirement), going-rummy = score×2 |
 | Gin | A.2 | 2P, 10 cards, ace low; first-upcard offered non-dealer→dealer→stock (A.2.2); no mid-turn melding (melds revealed only at knock/gin); knock at deadwood ≤10; gin = +20 + opp deadwood (no layoff vs gin); non-gin knock = opp lays off onto knocker's melds, knocker scores `opp_dw − knocker_dw`; undercut (opp_dw ≤ knocker_dw after layoff) = opp +10 + diff; stock-depletion (stock ≤ 2 after a no-knock discard) = hand cancelled, same dealer re-deals (A.2.3); box +20 per hand won, game ≥100, shutout +100 (`[BIC-G]`); winner deals next hand (A.2.2) |
@@ -188,7 +188,7 @@ Rules.md lists multiple options per house rule. Defaults for v1:
 
 ### Gin Rummy
 
-Canonical rules only. No house-rule variants are in scope.
+Canonical rules only. No house rules are in scope.
 
 | Rule | Pick | Source |
 | --- | --- | --- |
@@ -215,7 +215,7 @@ Canonical rules only. No house-rule variants are in scope.
 
 | Rule | Pick |
 | --- | --- |
-| Deal | 2P=13, 3+P=7 (`[BIC-5]`, NOT 10 `[PR]` variant) |
+| Deal | 2P=13, 3+P=7 (`[BIC-5]`, NOT 10 `[PR]` house rule) |
 | Deck | 1×52 ≤4P, 2×52 ≥5P, no jokers v1 |
 | Jokers *(HR)* | OFF v1 (defer `[PG-5]`) |
 | Ace direction | Per-meld, inferred from neighbours (A-2-3 → low, Q-K-A → high) |
@@ -350,7 +350,7 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 ## Test strategy
 
 - Vitest. `packages/shared` + `packages/server/engine` heavy coverage.
-- Variant golden tests: scripted hand sequences → assert final scores match hand-computed rules.md examples.
+- Game-variation golden tests: scripted hand sequences → assert final scores match hand-computed rules.md examples.
 - `scripted-player` helper: feed canned C2S sequence into in-process server, snapshot S2C output. Build in M1.
 - Playwright smoke for client: create → join 2nd browser → play 1 hand.
 
@@ -363,8 +363,8 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 | M3 | Wire engine to WS; play basic rummy hand 2 browsers | 3-5d |
 | M4 | Client polish: hand fan, drag-drop, discard, meld zone, chat | 4-6d |
 | M4.5 | Re-deal (multi-hand game); How to Play modal for Basic Rummy | 1-2d |
-| M5 | 500 Rum variant (pile dive UX); How to Play modal for 500 Rum | 3-4d |
-| M6 | Gin variant; How to Play modal for Gin | 2-3d |
+| M5 | 500 Rum game variation (pile dive UX); How to Play modal for 500 Rum | 3-4d |
+| M6 | Gin game variation; How to Play modal for Gin | 2-3d |
 | M7 | Deploy: Cloudflare Tunnel + manual local host (no structured logs, no metrics) | <1d |
 | M8 | PixiJS card layer | 1-2w |
 
@@ -377,17 +377,17 @@ v1 = M1-M7. M8 after.
 
 ## How to Play implementation notes
 
-- **Component:** `src/components/HowToPlayModal.tsx` — takes `variant: Variant` prop, renders variant-specific sections. One modal component; content is data-driven per variant.
+- **Component:** `src/components/HowToPlayModal.tsx` — takes `variant: Variant` prop, renders game-variation-specific sections. One modal component; content is data-driven per game variation.
 - **Trigger:** "How to Play" button in `Room.tsx` header, visible in both lobby and game phases. Button always shows regardless of turn or phase.
-- **Content shape per variant:**
+- **Content shape per game variation:**
   - Objective — win condition (go out / knock / reach score target)
-  - Turn flow — draw → meld/layoff (optional) → discard; note variant deviations
+  - Turn flow — draw → meld/layoff (optional) → discard; note game-variation deviations
   - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rum: pile dive
   - Scoring — point values per card, how hand score is computed, game target
   - Active house rules — list only the locked picks from plan.md (e.g. ace low, layoff unrestricted, going-rummy ×2)
 - **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rum) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
 - **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
-- **No protocol change needed** — variant is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
+- **No protocol change needed** — the game variation is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
 
 ## M3 implementation notes
 
@@ -456,7 +456,7 @@ v1 = M1-M7. M8 after.
 - [x] M4 complete
 - [x] M4.5 complete
 - [x] M5 complete
-- [x] M6 complete — Gin variant: engine, WS wiring, client UI, 62 engine tests, How-to-Play content
+- [x] M6 complete — Gin game variation: engine, WS wiring, client UI, 62 engine tests, How-to-Play content
 - [x] M7 complete — Deploy: server serves client bundle; single Cloudflare Tunnel + manual local host (`scripts/launch-in-tmux-window.sh`). No structured logs, no metrics
 - [ ] M8 not started — PixiJS card layer
 

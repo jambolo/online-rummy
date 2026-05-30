@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Terminology (strict)
+
+Use this vocabulary in **all documentation and user-facing UI strings**:
+
+- **Game variation** — a distinct game in the suite (Classic Rummy, Gin Rummy, 500 Rum, Knock Rummy, …). Never call one a "variant".
+- **House rule** — a configurable rule option within a game variation (e.g. "Maximum one meld per turn", "Layoff requires prior meld", "Going Rummy bonus"). Never call one a "variant".
+
+This convention governs prose and UI copy only. **Code identifiers keep their existing names** — `Variant` type, `variant` field, `VariantEngine`, `variantPublic`, `variantFns`, `variantLimits`, etc. — do not rename them. When prose names such an identifier, keep the identifier's spelling; describe the concept around it as a "game variation".
+
 ## Commands
 
 ```sh
@@ -63,16 +72,16 @@ Node.js 22 + native `ws`. No ORM, no DB — all state in memory.
 | `engine/variants/basic.ts` | `basicVariant: VariantEngine`, `createBasicGame`, `applyDraw`, `applyMeld`, `applyLayoff`, `applyDiscard` |
 | `engine/variants/rum500.ts` | `rum500Variant: VariantEngine`, `createRum500Game`, `applyDraw`, `applyDrawFromPile`, `applyMeld`, `applyLayoff`, `applyDiscard` |
 | `engine/variants/gin.ts` | `ginVariant: VariantEngine`, `createGinGame`, `applyDraw`, `applyPassUpcard`, `applyDiscard`, `applyKnock(state, pid, melds?, discardId)`, `applyGinLayoff(state, pid, layoffs, ownMelds?)`, `ginDeadwood`. `applyMeld`/`applyLayoff` throw `ERR_NOT_SUPPORTED` (Gin declares melds at knock time only). |
-| `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences; dispatches per-variant via `state.variant` |
+| `engine/scripted-player.ts` | `runScript(state, C2S[])` — replay canned action sequences; dispatches per game variation via `state.variant` |
 | `rng.ts` | `RNG` type alias; wraps `node:crypto` `randomInt` |
 | `session.ts` | `makeSessionId`, `signSessionId`, `verifySessionId` — HMAC-SHA256 session tokens |
 | `room.ts` | `Room`/`Player` types (Room carries `gameState: GameState \| null`), Crockford base32 room codes, in-memory registry, `variantLimits` |
-| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`keepalive`/`leave`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/`knock`/`ginLayoff`/`passUpcard`/disconnect handlers. `variantFns(v)` routes engine calls per variant. `handleHandCancelled` handles Gin stock-depletion (no scoring, same dealer re-deals). `keepalive` is relayed to the **other** room players (sender excluded) so their sockets stay warm. `leave` cancels the game: broadcasts `playerLeft`, detaches every player's socket context, clears timers, and deletes the room. |
+| `ws.ts` | `initWS(server, secret, origins)` — WS server, origin allowlist, per-IP cap (10), per-socket rate limit (20/s), `create`/`join`/`start`/`chat`/`keepalive`/`leave`/`draw`/`drawFromPile`/`meld`/`layoff`/`discard`/`knock`/`ginLayoff`/`passUpcard`/disconnect handlers. `variantFns(v)` routes engine calls per game variation. `handleHandCancelled` handles Gin stock-depletion (no scoring, same dealer re-deals). `keepalive` is relayed to the **other** room players (sender excluded) so their sockets stay warm. `leave` cancels the game: broadcasts `playerLeft`, detaches every player's socket context, clears timers, and deletes the room. |
 | `index.ts` | HTTP server, `SESSION_SECRET`/`ALLOWED_ORIGINS`/`PORT` env validation, startup |
 
 **`GameState` is mutated in place** by all `apply*` functions. Clone before passing to `runScript` if you need snapshot comparison.
 
-The `VariantEngine` interface is the extension point for Gin and 500 Rum. Each variant owns `deal`, `validateMeld`, `canDrawFromDiscard`, `onDrawFromDiscard`, `canDiscard`, `scoreHand`, `isGameOver`.
+The `VariantEngine` interface is the extension point for Gin and 500 Rum. Each game variation owns `deal`, `validateMeld`, `canDrawFromDiscard`, `onDrawFromDiscard`, `canDiscard`, `scoreHand`, `isGameOver`.
 
 `vitest.config.ts` aliases `@online-rummy/shared` → `../shared/src/index.ts` so tests run without building shared first.
 
@@ -97,7 +106,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 | `src/components/MeldZone.tsx` | All players' melds. Uses `meld.cards[]` from public state. Layoff button shown when allowed: basic requires own meld, 500 Rum does not. During Gin `layoff` phase: staged `ginDefenderMelds` render as dashed-border pending piles; staged `ginLayoffs` render as semi-transparent cards appended to their target knocker meld. |
 | `src/components/ActionBar.tsx` | Phase-aware action buttons. 500 Rum: multiple melds per turn; discard disabled when `mustMeldCardId` is set. Gin: `firstUpcardOffer` take/pass, knock meld-group builder (chips with × per group, live deadwood indicator, knock button when deadwood ≤ 10), defender layoff-phase UI (own-meld chips with ×, staged layoff chips with ×, submit sends one `ginLayoff` message). |
 | `src/components/Chat.tsx` | Chat message list + send form. |
-| `src/components/HowToPlayModal.tsx` | Variant-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. All three variants have full content. |
+| `src/components/HowToPlayModal.tsx` | Game-variation-keyed modal. Renders `src/content/howToPlay/{basic,gin,rum500}.tsx`. All three game variations have full content. |
 | `src/content/howToPlay/basic.tsx` | Static Basic Rummy rules fragment — objective, turn flow, melds, scoring, locked house rules. |
 | `src/content/howToPlay/rum500.tsx` | Static 500 Rum rules fragment — pile dive, ace-either-end, multi-meld turns, layoff credit. |
 | `src/content/howToPlay/gin.tsx` | Static Gin Rummy rules fragment — upcard offer, knock/gin/undercut scoring, layoff after knock, stock-depletion cancel, locked house rules. |
@@ -110,7 +119,7 @@ React 19 + Vite + Zustand 5 + dnd-kit. Entry: `src/main.tsx` → `src/App.tsx`.
 
 | File | Purpose |
 | --- | --- |
-| `docs/rules.md` | Canonical game rules for all variants, with section IDs used in code comments |
+| `docs/rules.md` | Canonical game rules for all game variations, with section IDs used in code comments |
 | `docs/plan.md` | Architecture decisions, house rule picks, milestone scope, open items |
 | `docs/client-server-protocol.md` | Complete WS protocol reference for client developers — all C2S/S2C messages, error codes, session management, turn flow examples |
 | `docs/branding.md` | Brand guidelines — colors, typography, logo usage |
@@ -149,12 +158,12 @@ Favicon files are copied verbatim to `packages/client/public/` and linked in `pa
 
 | # | Status | Scope |
 | --- | --- | --- |
-| M1 | Done | shared types, engine (deck/meld/basic variant), scripted-player, tests |
+| M1 | Done | shared types, engine (deck/meld/basic game variation), scripted-player, tests |
 | M2 | Done | WS server, room create/join, lobby, in-memory registry |
 | M3 | Done | Wire engine to WS; 2-browser basic rummy |
 | M4 | Done | React client: hand fan, drag-drop, discard, meld zone, chat, score overlay |
 | M4.5 | Done | Re-deal, first-player rotation, How to Play modal (Basic), bug fixes |
-| M5 | Done | 500 Rum variant — pile-dive UX, ace-either-end melds, multi-meld turns, layoff credit, How to Play |
-| M6 | Done | Gin variant |
+| M5 | Done | 500 Rum game variation — pile-dive UX, ace-either-end melds, multi-meld turns, layoff credit, How to Play |
+| M6 | Done | Gin game variation |
 | M7 | Done | Deploy via Cloudflare Tunnel + manual local host (no structured logs, no metrics) |
 | M8 | Not started | PixiJS card layer |
