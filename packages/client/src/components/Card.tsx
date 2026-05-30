@@ -33,7 +33,7 @@ export default function CardComponent({
 
   const cornerStyle: React.CSSProperties = compact
     ? { fontWeight: "bold", lineHeight: 1 }          // inherits fontSize from outer (set by caller)
-    : { fontSize: 13, fontWeight: "bold", lineHeight: 1 }; // hardcoded for full-size
+    : { fontSize: 16, fontWeight: "bold", lineHeight: 1 }; // hardcoded for full-size
 
   return (
     <div
@@ -65,13 +65,12 @@ export default function CardComponent({
     >
       {/* Top-left corner */}
       <div style={cornerStyle}>
-        <div>{card.rank}</div>
-        <div>{sym}</div>
+        {card.rank}{sym}
       </div>
 
       {/* Center suit — full-size only */}
       {!compact && (
-        <div style={{ fontSize: 22, textAlign: "center", lineHeight: 1 }}>
+        <div style={{ fontSize: 30, textAlign: "center", lineHeight: 1 }}>
           {sym}
         </div>
       )}
@@ -85,8 +84,7 @@ export default function CardComponent({
             alignSelf: "flex-end",
           }}
         >
-          <div>{card.rank}</div>
-          <div>{sym}</div>
+          {card.rank}{sym}
         </div>
       )}
     </div>

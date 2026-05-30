@@ -108,7 +108,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
               key={id}
               card={card}
               compact
-              style={{ width: 40, height: 56, fontSize: 11 }}
+              style={{ width: 40, height: 56, fontSize: 14 }}
             />
           ) : (
             <div
