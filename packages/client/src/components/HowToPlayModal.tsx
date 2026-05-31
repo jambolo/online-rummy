@@ -2,6 +2,7 @@ import type { Variant } from "@online-rummy/shared";
 import BasicRules from "../content/howToPlay/basic";
 import Rum500Rules from "../content/howToPlay/rum500";
 import GinRules from "../content/howToPlay/gin";
+import Modal from "./Modal";
 import { t } from "../theme/tokens";
 
 interface Props {
@@ -17,62 +18,48 @@ const TITLES: Record<Variant, string> = {
 
 export default function HowToPlayModal({ variant, onClose }: Props) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: t.scrim,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: t.zModal,
+    <Modal
+      titleId="how-to-play-title"
+      onClose={onClose}
+      panelStyle={{
+        background: t.surfaceModalNavy,
+        padding: 28,
+        width: 480,
+        maxWidth: "calc(100vw - 32px)",
+        maxHeight: "80vh",
+        overflowY: "auto",
+        color: t.text100,
       }}
-      onClick={onClose}
     >
       <div
         style={{
-          background: t.surfaceModalNavy,
-          border: `2px solid ${t.borderModal}`,
-          borderRadius: t.radiusCard,
-          padding: 28,
-          width: 480,
-          maxWidth: "calc(100vw - 32px)",
-          maxHeight: "80vh",
-          overflowY: "auto",
-          color: t.text100,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 20,
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        <div
+        <h2 id="how-to-play-title" style={{ fontSize: 18, margin: 0 }}>
+          How to Play — {TITLES[variant]}
+        </h2>
+        <button
+          onClick={onClose}
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 20,
+            background: "transparent",
+            fontSize: 22,
+            padding: "0 6px",
+            lineHeight: 1,
+            color: t.text60,
+            cursor: "pointer",
           }}
         >
-          <h2 style={{ fontSize: 18, margin: 0 }}>
-            How to Play — {TITLES[variant]}
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: "transparent",
-              fontSize: 22,
-              padding: "0 6px",
-              lineHeight: 1,
-              color: t.text60,
-              cursor: "pointer",
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        {variant === "basic" && <BasicRules />}
-        {variant === "rum500" && <Rum500Rules />}
-        {variant === "gin" && <GinRules />}
+          ×
+        </button>
       </div>
-    </div>
+
+      {variant === "basic" && <BasicRules />}
+      {variant === "rum500" && <Rum500Rules />}
+      {variant === "gin" && <GinRules />}
+    </Modal>
   );
 }

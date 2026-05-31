@@ -356,7 +356,7 @@ export default function ActionBar() {
         <>
           {mustMeldBlock && (
             <span style={{ fontSize: 12, color: t.accentAttention, fontWeight: "bold" }}>
-              Must meld or lay off your dived card before discarding.
+              ▲ Must meld or lay off your dived card before discarding.
             </span>
           )}
 

@@ -1,6 +1,6 @@
 # Rum Runner — User-Interface Design Document (UIDD)
 
-> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.4.0 (M1–M7 complete; M8 PixiJS layer pending).
+> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.4.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress (2026-05-30):** NS-1 (design-token layer) and NS-6 (accessibility & motion baseline) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. NS-2/3/4/5/7/8 not yet started; "current reality" notes below for those items remain accurate.
 >
 > **Audience:** Human developers extending the client, and future LLM sessions implementing or refactoring the UI.
 >

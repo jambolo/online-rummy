@@ -6,6 +6,8 @@
 >
 > **Authoritative sources (read before editing):** [docs/ux-design.md](ux-design.md) (the UIDD — binding §4 guardrails), [docs/branding.md](branding.md) (NS-2 visual direction), [docs/plan.md](plan.md) (house-rule picks, architecture), [docs/rules.md](rules.md) (rule citations). When this plan and the UIDD disagree, the UIDD wins; update both in the same change (UIDD rule [E8]).
 
+**Progress (as of 2026-05-30):** Phase A (NS-1 tokens) and Phase B (NS-6 a11y) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3 landed (commits 5073f18, 9d8a5de). All other phases (NS-7, NS-2, NS-4, NS-8, NS-5, NS-3, smaller gaps) not started. See §4 master checklist.
+
 ---
 
 ## 0. How to use this document
@@ -675,12 +677,12 @@ Fold where noted; the rest are small standalone tasks.
 
 ```text
 Phase A — NS-1 tokens
-  [ ] T-NS1-1 declare tokens (zero visual change)
-  [ ] T-NS1-2 migrate components to tokens
+  [x] T-NS1-1 declare tokens (zero visual change)         (commit 5073f18; issues #1,#2,#3)
+  [x] T-NS1-2 migrate components to tokens                (commit 5073f18; issues #1,#2)
 Phase B — NS-6 a11y
-  [ ] T-NS6-1 modal primitive (focus trap, role, Esc)
-  [ ] T-NS6-2 non-color cues
-  [ ] T-NS6-3 reduced-motion + keyboard reorder
+  [x] T-NS6-1 modal primitive (focus trap, role, Esc)     (commit 9d8a5de; issue #20)
+  [x] T-NS6-2 non-color cues                              (commit 9d8a5de; issue #21)
+  [x] T-NS6-3 reduced-motion + keyboard reorder           (commit 9d8a5de; issues #22,#23)
 Phase C — NS-4 responsive
   [ ] T-NS4-1 breakpoint helper + Room reflow
   [ ] T-NS4-2 chat drawer + ActionBar fit

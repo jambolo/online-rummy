@@ -2,6 +2,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -11,10 +12,12 @@ import {
   useSortable,
   horizontalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import type { Card } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
+import { useReducedMotion } from "../theme/useReducedMotion";
 import { t, sectionLabel } from "../theme/tokens";
 
 interface SortableCardProps {
@@ -25,6 +28,7 @@ interface SortableCardProps {
 
 function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
   const toggle = useAppStore((s) => s.toggleSelect);
+  const reducedMotion = useReducedMotion();
   const {
     attributes,
     listeners,
@@ -43,7 +47,7 @@ function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
       ref={setNodeRef}
       style={{
         transform: transformCss,
-        transition,
+        transition: reducedMotion ? undefined : transition,
         opacity: isDragging ? 0.4 : 1,
         zIndex: isDragging ? t.zCardDrag : undefined,
       }}
@@ -80,7 +84,8 @@ export default function Hand() {
       : null;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   if (!privateState) return null;

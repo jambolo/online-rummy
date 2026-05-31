@@ -9,6 +9,7 @@ import MeldZone from "../components/MeldZone";
 import ActionBar from "../components/ActionBar";
 import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
+import Modal from "../components/Modal";
 import { t } from "../theme/tokens";
 
 // Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
@@ -26,60 +27,48 @@ function ConfirmModal({
   onCancel: () => void;
 }) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: t.scrim,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: t.zModal,
+    <Modal
+      ariaLabel={message}
+      onClose={onCancel}
+      panelStyle={{
+        background: t.surfaceModalGreen,
+        padding: 28,
+        width: 320,
+        textAlign: "center",
       }}
     >
-      <div
-        style={{
-          background: t.surfaceModalGreen,
-          border: `2px solid ${t.borderModal}`,
-          borderRadius: t.radiusCard,
-          padding: 28,
-          width: 320,
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontSize: 14, marginBottom: 20 }}>{message}</div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            onClick={onCancel}
-            style={{
-              flex: 1,
-              background: "rgba(255,255,255,0.1)", // NS-1 one-off: cancel button bg
-              border: `1px solid ${t.borderModal}`,
-              color: t.text100,
-              padding: "8px 0",
-              borderRadius: t.radiusControl,
-              cursor: "pointer",
-            }}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            style={{
-              flex: 1,
-              background: "rgba(174,42,26,0.85)", // NS-1 one-off: btn-danger at 85%
-              border: "1px solid rgba(174,42,26,1)", // NS-1 one-off: btn-danger solid
-              color: t.text100,
-              padding: "8px 0",
-              borderRadius: t.radiusControl,
-              cursor: "pointer",
-            }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
+      <div style={{ fontSize: 14, marginBottom: 20 }}>{message}</div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button
+          onClick={onCancel}
+          style={{
+            flex: 1,
+            background: "rgba(255,255,255,0.1)", // NS-1 one-off: cancel button bg
+            border: `1px solid ${t.borderModal}`,
+            color: t.text100,
+            padding: "8px 0",
+            borderRadius: t.radiusControl,
+            cursor: "pointer",
+          }}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          onClick={onConfirm}
+          style={{
+            flex: 1,
+            background: "rgba(174,42,26,0.85)", // NS-1 one-off: btn-danger at 85%
+            border: "1px solid rgba(174,42,26,1)", // NS-1 one-off: btn-danger solid
+            color: t.text100,
+            padding: "8px 0",
+            borderRadius: t.radiusControl,
+            cursor: "pointer",
+          }}
+        >
+          {confirmLabel}
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -166,6 +155,10 @@ function OpponentStrip() {
           <span style={{ fontWeight: "bold", fontSize: 14 }}>{p.name}</span>
           {p.id === myPlayerId && (
             <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>
+          )}
+          {/* Non-color turn cue [V7]: ▶ marker beside the green outline. */}
+          {publicState.turnPlayerId === p.id && (
+            <span style={{ fontSize: 11, color: t.accentPositive }}>▶ turn</span>
           )}
           <span style={{ fontSize: 12, color: t.text60 }}>
             {p.handCount} cards
@@ -338,267 +331,42 @@ function ScoreOverlay() {
   // rules.md A.2.3 stock-depletion cancel: no scoring; show simple banner + Re-deal.
   if (handCancelled) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: t.scrim,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: t.zScoreOverlay,
-        }}
-      >
-        <div
-          style={{
-            background: t.surfaceModalGreen,
-            border: `2px solid ${t.borderModal}`,
-            borderRadius: t.radiusCard,
-            padding: 32,
-            width: 340,
-            textAlign: "center",
-          }}
-        >
-          <h2 style={{ marginBottom: 8 }}>Hand Cancelled</h2>
-          <div style={{ fontSize: 13, color: t.text70, marginBottom: 20 }}>
-            Stock ran low before anyone knocked. No score this hand — same dealer re-deals.
-          </div>
-          {sorted.map((p) => (
-            <div
-              key={p.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "6px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
-                fontSize: 13,
-              }}
-            >
-              <span>{p.name}{p.id === myPlayerId ? " (you)" : ""}</span>
-              <span>{p.score} pts</span>
-            </div>
-          ))}
-          {isHost ? (
-            <button
-              className="primary"
-              onClick={() => send({ t: "start" })}
-              style={{ width: "100%", marginTop: 20 }}
-            >
-              Re-deal
-            </button>
-          ) : (
-            <div
-              style={{
-                textAlign: "center",
-                marginTop: 20,
-                color: t.text50,
-                fontSize: 13,
-              }}
-            >
-              Waiting for host…
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-            <LeaveButton />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: t.scrim,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: t.zScoreOverlay,
-      }}
-    >
-      <div
-        style={{
+      <Modal
+        titleId="score-overlay-title"
+        z={t.zScoreOverlay}
+        panelStyle={{
           background: t.surfaceModalGreen,
-          border: `2px solid ${t.borderModal}`,
-          borderRadius: t.radiusCard,
           padding: 32,
           width: 340,
+          textAlign: "center",
         }}
       >
-        <h2 style={{ textAlign: "center", marginBottom: 4 }}>
-          {isGameOver ? "Game Over!" : "Hand Over"}
-        </h2>
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 12,
-            color: t.text50,
-            marginBottom: 20,
-          }}
-        >
-          {isGameOver
-            ? `A player reached ${gameTarget} pts`
-            : `Game target: ${gameTarget} pts`}
+        <h2 id="score-overlay-title" style={{ marginBottom: 8 }}>Hand Cancelled</h2>
+        <div style={{ fontSize: 13, color: t.text70, marginBottom: 20 }}>
+          Stock ran low before anyone knocked. No score this hand — same dealer re-deals.
         </div>
-
-        {sorted.map((p, i) => {
-          const prev = prevScores[p.id] ?? 0;
-          const delta = p.score - prev;
-          const isWinner = i === 0;
-          const playerCards = sortCardsDesc(finalHands[p.id] ?? [], cardPts);
-          const playerCardPts = handDeadwood[p.id] ?? handPts(playerCards, cardPts);
-
-          return (
-            <div
-              key={p.id}
-              style={{
-                padding: "10px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
-              }}
-            >
-              {/* Name + scores row */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  fontSize: isWinner ? 15 : 13,
-                  fontWeight: isWinner ? "bold" : "normal",
-                }}
-              >
-                <span>
-                  {isWinner ? "🏆 " : ""}
-                  {p.name}
-                  {p.id === myPlayerId ? " (you)" : ""}
-                </span>
-                <span style={{ display: "flex", gap: 16 }}>
-                  <span
-                    style={{
-                      color:
-                        delta > 0
-                          ? t.accentPositive
-                          : delta < 0
-                            ? t.accentNegative
-                            : t.text40,
-                      fontSize: 13,
-                    }}
-                  >
-                    {delta > 0
-                      ? `+${delta}`
-                      : delta < 0
-                        ? `${delta}`
-                        : "—"}
-                  </span>
-                  <span style={{ minWidth: 52, textAlign: "right" }}>
-                    {p.score} pts
-                  </span>
-                </span>
-              </div>
-
-              {/* Gin result */}
-              {isGin && ginInfo && (
-                <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
-                  {p.id === ginInfo.knockerId
-                    ? ginInfo.result === "gin"
-                      ? `Gin! — 0 deadwood (+20 gin bonus, +20 box)`
-                      : ginInfo.result === "knock"
-                        ? `Knocked — ${ginInfo.knockerDeadwood} deadwood (+20 box)`
-                        : `Knocked — ${ginInfo.knockerDeadwood} deadwood (undercut!)`
-                    : ginInfo.result === "undercut"
-                      ? `Undercut! — ${ginInfo.defenderDeadwood} deadwood (+10 undercut, +20 box)`
-                      : `${ginInfo.defenderDeadwood} deadwood`}
-                </div>
-              )}
-              {/* Score explanation — basic only */}
-              {!is500 && !isGin && isWinner && delta > 0 && (
-                <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
-                  Won hand — scored {delta} pts from opponents' unmelded cards
-                </div>
-              )}
-
-              {/* Melded cards credited to this player */}
-              {(() => {
-                const credited = [...(meldCredits[p.id] ?? [])].sort(
-                  (a, b) => b.pts - a.pts,
-                );
-                if (credited.length === 0) return null;
-                const meldedPts = credited.reduce((s, x) => s + x.pts, 0);
-                return (
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
-                      {p.id === myPlayerId ? "Your" : `${p.name}'s`} melded cards (+{meldedPts} pts):
-                    </div>
-                    <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                      {credited.map(({ card, pts }) => (
-                        <div key={card.id} style={{ position: "relative" }}>
-                          <CardComponent
-                            card={card}
-                            compact
-                            style={{ width: 36, height: 50, fontSize: 10 }}
-                          />
-                          <div
-                            style={{
-                              position: "absolute",
-                              bottom: 2,
-                              right: 3,
-                              fontSize: 9,
-                              color: t.accentMeldCredit,
-                              fontWeight: "bold",
-                            }}
-                          >
-                            +{pts}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Unmelded cards breakdown */}
-              {playerCards.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
-                    {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
-                  </div>
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                    {playerCards.map((c) => (
-                      <div key={c.id} style={{ position: "relative" }}>
-                        <CardComponent
-                          card={c}
-                          compact
-                          style={{ width: 36, height: 50, fontSize: 10 }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            bottom: 2,
-                            right: 3,
-                            fontSize: 9,
-                            color: t.accentDeadwoodBadge,
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {cardPts(c)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
+        {sorted.map((p) => (
+          <div
+            key={p.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "6px 0",
+              borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
+              fontSize: 13,
+            }}
+          >
+            <span>{p.name}{p.id === myPlayerId ? " (you)" : ""}</span>
+            <span>{p.score} pts</span>
+          </div>
+        ))}
         {isHost ? (
           <button
             className="primary"
             onClick={() => send({ t: "start" })}
             style={{ width: "100%", marginTop: 20 }}
           >
-            {isGameOver ? "Play Again" : "New Hand"}
+            Re-deal
           </button>
         ) : (
           <div
@@ -615,8 +383,210 @@ function ScoreOverlay() {
         <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
           <LeaveButton />
         </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      titleId="score-overlay-title"
+      z={t.zScoreOverlay}
+      panelStyle={{
+        background: t.surfaceModalGreen,
+        padding: 32,
+        width: 340,
+      }}
+    >
+      <h2 id="score-overlay-title" style={{ textAlign: "center", marginBottom: 4 }}>
+        {isGameOver ? "Game Over!" : "Hand Over"}
+      </h2>
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 12,
+          color: t.text50,
+          marginBottom: 20,
+        }}
+      >
+        {isGameOver
+          ? `A player reached ${gameTarget} pts`
+          : `Game target: ${gameTarget} pts`}
       </div>
-    </div>
+
+      {sorted.map((p, i) => {
+        const prev = prevScores[p.id] ?? 0;
+        const delta = p.score - prev;
+        const isWinner = i === 0;
+        const playerCards = sortCardsDesc(finalHands[p.id] ?? [], cardPts);
+        const playerCardPts = handDeadwood[p.id] ?? handPts(playerCards, cardPts);
+
+        return (
+          <div
+            key={p.id}
+            style={{
+              padding: "10px 0",
+              borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
+            }}
+          >
+            {/* Name + scores row */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                fontSize: isWinner ? 15 : 13,
+                fontWeight: isWinner ? "bold" : "normal",
+              }}
+            >
+              <span>
+                {isWinner ? "🏆 " : ""}
+                {p.name}
+                {p.id === myPlayerId ? " (you)" : ""}
+              </span>
+              <span style={{ display: "flex", gap: 16 }}>
+                {/* Non-color delta cue [V7]: ▲/▼ arrow beside the green/salmon color. */}
+                <span
+                  style={{
+                    color:
+                      delta > 0
+                        ? t.accentPositive
+                        : delta < 0
+                          ? t.accentNegative
+                          : t.text40,
+                    fontSize: 13,
+                  }}
+                >
+                  {delta > 0
+                    ? `▲ +${delta}`
+                    : delta < 0
+                      ? `▼ ${delta}`
+                      : "—"}
+                </span>
+                <span style={{ minWidth: 52, textAlign: "right" }}>
+                  {p.score} pts
+                </span>
+              </span>
+            </div>
+
+            {/* Gin result */}
+            {isGin && ginInfo && (
+              <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
+                {p.id === ginInfo.knockerId
+                  ? ginInfo.result === "gin"
+                    ? `Gin! — 0 deadwood (+20 gin bonus, +20 box)`
+                    : ginInfo.result === "knock"
+                      ? `Knocked — ${ginInfo.knockerDeadwood} deadwood (+20 box)`
+                      : `Knocked — ${ginInfo.knockerDeadwood} deadwood (undercut!)`
+                  : ginInfo.result === "undercut"
+                    ? `Undercut! — ${ginInfo.defenderDeadwood} deadwood (+10 undercut, +20 box)`
+                    : `${ginInfo.defenderDeadwood} deadwood`}
+              </div>
+            )}
+            {/* Score explanation — basic only */}
+            {!is500 && !isGin && isWinner && delta > 0 && (
+              <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
+                Won hand — scored {delta} pts from opponents' unmelded cards
+              </div>
+            )}
+
+            {/* Melded cards credited to this player */}
+            {(() => {
+              const credited = [...(meldCredits[p.id] ?? [])].sort(
+                (a, b) => b.pts - a.pts,
+              );
+              if (credited.length === 0) return null;
+              const meldedPts = credited.reduce((s, x) => s + x.pts, 0);
+              return (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
+                    {p.id === myPlayerId ? "Your" : `${p.name}'s`} melded cards (+{meldedPts} pts):
+                  </div>
+                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                    {credited.map(({ card, pts }) => (
+                      <div key={card.id} style={{ position: "relative" }}>
+                        <CardComponent
+                          card={card}
+                          compact
+                          style={{ width: 36, height: 50, fontSize: 10 }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 2,
+                            right: 3,
+                            fontSize: 9,
+                            color: t.accentMeldCredit,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          +{pts}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Unmelded cards breakdown */}
+            {playerCards.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
+                  {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
+                </div>
+                <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                  {playerCards.map((c) => (
+                    <div key={c.id} style={{ position: "relative" }}>
+                      <CardComponent
+                        card={c}
+                        compact
+                        style={{ width: 36, height: 50, fontSize: 10 }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 2,
+                          right: 3,
+                          fontSize: 9,
+                          color: t.accentDeadwoodBadge,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {cardPts(c)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {isHost ? (
+        <button
+          className="primary"
+          onClick={() => send({ t: "start" })}
+          style={{ width: "100%", marginTop: 20 }}
+        >
+          {isGameOver ? "Play Again" : "New Hand"}
+        </button>
+      ) : (
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: 20,
+            color: t.text50,
+            fontSize: 13,
+          }}
+        >
+          Waiting for host…
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+        <LeaveButton />
+      </div>
+    </Modal>
   );
 }
 
