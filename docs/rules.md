@@ -28,7 +28,7 @@ Compiled from **primary authoritative sources** (Bicycle Cards + Pagat) and **se
 
 **Conflict resolution policy:** when authoritative primaries disagree with secondaries, use primaries, but note variation. When primaries disagree with each other, see the Inconsistencies section.
 
-**Terminology — "house rule":** in this document, any rule, value, or option flagged *(house rule)* is **host-configurable** — the game host may enable or disable it when creating a room. House rules are not the document author's editorial picks; they are non-canonical variants that real-world play groups commonly adopt. The default behavior (when a house rule is disabled) is whatever the surrounding standard rule specifies.
+**Terminology — "house rule":** in this document, any rule, value, or option flagged *(house rule)* is **host-configurable** — the game host may enable or disable it when creating a room. House rules are not the document author's editorial picks; they are non-canonical rule alternatives that real-world play groups commonly adopt. The default behavior (when a house rule is disabled) is whatever the surrounding standard rule specifies.
 
 ---
 
@@ -99,7 +99,7 @@ Card values:
 
 | Card | Points |
 | --- | --- |
-| Ace | 1 (or 11 in ace-either-end and round-the-corner variants) |
+| Ace | 1 (or 11 in ace-either-end and round-the-corner house rules) |
 | 2-10 | face value |
 | J, Q, K | 10 |
 
@@ -215,13 +215,13 @@ Card point values (used for deadwood, hand scoring, and Oklahoma Gin upcard thre
 | 2-10 | face value |
 | J, Q, K | 10 |
 
-### A.2.8 Variants
+### A.2.8 Game variations
 
-Documented for reference only. **No Gin Rummy variants are planned for implementation.**
+Documented for reference only. **No Gin Rummy game variations are planned for implementation.**
 
 #### Oklahoma Gin `[PG-G]` *(house rule)*
 
-A widely-played variant where the **rank of the first upcard** sets the maximum-deadwood knock threshold for the entire hand.
+A widely-played game variation where the **rank of the first upcard** sets the maximum-deadwood knock threshold for the entire hand.
 
 | Upcard rank | Knock threshold this hand |
 | --- | --- |
@@ -233,7 +233,7 @@ A widely-played variant where the **rank of the first upcard** sets the maximum-
 
 Oklahoma Gin game target is typically **150 points** rather than 100.
 
-#### Other listed variants `[PG-G]`
+#### Other listed game variations `[PG-G]`
 
 - **25-point gin bonus** — see A.2.4.
 - **25-point undercut bonus** — see A.2.4.
@@ -277,7 +277,7 @@ Any player may knock before discarding, on any turn including their first. Knock
 ### A.3.5 Scoring
 
 - Lowest deadwood count wins.
-- Tie: tying player wins instead of knocker. Variant: knocker neither pays nor receives; non-knocker ties split winnings `[PG-K]` *(house rule)*.
+- Tie: tying player wins instead of knocker. House rule: knocker neither pays nor receives; non-knocker ties split winnings `[PG-K]`.
 - Penalty if knocker not lowest: 10 points + difference to lowest.
 - **Rummy bonus** (going out with zero deadwood): each opponent pays their deadwood value + 25 points.
 
@@ -287,11 +287,11 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 
 > **TODO** — primary sources `[BIC-K]` and `[PG-K]` need re-verification for the relationship between A.3.4 (knock with face-down discard) and A.3.6 (going out without discard): are both legitimate end conditions in standard knock rummy, and does "going out" with zero deadwood differ from the A.3.5 Rummy bonus? Compiled text here implies both end conditions coexist, but primaries have not been re-checked since this file was first synthesized.
 >
-> **Blocks** Knock Rummy implementation (deferred — see `docs/refactor-plan.md` D3). Resolve this TODO before scoping that variant.
+> **Blocks** Knock Rummy implementation (deferred — see `docs/refactor-plan.md` D3). Resolve this TODO before scoping that game variation.
 
 ---
 
-## A.4 500 Rum (a.k.a. Pinochle Rummy, 500 Rummy)
+## A.4 500 Rummy (a.k.a. Pinochle Rummy, 500 Rum)
 
 ### A.4.1 Setup
 
@@ -310,8 +310,8 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 | J, Q, K | 10 |
 | Ace | 15, or 1 when melded as A-2-3 sequence. |
 
-Aces-score-15 variant *(house rule)*: Aces always 15 pts `[RP]`
-low-5 variant *(house rule)*: 2-9 and ace in A-2-3 meld score 5, instead of face value and 1, respectively.
+Aces-score-15 house rule: Aces always 15 pts `[RP]`
+low-5 house rule: 2-9 and ace in A-2-3 meld score 5, instead of face value and 1, respectively.
 
 ### A.4.3 Melds
 
@@ -321,7 +321,7 @@ low-5 variant *(house rule)*: 2-9 and ace in A-2-3 meld score 5, instead of face
 
 ### A.4.4 Drawing from discard pile
 
-Two draw modes (standard 500 Rum):
+Two draw modes (standard 500 Rummy):
 
 - **Single top card**: take only the top card of the discard pile. The drawn card **cannot be re-discarded on the same turn** but is otherwise unrestricted — it need not be melded or laid off this turn.
 - **Pile dive** (any card below the top): take the selected card plus every card on top of it (the selected card and all cards above it move to the player's hand). The **selected card must be melded or laid off this turn before discarding**. No must-use restriction applies to the other cards taken from above.
@@ -387,7 +387,7 @@ Note: two different games sharing the same name (Pagat vs. Bicycle)
 | --- | --- |
 | Players | 2-4 (best 2-3) |
 | Deck | 52, no jokers |
-| Deal | 5 cards each. Variant: 7 cards each `[RP]` *(house rule)* |
+| Deal | 5 cards each; 7 cards each `[RP]` *(house rule)* |
 | Ace | 1 point |
 | 2-10 | face value |
 | J, Q, K | 10 each |
@@ -411,7 +411,7 @@ Going out:
 
 Stock exhausted: lowest count wins basic stake from each player.
 
-Variants: alternate auto-Tonk low thresholds (at or below 9, 13, 14, or 15) in addition to matching 49 or 50 exactly. Lowest or highest wins, but low beats high.
+House rule: alternate auto-Tonk low thresholds (at or below 9, 13, 14, or 15) in addition to matching 49 or 50 exactly. Lowest or highest wins, but low beats high.
 
 ### A.6.2 Bicycle Rules
 
@@ -438,13 +438,13 @@ Elimination: score reaches **100** → out. Last remaining player wins.
 
 ---
 
-## Variants (Secondary Sources Only)
+## Game variations (Secondary Sources Only)
 
-These variants have no primary-source coverage. Apply greater scrutiny.
+These game variations have no primary-source coverage. Apply greater scrutiny.
 
-### Variants Summary Table
+### Game variations Summary Table
 
-| Variant | Players | Deck | Cards Dealt | Distinguishing rule | Primary section |
+| Game variation | Players | Deck | Cards Dealt | Distinguishing rule | Primary section |
 | --- | --- | --- | --- | --- | --- |
 | Gin Rummy | 2 | 1x52 | 10 | Hidden hands; knock at deadwood ≤10 or gin (0 deadwood) | A.2 |
 | Oklahoma Rummy | 2-4 / 2-6 | 1 or 2 x 52 | 10 / 7 | First discard sets max draw-pile pickup | -- |
@@ -477,7 +477,7 @@ These variants have no primary-source coverage. Apply greater scrutiny.
 
 - **Canasta** = meld of 7 cards same rank. Natural (no wilds) scores higher than mixed/dirty.
 - Max 3 wild cards per canasta `[GR]`.
-- Only sets -- no runs `[GR]`. (Sambas = 7-card same-suit sequences in some variants `[PR]`.)
+- Only sets -- no runs `[GR]`. (Sambas = 7-card same-suit sequences in some game variations `[PR]`.)
 - Partnership (4 players in 2 teams).
 - Game ends at 5,000 points.
 - Discard pile can be "frozen" by wild discards.
@@ -558,7 +558,7 @@ if game == basic_rummy:
     melds: set(3-4 same rank) | run(3+ same suit sequential)
     turn: draw(stock|top_discard) -> meld(*) -> lay_off? -> discard
     constraint: if drew top_discard, cannot discard same card same turn
-    going_rummy_bonus: score *= 2  (or +10 variant per PG-R)
+    going_rummy_bonus: score *= 2  (or +10 house rule per PG-R)
     score: opp_unmelded; A=1, 2-10=pip, JQK=10
 elif game == gin:
     deck = 1*52, no jokers; players == 2; deal = 10

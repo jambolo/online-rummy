@@ -3,7 +3,7 @@
 [![CI](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml/badge.svg)](https://github.com/jambolo/online-rummy/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/jambolo/online-rummy/graph/badge.svg)](https://codecov.io/gh/jambolo/online-rummy)
 
-Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **Gin Rummy**, and **500 Rum**. No accounts — pick a nickname, create a room, share the code, play.
+Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **Gin Rummy**, and **500 Rummy**. No accounts — pick a nickname, create a room, share the code, play.
 
 ---
 
@@ -17,7 +17,7 @@ Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **
 
 2 players. Build your hand privately — no open melding until you knock. Knock when your unmatched (deadwood) cards total 10 points or fewer. Gin (zero deadwood) earns a 20-point bonus plus your opponent's unmatched total. Undercut earns your opponent 10 points plus the difference. Box bonus of 20 per hand won; first to 100 cumulative points wins with a 100-point game bonus.
 
-### 500 Rum
+### 500 Rummy
 
 2–8 players. Melds score positive points; cards left in hand score negative. Pick any card from the discard pile — you must take everything above it and immediately play the selected card. Lay off cards onto other players' melds and take the credit yourself. Ace counts as 15 (or 1 in an A-2-3 run). First player to cross 500 cumulative points wins.
 

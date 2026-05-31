@@ -14,7 +14,7 @@ import {
 } from '../util.js';
 import { formatLayoffError } from '../layoff-error.js';
 
-// Narrowing helper: every function here is only ever called on a 500 Rum state.
+// Narrowing helper: every function here is only ever called on a 500 Rummy state.
 // Throws on misuse to keep TS happy + catch dispatch bugs early.
 function r500(state: GameState): Rum500State {
   if (state.variant !== 'rum500') throw new Error('ERR_VARIANT_MISMATCH:rum500');
@@ -34,7 +34,7 @@ export function runAceDirection(cards: Card[]): 'low' | 'high' | null {
   return null;
 }
 
-// 500 Rum per-card meld scoring (rules.md A.4.2, A.4.7).
+// 500 Rummy per-card meld scoring (rules.md A.4.2, A.4.7).
 // Set: each card scored at base value, aces 15.
 // Run: aces 1 if A-2-3 run, else 15.
 export function score500MeldCard(card: Card, allCards: Card[]): number {
@@ -44,8 +44,8 @@ export function score500MeldCard(card: Card, allCards: Card[]): number {
   return cardPoints(card, ace === 'low' ? 1 : 15);
 }
 
-// rules.md A.4 — 500 Rum (a.k.a. Pinochle Rummy)
-// House rule picks: plan.md "House rule picks (locked) > 500 Rum"
+// rules.md A.4 — 500 Rummy (a.k.a. Pinochle Rummy)
+// House rule picks: plan.md "House rule picks (locked) > 500 Rummy"
 
 // rules.md A.4.1: 2P deals 13; 3+P deals 7.
 function dealCount(playerCount: number): number {
@@ -312,7 +312,7 @@ export function canUseSelectedInMeldOrLayoff(
 
 function canFormRunWith(others: Card[], selected: Card): boolean {
   const sameSuit = others.filter((c) => c.suit === selected.suit);
-  // 500 Rum ace-either-end: try ace=low and ace=high independently.
+  // 500 Rummy ace-either-end: try ace=low and ace=high independently.
   for (const aceHigh of [false, true]) {
     const idxOf = (c: Card) =>
       c.rank === 'A' ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank];
@@ -443,7 +443,7 @@ export function applyDiscard(
   return { handEnded: false };
 }
 
-// 500 Rum clears its variant-specific pile-dive obligation on turn end.
+// 500 Rummy clears its variant-specific pile-dive obligation on turn end.
 function advanceTurn(state: GameState): void {
   baseAdvanceTurn(state);
   r500(state).mustMeldCardId = null;

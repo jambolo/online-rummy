@@ -2,6 +2,8 @@ import type { Card, Meld } from "@online-rummy/shared";
 import { validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
+import { t, sectionLabel } from "../theme/tokens";
+import { variationAccent } from "../theme/variations";
 
 // Can `newCard` extend `meld`? Uses shared validateMeld with gin opts (ace low only).
 function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
@@ -31,7 +33,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   const isTurnPlayer = publicState.turnPlayerId === myPlayerId;
   const myMeldsCount =
     publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
-  // 500 Rum (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
+  // 500 Rummy (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
   // Basic (rules.md A.1.6 [WP]): own-meld required.
   const isGin = publicState.variant === "gin";
   const ownMeldRequired = publicState.variant !== "rum500";
@@ -82,17 +84,21 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   return (
     <div
       style={{
-        background: pending ? "rgba(255,200,0,0.08)" : "rgba(0,0,0,0.15)",
-        borderRadius: 6,
+        background: pending
+          ? "rgba(255,200,0,0.08)"  // NS-1 one-off: pending-meld surface
+          : "rgba(0,0,0,0.15)",     // NS-1 one-off: meld pile (surfacePanelMuted at 0.15)
+        borderRadius: t.radiusControl,
         padding: "6px 10px",
         opacity: pending ? 0.7 : 1,
-        border: pending ? "1px dashed rgba(255,200,0,0.4)" : undefined,
+        border: pending ? "1px dashed rgba(255,200,0,0.4)" : undefined, // NS-1 one-off
       }}
     >
       <div
         style={{
           fontSize: 10,
-          color: pending ? "rgba(255,200,0,0.7)" : "rgba(255,255,255,0.5)",
+          color: pending
+            ? "rgba(255,200,0,0.7)"  // NS-1 one-off: pending label
+            : t.text50,
           marginBottom: 4,
           textTransform: "uppercase",
           letterSpacing: 1,
@@ -108,7 +114,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
               key={id}
               card={card}
               compact
-              style={{ width: 40, height: 56, fontSize: 11 }}
+              style={{ width: 40, height: 56, fontSize: 14 }}
             />
           ) : (
             <div
@@ -116,9 +122,9 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
               style={{
                 width: 40,
                 height: 56,
-                border: "1px solid #ccc",
-                borderRadius: 4,
-                background: "#1a3a8a",
+                border: `1px solid #ccc`, // NS-1 one-off: placeholder border (lighter than card-border)
+                borderRadius: t.radiusChip,
+                background: t.cardBack,
                 flexShrink: 0,
               }}
             />
@@ -201,7 +207,7 @@ export default function MeldZone() {
     return (
       <div
         style={{
-          color: "rgba(255,255,255,0.3)",
+          color: t.text30,
           fontSize: 12,
           fontStyle: "italic",
         }}
@@ -218,15 +224,7 @@ export default function MeldZone() {
 
   return (
     <div>
-      <div
-        style={{
-          fontSize: 11,
-          color: "rgba(255,255,255,0.6)",
-          marginBottom: 6,
-          textTransform: "uppercase",
-          letterSpacing: 1,
-        }}
-      >
+      <div style={{ ...sectionLabel, color: variationAccent(publicState.variant), marginBottom: 6 }}>
         Melds on table
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

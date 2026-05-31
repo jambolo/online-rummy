@@ -1,8 +1,11 @@
 // rules.md A.1 + plan.md "House rule picks > Basic Rummy"
+import { t } from "../../theme/tokens";
+import { variationAccent } from "../../theme/variations";
+
 export default function BasicRules() {
   const h3Style: React.CSSProperties = {
     fontSize: 14,
-    color: "#7fd4ff",
+    color: variationAccent("basic"),
     marginBottom: 6,
     marginTop: 0,
   };
@@ -85,7 +88,7 @@ export default function BasicRules() {
                 <td
                   style={{
                     padding: "3px 12px 3px 0",
-                    color: "rgba(255,255,255,0.7)",
+                    color: t.text70,
                   }}
                 >
                   {label}

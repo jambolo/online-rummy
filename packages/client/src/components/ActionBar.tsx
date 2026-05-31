@@ -1,6 +1,11 @@
+import { useState } from "react";
 import type { Card, Suit } from "@online-rummy/shared";
 import { cardPoints, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
+import { t } from "../theme/tokens";
+import { variationAccent } from "../theme/variations";
+import { useBreakpoint } from "../theme/useBreakpoint";
+import Modal from "./Modal";
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
 
@@ -24,6 +29,39 @@ function cardLabel(c: Card): string {
   return `${c.rank}${SUIT_SYMBOL[c.suit]}`;
 }
 
+// Chip styles for knock/defender meld groups and gin layoffs.
+const chipMeld: React.CSSProperties = {
+  background: "rgba(127,255,127,0.15)", // NS-1 one-off: --chip-meld surface
+  border: "1px solid rgba(127,255,127,0.4)", // NS-1 one-off: --chip-meld border
+  borderRadius: t.radiusChip,
+  padding: "2px 6px",
+  fontSize: 12,
+  display: "flex",
+  gap: 4,
+  alignItems: "center",
+};
+
+const chipLayoff: React.CSSProperties = {
+  background: "rgba(100,160,255,0.15)", // NS-1 one-off: --chip-layoff surface
+  border: "1px solid rgba(100,160,255,0.4)", // NS-1 one-off: --chip-layoff border
+  borderRadius: t.radiusChip,
+  padding: "2px 6px",
+  fontSize: 12,
+  display: "flex",
+  gap: 4,
+  alignItems: "center",
+};
+
+const chipRemoveBtn: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: t.text50,
+  cursor: "pointer",
+  padding: "0 2px",
+  fontSize: 13,
+  lineHeight: 1,
+};
+
 export default function ActionBar() {
   const publicState = useAppStore((s) => s.publicState);
   const privateState = useAppStore((s) => s.privateState);
@@ -42,6 +80,11 @@ export default function ActionBar() {
   const clearGinDefenderMelds = useAppStore((s) => s.clearGinDefenderMelds);
   const removeGinLayoff = useAppStore((s) => s.removeGinLayoff);
   const clearGinLayoffs = useAppStore((s) => s.clearGinLayoffs);
+
+  // Set when a discard is held pending confirmation because the card could be laid off.
+  const [pendingDiscardId, setPendingDiscardId] = useState<string | null>(null);
+
+  const isMobile = useBreakpoint() === "mobile";
 
   if (!publicState) return null;
 
@@ -67,10 +110,40 @@ export default function ActionBar() {
     send({ t: "meld", cardIds: sel });
   }
 
+  // Layoff opts per game variation (mirrors server: basic ace-low, 500 Rummy ace-either-end).
+  const layoffOpts = is500
+    ? { aceHigh: false, roundTheCorner: false, aceEitherEnd: true }
+    : { aceHigh: false, roundTheCorner: false };
+
+  // Could `card` currently be laid off onto a meld on the table? (non-gin only)
+  // Basic requires the player to already have a meld (rules.md A.1.6); 500 Rummy does not (A.4.6).
+  function canLayoffCard(card: Card): boolean {
+    if (isGin) return false;
+    if (!is500 && myMeldsCount === 0) return false;
+    return publicState!.players.some((p) =>
+      p.melds.some((m) => {
+        const meldCards = m.cards ?? [];
+        return meldCards.length > 0 && validateMeld([...meldCards, card], layoffOpts);
+      }),
+    );
+  }
+
   function doDiscard() {
     const cardId = sel[0];
     if (!cardId) return;
+    const card = (privateState?.hand ?? []).find((c) => c.id === cardId);
+    if (card && canLayoffCard(card)) {
+      setPendingDiscardId(cardId);
+      return;
+    }
     send({ t: "discard", cardId });
+    clearSelect();
+  }
+
+  function confirmDiscard() {
+    if (!pendingDiscardId) return;
+    send({ t: "discard", cardId: pendingDiscardId });
+    setPendingDiscardId(null);
     clearSelect();
   }
 
@@ -79,8 +152,7 @@ export default function ActionBar() {
   const hand = privateState?.hand ?? [];
 
   // The knock discard: exactly 1 non-melded card selected — will be discarded face-down
-  // as the knock signal (rules.md A.2.4). Deadwood is computed from remaining cards after
-  // that discard, so deadwoodValue reflects the true post-discard count.
+  // as the knock signal (rules.md A.2.4).
   const knockDiscardId = sel.length === 1 && !knockMeldedIds.has(sel[0]!) ? sel[0]! : null;
   const deadwoodCards = hand.filter(
     (c) => !knockMeldedIds.has(c.id) && c.id !== knockDiscardId,
@@ -90,7 +162,6 @@ export default function ActionBar() {
   const selCards = sel.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined);
   const selAlreadyMelded = sel.some((id) => knockMeldedIds.has(id));
   const canAddKnockMeld = isGin && isMyTurn && sel.length >= 3 && !selAlreadyMelded && isValidGinMeld(selCards);
-  // Knock requires 1 card selected as face-down discard AND remaining deadwood ≤ 10.
   const canKnock = isGin && isMyTurn && phase === "discard" && knockDiscardId !== null && deadwoodValue <= 10;
 
   function doKnock() {
@@ -116,8 +187,11 @@ export default function ActionBar() {
         style={{
           fontSize: 13,
           fontWeight: "bold",
-          color: isMyTurn ? "#7fff7f" : "rgba(255,255,255,0.55)",
-          minWidth: 160,
+          // My turn keeps the green turn cue [V7]; otherwise tint with the
+          // game-variation accent (NS-7 identity).
+          color: isMyTurn ? t.accentPositive : variationAccent(publicState.variant),
+          minWidth: isMobile ? 0 : 160,
+          flexBasis: isMobile ? "100%" : "auto",
         }}
       >
         {isMyTurn
@@ -136,7 +210,7 @@ export default function ActionBar() {
             {SUIT_SYMBOL[publicState.discardTop.suit]}
           </button>
           <button onClick={() => send({ t: "passUpcard" })}>Pass</button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+          <span style={{ fontSize: 12, color: t.text55 }}>
             Opening upcard offer — take it or pass to opponent.
           </span>
         </>
@@ -150,12 +224,14 @@ export default function ActionBar() {
             onClick={() => send({ t: "draw", from: "stock" })}
             disabled={publicState.stockSize === 0}
           >
-            Draw from stock ({publicState.stockSize})
+            {isMobile ? "Draw" : "Draw from stock"} ({publicState.stockSize})
           </button>
           {publicState.discardTop && (
             <button onClick={() => send({ t: "draw", from: "discard" })}>
-              Draw {publicState.discardTop.rank}
-              {SUIT_SYMBOL[publicState.discardTop.suit]} from discard
+              {isMobile ? "Take " : "Draw "}
+              {publicState.discardTop.rank}
+              {SUIT_SYMBOL[publicState.discardTop.suit]}
+              {isMobile ? "" : " from discard"}
             </button>
           )}
         </>
@@ -170,34 +246,9 @@ export default function ActionBar() {
               {knockMelds.map((group, i) => {
                 const groupCards = group.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined);
                 return (
-                  <span
-                    key={i}
-                    style={{
-                      background: "rgba(127,255,127,0.15)",
-                      border: "1px solid rgba(127,255,127,0.4)",
-                      borderRadius: 4,
-                      padding: "2px 6px",
-                      fontSize: 12,
-                      display: "flex",
-                      gap: 4,
-                      alignItems: "center",
-                    }}
-                  >
+                  <span key={i} style={chipMeld}>
                     {groupCards.map(cardLabel).join(" ")}
-                    <button
-                      onClick={() => removeKnockMeld(i)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "rgba(255,255,255,0.5)",
-                        cursor: "pointer",
-                        padding: "0 2px",
-                        fontSize: 13,
-                        lineHeight: 1,
-                      }}
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => removeKnockMeld(i)} style={chipRemoveBtn}>×</button>
                   </span>
                 );
               })}
@@ -208,49 +259,42 @@ export default function ActionBar() {
           <span
             style={{
               fontSize: 12,
-              color: deadwoodValue <= 10 ? "#7fff7f" : "rgba(255,255,255,0.55)",
+              color: deadwoodValue <= 10 ? t.accentPositive : t.text55,
               fontWeight: deadwoodValue <= 10 ? "bold" : "normal",
             }}
           >
             Deadwood: {deadwoodValue}{deadwoodValue <= 10 ? " ✓" : ` (need ≤10)`}
           </span>
 
-          {/* Add group button */}
           {canAddKnockMeld && (
-            <button
-              className="primary"
-              onClick={() => addKnockMeld(sel)}
-            >
+            <button className="primary" onClick={() => addKnockMeld(sel)}>
               Group {sel.length} cards
             </button>
           )}
 
-          {/* Knock button */}
           {canKnock && (
             <button
               className="primary"
               onClick={doKnock}
-              style={{ background: deadwoodValue === 0 ? "#6a0dad" : undefined }}
+              style={{ background: deadwoodValue === 0 ? t.accentGin : undefined }}
             >
               {deadwoodValue === 0 ? "Gin!" : `Knock`}
             </button>
           )}
 
-          {/* Discard — not a card that's already in a declared knock meld */}
           {sel.length === 1 && !knockMeldedIds.has(sel[0]!) && (
             <button className="danger" onClick={doDiscard}>
-              Discard selected
+              {isMobile ? "Discard" : "Discard selected"}
             </button>
           )}
 
-          {/* Guidance */}
           {sel.length === 0 && knockMelds.length === 0 && (
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+            <span style={{ fontSize: 12, color: t.text45 }}>
               Select 3+ cards to group as a meld, then select 1 card to discard or knock
             </span>
           )}
           {sel.length === 0 && knockMelds.length > 0 && (
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+            <span style={{ fontSize: 12, color: t.text45 }}>
               Select 1 card to discard{deadwoodValue <= 10 ? " — or knock with it" : " (group more melds to reduce deadwood)"}
             </span>
           )}
@@ -258,7 +302,6 @@ export default function ActionBar() {
       )}
 
       {/* ── Gin layoff phase (defender: declare own melds + lay off onto knocker's melds) ── */}
-      {/* rules.md A.2.4 step 3: opponent separates own melds from deadwood, then may lay off */}
       {isGin && phase === "layoff" && (
         <>
           {isMyTurn && (() => {
@@ -287,7 +330,6 @@ export default function ActionBar() {
 
             return (
               <>
-                {/* Declared own meld groups */}
                 {ginDefenderMelds.length > 0 && (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     {ginDefenderMelds.map((group, i) => {
@@ -295,88 +337,35 @@ export default function ActionBar() {
                         .map((id) => hand.find((c) => c.id === id))
                         .filter((c): c is Card => c !== undefined);
                       return (
-                        <span
-                          key={i}
-                          style={{
-                            background: "rgba(127,255,127,0.15)",
-                            border: "1px solid rgba(127,255,127,0.4)",
-                            borderRadius: 4,
-                            padding: "2px 6px",
-                            fontSize: 12,
-                            display: "flex",
-                            gap: 4,
-                            alignItems: "center",
-                          }}
-                        >
+                        <span key={i} style={chipMeld}>
                           {groupCards.map(cardLabel).join(" ")}
-                          <button
-                            onClick={() => removeGinDefenderMeld(i)}
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              color: "rgba(255,255,255,0.5)",
-                              cursor: "pointer",
-                              padding: "0 2px",
-                              fontSize: 13,
-                              lineHeight: 1,
-                            }}
-                          >
-                            ×
-                          </button>
+                          <button onClick={() => removeGinDefenderMeld(i)} style={chipRemoveBtn}>×</button>
                         </span>
                       );
                     })}
                   </div>
                 )}
 
-                {/* Staged layoffs — one chip per entry with × to remove */}
                 {ginLayoffs.length > 0 && (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     {ginLayoffs.map((layoff, i) => {
                       const card = hand.find((c) => c.id === layoff.cardId);
                       return (
-                        <span
-                          key={i}
-                          style={{
-                            background: "rgba(100,160,255,0.15)",
-                            border: "1px solid rgba(100,160,255,0.4)",
-                            borderRadius: 4,
-                            padding: "2px 6px",
-                            fontSize: 12,
-                            display: "flex",
-                            gap: 4,
-                            alignItems: "center",
-                          }}
-                        >
+                        <span key={i} style={chipLayoff}>
                           {card ? cardLabel(card) : layoff.cardId} → meld
-                          <button
-                            onClick={() => removeGinLayoff(i)}
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              color: "rgba(255,255,255,0.5)",
-                              cursor: "pointer",
-                              padding: "0 2px",
-                              fontSize: 13,
-                              lineHeight: 1,
-                            }}
-                          >
-                            ×
-                          </button>
+                          <button onClick={() => removeGinLayoff(i)} style={chipRemoveBtn}>×</button>
                         </span>
                       );
                     })}
                   </div>
                 )}
 
-                {/* Declare own meld button */}
                 {canAddDefenderMeld && (
                   <button className="primary" onClick={() => addGinDefenderMeld(sel)}>
                     Declare meld ({sel.length} cards)
                   </button>
                 )}
 
-                {/* Submit */}
                 <button
                   className="primary"
                   onClick={() => {
@@ -389,9 +378,8 @@ export default function ActionBar() {
                   {submitLabel}
                 </button>
 
-                {/* Guidance */}
                 {sel.length === 0 && totalActions === 0 && (
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                  <span style={{ fontSize: 12, color: t.text45 }}>
                     Select 3+ cards to declare a meld, or select 1 card then click + on a meld to lay off
                   </span>
                 )}
@@ -400,7 +388,7 @@ export default function ActionBar() {
           })()}
 
           {!isMyTurn && (
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+            <span style={{ fontSize: 12, color: t.text55 }}>
               Opponent is declaring melds and laying off…
             </span>
           )}
@@ -410,21 +398,18 @@ export default function ActionBar() {
       {/* ── Non-gin meld / discard phase ── */}
       {!isGin && isMyTurn && (phase === "meld" || phase === "discard") && (
         <>
-          {/* 500 Rum mustMeldCardId notice (rules.md A.4.4) */}
           {mustMeldBlock && (
-            <span style={{ fontSize: 12, color: "#ffd166", fontWeight: "bold" }}>
-              Must meld or lay off your dived card before discarding.
+            <span style={{ fontSize: 12, color: t.accentAttention, fontWeight: "bold" }}>
+              ▲ Must meld or lay off your dived card before discarding.
             </span>
           )}
 
-          {/* Meld button: 500 Rum allows multiple melds per turn, basic only one */}
           {(phase === "meld" || (is500 && phase === "discard")) && sel.length >= 2 && (
             <button className="primary" onClick={doMeld}>
               Meld {sel.length} cards
             </button>
           )}
 
-          {/* Discard — exactly 1 card; blocked in 500 Rum while a pile-dived card is unplaced */}
           {sel.length === 1 && (
             <button
               className="danger"
@@ -432,13 +417,12 @@ export default function ActionBar() {
               disabled={mustMeldBlock}
               title={mustMeldBlock ? "Place the dived card first" : undefined}
             >
-              Discard selected
+              {isMobile ? "Discard" : "Discard selected"}
             </button>
           )}
 
-          {/* Guidance when nothing selected */}
           {sel.length === 0 && !mustMeldBlock && (
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+            <span style={{ fontSize: 12, color: t.text45 }}>
               {phase === "meld"
                 ? myMeldsCount === 0
                   ? "Select 3+ cards to meld, or 1 to discard"
@@ -458,6 +442,34 @@ export default function ActionBar() {
           Clear {sel.length} selected
         </button>
       )}
+
+      {/* Confirm discard of a card that could still be laid off. */}
+      {pendingDiscardId && (() => {
+        const card = (privateState?.hand ?? []).find((c) => c.id === pendingDiscardId);
+        return (
+          <Modal
+            ariaLabel="Confirm discard"
+            onClose={() => setPendingDiscardId(null)}
+            panelStyle={{
+              background: t.surfacePanel,
+              padding: 20,
+              maxWidth: 360,
+              color: t.text100,
+            }}
+          >
+            <div style={{ fontSize: 14, marginBottom: 16 }}>
+              {card ? `${card.rank}${SUIT_SYMBOL[card.suit]}` : "This card"} can be laid
+              off on a meld. Discard it anyway?
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setPendingDiscardId(null)}>Cancel</button>
+              <button className="danger" onClick={confirmDiscard}>
+                Discard anyway
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

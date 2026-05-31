@@ -10,39 +10,126 @@
     <link rel="manifest" href="/site.webmanifest" />
     <title>Rum Runner: The Ultimate Rummy Club</title>
     <style>
+      /* NS-2: art-deco display + humanist body faces (Google Fonts CDN). @import MUST precede all rules. */
+      @import url('https://fonts.googleapis.com/css2?family=Poiret+One&family=Work+Sans:wght@400;500;600;700&display=swap');
+
+      :root {
+        /* NS-2 typography faces */
+        --font-display: 'Poiret One', 'Century Gothic', 'Futura', sans-serif;
+        --font-body:    'Work Sans', system-ui, -apple-system, sans-serif;
+
+        /* Surface & brand — NS-2 speakeasy re-skin (branding.md "Gold Standard"):
+           deep emerald felt with vignette, charcoal-navy panels, brass edges. */
+        --felt-base:           #0b2a1e;               /* darkest felt stop; reuse where surfaces meet the bg */
+        --surface-felt:
+          radial-gradient(ellipse 120% 90% at 50% -10%, rgba(255,236,190,0.07), transparent 55%),
+          radial-gradient(ellipse 140% 120% at 50% 115%, #08160f 0%, transparent 55%),
+          linear-gradient(165deg, #17533a 0%, #103c2a 52%, var(--felt-base) 100%);
+        --surface-panel:       rgba(20,26,34,0.72);
+        --surface-panel-muted: rgba(12,17,24,0.5);
+        --surface-modal-green: #143726;
+        --surface-modal-navy:  #131d2e;
+        --scrim:               rgba(0,0,0,0.65);
+        --border-modal:        rgba(198,160,75,0.45); /* brass edge */
+        --card-face:           #f4eedd;               /* aged parchment */
+        --card-face-dimmed:    #e3dcc6;
+        --card-back:           #0f2138;               /* deep navy (RR monogram drawn over it) */
+        --card-border:         #c9b27a;               /* brass-tinted card edge */
+        --card-red:            #a82a23;
+        --card-black:          #15110c;
+
+        --brass:               #c6a04b;               /* NS-2 metal accent (borders, monogram) */
+
+        /* Text ramp — NS-2 rebased onto aged-parchment off-white for low-light comfort */
+        --text-100: #f3ebd8;
+        --text-85:  rgba(243,235,216,0.85);
+        --text-70:  rgba(243,235,216,0.70);
+        --text-60:  rgba(243,235,216,0.60);
+        --text-55:  rgba(243,235,216,0.55);
+        --text-50:  rgba(243,235,216,0.50);
+        --text-45:  rgba(243,235,216,0.45);
+        --text-40:  rgba(243,235,216,0.40);
+        --text-30:  rgba(243,235,216,0.30);
+
+        /* Controls */
+        --btn-default:       #1f6b3a;
+        --btn-default-hover: #2a8a4d;
+        --btn-primary:       #1a7aae;
+        --btn-primary-hover: #2a8abe;
+        --btn-danger:        #ae2a1a;
+        --btn-danger-hover:  #c03a2a;
+        --focus-ring:        #4a9eff;
+
+        /* Semantic accents */
+        --accent-self:           #7fd4ff;
+        --accent-host:           #ffd700;
+        --accent-attention:      #ffd166;
+        --accent-positive:       #7fff7f;
+        --accent-negative:       #ff7f7f;
+        --accent-gin:            #6a0dad;
+        --accent-meld-credit:    #2a7a2a;
+        --accent-deadwood-badge: #555;
+
+        /* NS-7: per-game-variation identity accents (decoupled from semantic accents) */
+        --variation-basic:  #7fd4ff; /* cyan */
+        --variation-rum500: #ff9f5a; /* orange */
+        --variation-gin:    #ffd166; /* amber */
+
+        /* Radius */
+        --radius-card:    12px;
+        --radius-panel:   8px;
+        --radius-control: 6px;
+        --radius-chip:    4px;
+
+        /* z-index */
+        --z-card-drag:     10;
+        --z-score-overlay: 100;
+        --z-modal:         200;
+
+        /* Font weights */
+        --weight-regular:  400;
+        --weight-medium:   500;
+        --weight-semibold: 600;
+        --weight-bold:     700;
+      }
+
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #1a6b1a;
-        color: #fff;
+        font-family: var(--font-body);
+        background: var(--surface-felt);
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+        background-size: cover;
+        color: var(--text-100);
         min-height: 100vh;
       }
+      h1, h2, h3, h4 { font-family: var(--font-display); }
       button {
         cursor: pointer;
         font-family: inherit;
         font-size: 14px;
         border: none;
-        border-radius: 4px;
+        border-radius: var(--radius-chip);
         padding: 6px 14px;
-        background: #2a7a2a;
-        color: #fff;
+        background: var(--btn-default);
+        color: var(--text-100);
         transition: background 0.15s;
       }
-      button:hover:not(:disabled) { background: #3a9a3a; }
+      button:hover:not(:disabled) { background: var(--btn-default-hover); }
       button:disabled { opacity: 0.45; cursor: default; }
-      button.primary { background: #1a7aae; }
-      button.primary:hover:not(:disabled) { background: #2a8abe; }
-      button.danger { background: #ae2a1a; }
-      button.danger:hover:not(:disabled) { background: #c03a2a; }
+      button.primary { background: var(--btn-primary); }
+      button.primary:hover:not(:disabled) { background: var(--btn-primary-hover); }
+      button.danger { background: var(--btn-danger); }
+      button.danger:hover:not(:disabled) { background: var(--btn-danger-hover); }
       input, select {
         font-family: inherit;
         font-size: 14px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
+        border: 1px solid #ccc; /* NS-1 one-off: input border, lighter than --card-border */
+        border-radius: var(--radius-chip);
         padding: 6px 10px;
         outline: none;
       }
-      input:focus, select:focus { border-color: #4a9eff; }
+      input:focus, select:focus { border-color: var(--focus-ring); }
     </style>
   </head>
   <body>

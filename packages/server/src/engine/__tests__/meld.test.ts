@@ -100,7 +100,7 @@ describe('cardPoints', () => {
     expect(cardPoints(c('7', 'C'))).toBe(7);
   });
 
-  it('ace = 15 when aceValue=15 (500 rum)', () => {
+  it('ace = 15 when aceValue=15 (500 rummy)', () => {
     expect(cardPoints(c('A', 'S'), 15)).toBe(15);
   });
 });

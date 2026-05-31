@@ -18,7 +18,7 @@ describe('deadwood', () => {
     expect(deadwood(player)).toBe(1 + 5 + 10);
   });
 
-  it('A=15 when aceValue=15 (500 Rum)', () => {
+  it('A=15 when aceValue=15 (500 Rummy)', () => {
     const player = {
       id: 'p', name: 'P', melds: [], score: 0, status: 'active' as const,
       hand: [c('A', 'C'), c('5', 'D')],

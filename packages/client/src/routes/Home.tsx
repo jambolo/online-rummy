@@ -1,12 +1,11 @@
 import { useState } from "react";
 import type { Variant } from "@online-rummy/shared";
 import { useAppStore } from "../store";
+import { t } from "../theme/tokens";
+import { variationLabel } from "../theme/variations";
+import { copy } from "../content/copy";
 
-const VARIANT_LABELS: Record<Variant, string> = {
-  basic: "Classic Rummy",
-  gin: "Gin Rummy",
-  rum500: "500 Rum",
-};
+const VARIANTS: Variant[] = ["basic", "gin", "rum500"];
 
 export default function Home() {
   const connected = useAppStore((s) => s.connected);
@@ -16,7 +15,9 @@ export default function Home() {
   const notice = useAppStore((s) => s.notice);
   const dismissNotice = useAppStore((s) => s.dismissNotice);
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(
+    () => sessionStorage.getItem("playerName") ?? localStorage.getItem("playerName") ?? "",
+  );
   const [variant, setVariant] = useState<Variant>("basic");
   const [joinCode, setJoinCode] = useState("");
   const [mode, setMode] = useState<"create" | "join">("create");
@@ -25,6 +26,8 @@ export default function Home() {
     e.preventDefault();
     const n = name.trim();
     if (!n || !connected) return;
+    sessionStorage.setItem("playerName", n);
+    localStorage.setItem("playerName", n);
     send({ t: "create", variant, name: n });
   }
 
@@ -33,16 +36,38 @@ export default function Home() {
     const n = name.trim();
     const code = joinCode.trim().toUpperCase();
     if (!n || !code || !connected) return;
+    sessionStorage.setItem("playerName", n);
+    localStorage.setItem("playerName", n);
     send({ t: "join", roomCode: code, name: n });
   }
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <img
-        src="/rum-runner-banner.png"
-        alt="Rum Runner: The Ultimate Rummy Club"
-        style={{ width: "100%", display: "block", maxHeight: 180, objectFit: "cover", objectPosition: "center" }}
-      />
+      {/* NS-2 / T-GAP-1: art-directed banner — fluid height, top-anchored crop keeps the
+          RR wordmark in frame, and a bottom gradient dissolves the image into the felt. */}
+      <div style={{ position: "relative", width: "100%", flexShrink: 0 }}>
+        <img
+          src="/rum-runner-banner.png"
+          alt="Rum Runner: The Ultimate Rummy Club"
+          style={{
+            width: "100%",
+            display: "block",
+            height: "clamp(120px, 24vw, 200px)",
+            objectFit: "cover",
+            objectPosition: "center 28%",
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            // Fade the lower edge into the deep-emerald felt for a seamless join.
+            background: `linear-gradient(to bottom, transparent 55%, ${t.feltBase} 100%)`,
+            pointerEvents: "none",
+          }}
+        />
+      </div>
       <div
         style={{
           flex: 1,
@@ -54,10 +79,10 @@ export default function Home() {
       >
       <div
         style={{
-          background: "rgba(0,0,0,0.35)",
-          borderRadius: 12,
+          background: t.surfacePanel,
+          borderRadius: t.radiusCard,
           padding: 32,
-          width: 360,
+          width: "min(360px, 92vw)",
         }}
       >
         <img
@@ -69,24 +94,24 @@ export default function Home() {
         {!connected && (
           <div
             style={{
-              background: "rgba(174,42,26,0.3)",
-              border: "1px solid rgba(174,42,26,0.6)",
-              borderRadius: 6,
+              background: "rgba(174,42,26,0.3)",   // NS-1 one-off: btn-danger at 30%
+              border: "1px solid rgba(174,42,26,0.6)", // NS-1 one-off: btn-danger at 60%
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
             }}
           >
-            Connecting to server…
+            {copy.home.connecting}
           </div>
         )}
 
         {notice && (
           <div
             style={{
-              background: "rgba(40,90,160,0.35)",
-              border: "1px solid rgba(80,140,220,0.6)",
-              borderRadius: 6,
+              background: "rgba(40,90,160,0.35)",   // NS-1 one-off: info-banner bg (no token)
+              border: "1px solid rgba(80,140,220,0.6)", // NS-1 one-off: info-banner border
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
@@ -108,8 +133,8 @@ export default function Home() {
         {lastError && (
           <div
             style={{
-              background: "rgba(174,42,26,0.8)",
-              borderRadius: 6,
+              background: "rgba(174,42,26,0.8)", // NS-1 one-off: btn-danger at 80%
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
@@ -130,12 +155,12 @@ export default function Home() {
 
         {/* Name */}
         <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-          Your name
+          {copy.home.nameLabel}
         </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Alice"
+          placeholder={copy.home.namePlaceholder}
           maxLength={20}
           style={{ width: "100%", marginBottom: 16 }}
         />
@@ -148,17 +173,14 @@ export default function Home() {
               onClick={() => setMode(m)}
               style={{
                 flex: 1,
-                borderRadius: m === "create" ? "4px 0 0 4px" : "0 4px 4px 0",
-                background:
-                  mode === m
-                    ? "rgba(255,255,255,0.2)"
-                    : "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                color: "#fff",
+                borderRadius: m === "create" ? `${t.radiusChip}px 0 0 ${t.radiusChip}px` : `0 ${t.radiusChip}px ${t.radiusChip}px 0`,
+                background: mode === m ? t.borderModal : "rgba(255,255,255,0.05)", // NS-1 one-off: tab inactive
+                border: `1px solid ${t.borderModal}`,
+                color: t.text100,
                 fontSize: 13,
               }}
             >
-              {m === "create" ? "Create Room" : "Join Room"}
+              {m === "create" ? copy.home.createTab : copy.home.joinTab}
             </button>
           ))}
         </div>
@@ -166,16 +188,16 @@ export default function Home() {
         {mode === "create" && (
           <form onSubmit={handleCreate}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-              Variant
+              {copy.home.variationLabel}
             </label>
             <select
               value={variant}
               onChange={(e) => setVariant(e.target.value as Variant)}
               style={{ width: "100%", marginBottom: 16 }}
             >
-              {(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => (
+              {VARIANTS.map((v) => (
                 <option key={v} value={v}>
-                  {VARIANT_LABELS[v]}
+                  {variationLabel(v)}
                 </option>
               ))}
             </select>
@@ -185,7 +207,7 @@ export default function Home() {
               disabled={!name.trim() || !connected}
               style={{ width: "100%" }}
             >
-              Create Room
+              {copy.home.createCta}
             </button>
           </form>
         )}
@@ -193,12 +215,12 @@ export default function Home() {
         {mode === "join" && (
           <form onSubmit={handleJoin}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-              Room code
+              {copy.home.codeLabel}
             </label>
             <input
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="5-letter code"
+              placeholder={copy.home.codePlaceholder}
               maxLength={5}
               style={{ width: "100%", marginBottom: 16, textTransform: "uppercase" }}
             />
@@ -208,7 +230,7 @@ export default function Home() {
               disabled={!name.trim() || joinCode.trim().length !== 5 || !connected}
               style={{ width: "100%" }}
             >
-              Join Room
+              {copy.home.joinCta}
             </button>
           </form>
         )}

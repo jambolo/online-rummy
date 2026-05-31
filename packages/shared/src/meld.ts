@@ -10,7 +10,7 @@ import { RANK_INDEX } from './cards.js';
 export type MeldOptions = {
   aceHigh: boolean;
   roundTheCorner: boolean;
-  // 500 Rum (rules.md A.4.3): a run may use A-2-3 OR Q-K-A, but not both at once.
+  // 500 Rummy (rules.md A.4.3): a run may use A-2-3 OR Q-K-A, but not both at once.
   // Tries both ace positions and accepts if either yields a valid run.
   aceEitherEnd?: boolean;
 };
@@ -56,7 +56,7 @@ function rankIndex(rank: Rank, aceHigh: boolean): number {
 }
 
 // Card point value for scoring unmelded cards. rules.md A.1.8
-// aceValue: 1 (basic), 11 (basic ace-high variant), 15 (500 Rum).
+// aceValue: 1 (basic), 11 (basic ace-high variant), 15 (500 Rummy).
 export function cardPoints(card: Card, aceValue: 1 | 11 | 15 = 1): number {
   const r = card.rank;
   if (r === 'A') return aceValue;

@@ -20,8 +20,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_NOT_ENOUGH_PLAYERS: "Not enough players to start.",
   ERR_ALREADY_IN_ROOM: "You're already in a room.",
   ERR_INVALID_NAME: "Name can't be empty.",
-  ERR_INVALID_VARIANT: "Unknown game variant.",
-  ERR_NOT_IMPLEMENTED: "That variant isn't implemented yet.",
+  ERR_INVALID_VARIANT: "Unknown game variation.",
+  ERR_NOT_IMPLEMENTED: "That game variation isn't implemented yet.",
   ERR_MUST_USE_PILE_CARD: "You drew a card from the discard pile — you must meld or lay it off before discarding.",
   ERR_NO_LEGAL_DIVE: "You can't pile-dive that card — there's no legal meld or lay-off for it with your current hand.",
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
@@ -95,7 +95,7 @@ interface AppState {
   // Gin: defender's pending layoff declarations during 'layoff' phase (client-only).
   ginLayoffs: Array<{ cardId: string; meldId: string }>;
   // Per-player unmelded hand point totals (variant-correct ace value). Server-computed
-  // to avoid client/server divergence over ace pts in 500 Rum.
+  // to avoid client/server divergence over ace pts in 500 Rummy.
   handDeadwood: Record<string, number>;
   // True from gameOver event until the next gameStarted event.
   isGameOver: boolean;
