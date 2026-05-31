@@ -13,7 +13,7 @@ interface Props {
 const TITLES: Record<Variant, string> = {
   basic: "Classic Rummy",
   gin: "Gin Rummy",
-  rum500: "500 Rum",
+  rum500: "500 Rummy",
 };
 
 export default function HowToPlayModal({ variant, onClose }: Props) {

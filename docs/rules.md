@@ -291,7 +291,7 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 
 ---
 
-## A.4 500 Rum (a.k.a. Pinochle Rummy, 500 Rummy)
+## A.4 500 Rummy (a.k.a. Pinochle Rummy, 500 Rum)
 
 ### A.4.1 Setup
 
@@ -321,7 +321,7 @@ low-5 house rule: 2-9 and ace in A-2-3 meld score 5, instead of face value and 1
 
 ### A.4.4 Drawing from discard pile
 
-Two draw modes (standard 500 Rum):
+Two draw modes (standard 500 Rummy):
 
 - **Single top card**: take only the top card of the discard pile. The drawn card **cannot be re-discarded on the same turn** but is otherwise unrestricted — it need not be melded or laid off this turn.
 - **Pile dive** (any card below the top): take the selected card plus every card on top of it (the selected card and all cards above it move to the player's hand). The **selected card must be melded or laid off this turn before discarding**. No must-use restriction applies to the other cards taken from above.

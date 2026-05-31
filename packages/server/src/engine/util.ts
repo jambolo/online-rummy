@@ -25,7 +25,7 @@ export function lookupCard(state: GameState, id: string): Card {
 }
 
 // Advance turn to next active player. Resets phase=draw, drewFromDiscardId=null.
-// Does NOT reset variant-specific pocket fields (e.g. 500 Rum mustMeldCardId);
+// Does NOT reset variant-specific pocket fields (e.g. 500 Rummy mustMeldCardId);
 // variant-specific advanceTurn wrappers handle those.
 export function advanceTurn(state: GameState): void {
   const activePlayers = state.players.filter((p) => p.status === 'active');

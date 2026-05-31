@@ -21,7 +21,7 @@ export type GamePlayer = {
 export type BasicState = Record<string, never>;
 
 export type Rum500State = {
-  // 500 Rum (rules.md A.4.4): pile-dive must-use restriction. Set by applyDrawFromPile;
+  // 500 Rummy (rules.md A.4.4): pile-dive must-use restriction. Set by applyDrawFromPile;
   // cleared when card is melded or laid off. applyDiscard rejects while non-null.
   mustMeldCardId: string | null;
 };
@@ -55,7 +55,7 @@ type BaseGameState = {
   scoreSheet: ScoreSheet;
   // Id of the player who went first this hand — used for re-deal rotation.
   firstPlayerId: PlayerId;
-  // 500 Rum (rules.md A.4.6, A.4.7): scoring credits the player who placed a card,
+  // 500 Rummy (rules.md A.4.6, A.4.7): scoring credits the player who placed a card,
   // not the meld's original owner. Used by basic + 500 (only 500 reads it for scoring).
   meldedBy: Map<string, PlayerId>;
 };
@@ -66,7 +66,7 @@ export type GameState =
   | (BaseGameState & { variant: 'gin';    variantState: GinState });
 
 // Result of an apply*-style action that may end the hand or cancel it.
-// Basic / 500 Rum: { handEnded }. Gin: { handEnded, cancelled? } (stock-depletion).
+// Basic / 500 Rummy: { handEnded }. Gin: { handEnded, cancelled? } (stock-depletion).
 export type ApplyResult = { handEnded: boolean; cancelled?: boolean };
 
 // Shape of the wonHand event payload returned by handEndPayload.

@@ -95,7 +95,7 @@ interface AppState {
   // Gin: defender's pending layoff declarations during 'layoff' phase (client-only).
   ginLayoffs: Array<{ cardId: string; meldId: string }>;
   // Per-player unmelded hand point totals (variant-correct ace value). Server-computed
-  // to avoid client/server divergence over ace pts in 500 Rum.
+  // to avoid client/server divergence over ace pts in 500 Rummy.
   handDeadwood: Record<string, number>;
   // True from gameOver event until the next gameStarted event.
   isGameOver: boolean;

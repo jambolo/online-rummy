@@ -1,4 +1,4 @@
-// rules.md A.4 + plan.md "House rule picks > 500 Rum"
+// rules.md A.4 + plan.md "House rule picks > 500 Rummy"
 import { t } from "../../theme/tokens";
 
 export default function Rum500Rules() {

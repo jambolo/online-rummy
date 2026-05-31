@@ -99,9 +99,9 @@ The state visible to all players.
 
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
 
-`discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rum uses this for the pile-dive picker and other game variations may ignore it.
+`discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rummy uses this for the pile-dive picker and other game variations may ignore it.
 
-`mustMeldCardId` is set in 500 Rum when the current turn player drew via pile dive and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
+`mustMeldCardId` is set in 500 Rummy when the current turn player drew via pile dive and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
 
 `ginKnockerId` is set in Gin after a knock (during `layoff` phase and through scoring). Identifies the knocker so the client can distinguish knocker from defender. Always `null` in `basic` and `rum500`.
 
@@ -225,7 +225,7 @@ After a successful draw, `phase` advances to `"meld"`.
 **Game-variation rules:**
 
 - **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn.
-- **500 Rum:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
+- **500 Rummy:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
 
 **Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
 
@@ -238,18 +238,18 @@ After a successful draw, `phase` advances to `"meld"`.
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
 | `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile (basic) |
-| `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rum) |
+| `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rummy) |
 | `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
 
 ---
 
-### `drawFromPile` — 500 Rum pile dive
+### `drawFromPile` — 500 Rummy pile dive
 
 ```json
 { "t": "drawFromPile", "cardId": "string" }
 ```
 
-500 Rum only. Take any card from the discard pile; the selected card plus every card on top of it move to your hand. Valid only on your turn when `phase` is `"draw"`.
+500 Rummy only. Take any card from the discard pile; the selected card plus every card on top of it move to your hand. Valid only on your turn when `phase` is `"draw"`.
 
 **Top-card shortcut:** if `cardId` is the top card of the discard pile, this behaves identically to `draw {from:"discard"}` — only `drewFromDiscardId` is set (cannot re-discard that card this turn), and `mustMeldCardId` is **not** set (no must-use obligation). Use `draw {from:"discard"}` for a plain top-card draw; `drawFromPile` with the top card's id works but is equivalent.
 
@@ -288,7 +288,7 @@ A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive c
 Game-variation differences:
 
 - **Basic:** ace is low only; round-the-corner is disabled. Multiple melds per turn are allowed (the "maximum one meld per turn" rule is a host-configurable house rule, currently off). The phase stays at `"meld"` after a meld so the player can meld further before discarding.
-- **500 Rum:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
+- **500 Rummy:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
 - **Gin:** **not supported** — Gin reveals melds only at knock time. `meld` always returns `ERR_NOT_SUPPORTED`. Use [`knock`](#knock--gin-knock-or-go-gin) instead.
 
 If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that field is cleared after the meld.
@@ -322,7 +322,7 @@ Adds one card from your hand onto any meld already on the table (your own or ano
 Game-variation differences:
 
 - **Basic:** layoff is unrestricted. The "layoff requires prior meld" rule (rules.md A.1.6 step 3) is documented as a future host-configurable house rule; not currently scaffolded.
-- **500 Rum:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
+- **500 Rummy:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
 - **Gin:** **not supported during regular play** — Gin layoffs happen only in the `layoff` phase after a knock, via the separate [`ginLayoff`](#ginlayoff--gin-defender-layoff) message. Plain `layoff` returns `ERR_NOT_SUPPORTED` in Gin.
 
 The card must extend the target meld while keeping it valid. Multiple layoffs are allowed per turn.
@@ -356,14 +356,14 @@ Places one card from your hand onto the discard pile and ends your turn. Valid o
 **House rules:**
 
 - **Basic:** you cannot discard the card you drew from the discard pile on the same turn (`ERR_CANNOT_DISCARD_DRAWN_CARD`).
-- **500 Rum:** you cannot discard while `PublicState.mustMeldCardId` is set (`ERR_MUST_USE_PILE_CARD`). Place the pile-drawn card in a meld or layoff first.
+- **500 Rummy:** you cannot discard while `PublicState.mustMeldCardId` is set (`ERR_MUST_USE_PILE_CARD`). Place the pile-drawn card in a meld or layoff first.
 - **Gin:** standard discard ends the turn (advances to the other player's `draw` phase). To end the hand, use [`knock`](#knock--gin-knock-or-go-gin) instead. **Stock-depletion cancel** (rules.md A.2.3): if the discard reduces stock to ≤ 2 cards without a knock, the hand is cancelled — no scoring, same dealer re-deals.
 
-If discarding empties your hand (basic / 500 Rum), the hand ends immediately.
+If discarding empties your hand (basic / 500 Rummy), the hand ends immediately.
 
 **Normal response (hand continues):** A [`state`](#state--game-state) message is sent. The acting player receives `public` and `private`. All other players receive `public` only. Turn advances to the next active player with `phase` reset to `"draw"`.
 
-**Hand-end response (hand emptied — basic / 500 Rum):** Three messages are sent to all connected players:
+**Hand-end response (hand emptied — basic / 500 Rummy):** Three messages are sent to all connected players:
 
 1. An [`event`](#event--game-event) with `kind: "wonHand"` identifying the winner; `data` contains `finalHands`, `meldCredits`, `handDeadwood` (see [event docs](#event--game-event))
 2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
@@ -382,8 +382,8 @@ If discarding empties your hand (basic / 500 Rum), the hand ends immediately.
 | `ERR_WRONG_STATE` | Game is not in progress |
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
-| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from the discard pile this turn (both basic and 500 Rum — applies to top-card draws in both game variations) |
-| `ERR_MUST_USE_PILE_CARD` | Pile-dive obligation unmet: the selected card has not yet been melded or laid off (500 Rum true pile dives only) |
+| `ERR_CANNOT_DISCARD_DRAWN_CARD` | Attempted to discard the card drawn from the discard pile this turn (both basic and 500 Rummy — applies to top-card draws in both game variations) |
+| `ERR_MUST_USE_PILE_CARD` | Pile-dive obligation unmet: the selected card has not yet been melded or laid off (500 Rummy true pile dives only) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | The specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 
@@ -620,9 +620,9 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 }
 ```
 
-- `finalHands` — every player's remaining unmelded cards at hand-end. Winner of basic/500 Rum has empty array; Gin knocker may still hold deadwood.
-- `meldCredits` — keyed by **placer** (not meld owner). 500 Rum credits the layoff player for points; basic placer == owner. Each entry includes pre-computed per-card points (500 Rum: ace=1 in A-2-3, =15 elsewhere). Gin entries are empty (Gin scores via deadwood comparison, not meld accumulation).
-- `handDeadwood` — sum of unmelded card values per player. Ace value = 15 for 500 Rum; = 1 for basic and Gin.
+- `finalHands` — every player's remaining unmelded cards at hand-end. Winner of basic/500 Rummy has empty array; Gin knocker may still hold deadwood.
+- `meldCredits` — keyed by **placer** (not meld owner). 500 Rummy credits the layoff player for points; basic placer == owner. Each entry includes pre-computed per-card points (500 Rummy: ace=1 in A-2-3, =15 elsewhere). Gin entries are empty (Gin scores via deadwood comparison, not meld accumulation).
+- `handDeadwood` — sum of unmelded card values per player. Ace value = 15 for 500 Rummy; = 1 for basic and Gin.
 - `ginInfo` — present only for Gin. `result` distinguishes knock outcomes; client renders the appropriate label and bonus breakdown.
 
 ---
@@ -765,7 +765,7 @@ Mid-game reconnect is not currently supported. If the game has already started w
 
 `PublicState.phase` reflects the current phase. Game variations differ:
 
-**Basic / 500 Rum:**
+**Basic / 500 Rummy:**
 
 ```text
 "draw"  →  "meld"  →  (next player's turn, phase resets to "draw")
@@ -773,7 +773,7 @@ Mid-game reconnect is not currently supported. If the game has already started w
 
 After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
 
-The `"discard"` phase value exists but is not set by basic or 500 Rum in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
+The `"discard"` phase value exists but is not set by basic or 500 Rummy in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
 
 **Gin:**
 

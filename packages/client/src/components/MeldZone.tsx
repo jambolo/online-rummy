@@ -32,7 +32,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   const isTurnPlayer = publicState.turnPlayerId === myPlayerId;
   const myMeldsCount =
     publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
-  // 500 Rum (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
+  // 500 Rummy (rules.md A.4.6): lay off onto any meld, no own-meld prerequisite.
   // Basic (rules.md A.1.6 [WP]): own-meld required.
   const isGin = publicState.variant === "gin";
   const ownMeldRequired = publicState.variant !== "rum500";

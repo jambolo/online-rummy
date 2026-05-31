@@ -12,7 +12,7 @@
 
 ### 1.1 High-Level Vision
 
-Rum Runner is a real-time, multiplayer rummy club delivered as a single-page web application. The interface exists to let two-to-eight guests at separate devices share one synchronized card table — drawing, melding, laying off, knocking, chatting, and scoring across three game variations (Classic Rummy, Gin Rummy, 500 Rum) — with **zero install, zero account, and a five-letter room code** as the entire onboarding surface.
+Rum Runner is a real-time, multiplayer rummy club delivered as a single-page web application. The interface exists to let two-to-eight guests at separate devices share one synchronized card table — drawing, melding, laying off, knocking, chatting, and scoring across three game variations (Classic Rummy, Gin Rummy, 500 Rummy) — with **zero install, zero account, and a five-letter room code** as the entire onboarding surface.
 
 The current implementation expresses this as a lean, server-authoritative, pessimistic-UI client: every action is a WebSocket message, every visual change waits for the server's `state` broadcast, and the DOM is rendered with hand-written inline-styled React. It is deliberately a *playability-first* surface — the engine, protocol, and turn-flow correctness are mature; the visual skin is a functional placeholder.
 
@@ -38,7 +38,7 @@ The **ultimate, ideal state** projects this foundation into an immersive 1920s s
 - Spectate active games; reconnect mid-hand without forfeiting.
 - Play comfortably on a phone with a layout that reflows rather than fixed-width panels.
 - Customize table felt, card backs, and theme.
-- As host, configure a game variation's house rules before starting a hand — toggling each documented deviation from canonical (e.g. ace-either-end, going-rummy flat +10, 500 Rum jokers).
+- As host, configure a game variation's house rules before starting a hand — toggling each documented deviation from canonical (e.g. ace-either-end, going-rummy flat +10, 500 Rummy jokers).
 - As any player, see which house rules are active and how they deviate from canonical — in the lobby and during play — so the whole table shares one agreed rule set.
 
 ### 1.3 North Star Design Concepts
@@ -276,7 +276,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 ### 3.4 `Hand` ([components/Hand.tsx](packages/client/src/components/Hand.tsx))
 
-- **State:** Reads `privateState`, `publicState`, `handOrder`, `selectedCardIds`, `setHandOrder`. Derives `mustMeldCardId` (500 Rum only, via `variantPublic` narrowing).
+- **State:** Reads `privateState`, `publicState`, `handOrder`, `selectedCardIds`, `setHandOrder`. Derives `mustMeldCardId` (500 Rummy only, via `variantPublic` narrowing).
 - **Structure:** Panel (`bg rgba(0,0,0,0.2), radius 8, padding 12×16`) with uppercase "Your Hand (n)" label, then a dnd-kit `DndContext` → `SortableContext` (horizontal strategy) → flex-wrap row of `SortableCard`.
 - **Styling constraints:** `PointerSensor` with `activationConstraint: { distance: 6 }` so a tap toggles selection (`toggleSelect`) without starting a drag. Dragging card → `opacity 0.4, zIndex 10`. `mustMeld` card → `outline: 3px solid #ffd166`. Order is client-local (`handOrder` array of ids); cards filtered/merged against live hand on each `state`.
 - **Aspirations & Gaps:** Flat wrap, not a fanned/arc layout — **[North Star]** PixiJS fan with overlap and arc (NS-3). On small screens many cards wrap into many rows (NS-4). No keyboard reordering (NS-6).
@@ -284,13 +284,13 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 ### 3.5 `Table` ([components/Table.tsx](packages/client/src/components/Table.tsx))
 
 - **State:** Reads `publicState`, `privateState`, `myPlayerId`, `send`. Local `showPile` toggle. Computes turn/phase gating: `canDraw`, `canDrawDiscard`, `upcardOfferPhase`, `is500`, `interactive`.
-- **Structure:** Flex row (gap 24) of two labelled slots — Stock (count label + 56×80 patterned back, clickable when `canDraw`) and Discard (count label, `· dive` hint in 500 Rum; top card or dashed "empty" slot). Conditionally mounts `PileDiveModal`.
-- **Styling constraints:** Stock back `#1a3a8a` + 45° repeating-linear-gradient `rgba(255,255,255,0.05)` at `8px` size; actionable glow `0 0 10px rgba(74,158,255,0.6)`. Discard top gets the same glow when drawable. Click routing: Basic/Gin top-discard → immediate `draw {from:'discard'}`; 500 Rum → opens picker. `firstUpcardOffer` (Gin) makes discard clickable as the accept-upcard action.
-- **Aspirations & Gaps:** Two static slots; **[North Star]** animated deal from stock, discard fan, and pile-depth visualization (NS-3). The 500 Rum "dive" affordance is a tiny text hint — could be a clearer affordance.
+- **Structure:** Flex row (gap 24) of two labelled slots — Stock (count label + 56×80 patterned back, clickable when `canDraw`) and Discard (count label, `· dive` hint in 500 Rummy; top card or dashed "empty" slot). Conditionally mounts `PileDiveModal`.
+- **Styling constraints:** Stock back `#1a3a8a` + 45° repeating-linear-gradient `rgba(255,255,255,0.05)` at `8px` size; actionable glow `0 0 10px rgba(74,158,255,0.6)`. Discard top gets the same glow when drawable. Click routing: Basic/Gin top-discard → immediate `draw {from:'discard'}`; 500 Rummy → opens picker. `firstUpcardOffer` (Gin) makes discard clickable as the accept-upcard action.
+- **Aspirations & Gaps:** Two static slots; **[North Star]** animated deal from stock, discard fan, and pile-depth visualization (NS-3). The 500 Rummy "dive" affordance is a tiny text hint — could be a clearer affordance.
 
 ### 3.6 `PileDiveModal` ([components/PileDiveModal.tsx](packages/client/src/components/PileDiveModal.tsx))
 
-- **State:** Props `pile`, `onPick?`, `onClose`, `canPick?`, `readOnly?`. Local `hoverIdx`. Dual-purpose: interactive 500 Rum dive picker **and** read-only any-time pile viewer.
+- **State:** Props `pile`, `onPick?`, `onClose`, `canPick?`, `readOnly?`. Local `hoverIdx`. Dual-purpose: interactive 500 Rummy dive picker **and** read-only any-time pile viewer.
 - **Structure:** Scrim (z-200) → navy panel `min(720px, calc(100vw−32px))`, `maxHeight 80vh`, scroll. Title + close `×`, instruction line, then a flex-wrap row of full cards rendered **top-first** (`[...pile].reverse()`).
 - **Styling constraints:** Hovering a pickable card highlights it + everything above (`willTake`) with `outline 3px solid #ffd166`. Unpickable cards → `opacity 0.35, cursor not-allowed` (mirrors server `ERR_NO_LEGAL_DIVE` preflight). Top card is a free plain-draw; deeper picks send `drawFromPile`. Backdrop click closes; inner click `stopPropagation`.
 - **Aspirations & Gaps:** Strong, rules-faithful UX. **[Gap]** wrap layout loses strict pile "stack" mental model; an overlapped stack visualization (NS-3) would read more naturally. No keyboard navigation (NS-6).
@@ -299,7 +299,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 - **State:** Reads `publicState`, `myPlayerId`, `ginDefenderMelds`, `lookupCard`, `privateState`. Sub-component `MeldPile` additionally reads `selectedCardIds`, `ginLayoffs`, `send`, `addGinLayoff`.
 - **Structure:** "Melds on table" label → flex-wrap row of `MeldPile`s (self melds sorted first), then synthetic **pending** piles for staged Gin defender melds. Empty state: italic "No melds yet". Each `MeldPile`: owner·kind label, compact 40×56 cards, optional `+` layoff button, plus staged-layoff ghost cards (opacity 0.55).
-- **Styling constraints:** Pile `bg rgba(0,0,0,0.15), radius 6, padding 6×10`. Pending pile → `bg rgba(255,200,0,0.08), dashed border rgba(255,200,0,0.4), opacity 0.7`. Layoff `+` shown when allowed (Basic requires own meld; 500 Rum does not; Gin uses the layoff-phase path). Run order maintained server-side; missing cards render as blue placeholder backs.
+- **Styling constraints:** Pile `bg rgba(0,0,0,0.15), radius 6, padding 6×10`. Pending pile → `bg rgba(255,200,0,0.08), dashed border rgba(255,200,0,0.4), opacity 0.7`. Layoff `+` shown when allowed (Basic requires own meld; 500 Rummy does not; Gin uses the layoff-phase path). Run order maintained server-side; missing cards render as blue placeholder backs.
 - **Aspirations & Gaps:** Clear pending/staged visual language (dashed + ghost). **[North Star]** drag-to-layoff (drop a hand card on a pile) instead of select-then-`+` (NS-3/NS-4); per-game-variation accent on pile chrome (NS-7).
 
 ### 3.8 `ActionBar` ([components/ActionBar.tsx](packages/client/src/components/ActionBar.tsx))
@@ -325,7 +325,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 - **State:** Stateless; props `variant`, `onClose`. Renders one of three static fragments ([basic](packages/client/src/content/howToPlay/basic.tsx) / [gin](packages/client/src/content/howToPlay/gin.tsx) / [rum500](packages/client/src/content/howToPlay/rum500.tsx)).
 - **Structure:** Scrim (z-200) → navy panel width 480, `maxHeight 80vh` scroll, title "How to Play — {label}" + close. Content fragments use sectioned `h3` + prose/lists/tables.
-- **Styling constraints:** Content `h3` color encodes a **partial game-variation identity**: Basic & 500 Rum use cyan `#7fd4ff`; Gin uses amber `#ffd166`. Body 13px, line-height 1.65–1.8. Tables are inline-styled with right-aligned values.
+- **Styling constraints:** Content `h3` color encodes a **partial game-variation identity**: Basic & 500 Rummy use cyan `#7fd4ff`; Gin uses amber `#ffd166`. Body 13px, line-height 1.65–1.8. Tables are inline-styled with right-aligned values.
 - **Aspirations & Gaps:** This is the **proto-example of NS-7 (game-variation theming)** — formalize the accent-per-game-variation into a token map and apply it across Table/MeldZone/ActionBar, not just rules text. Content is hand-maintained TSX (intentional, to avoid a markdown dep). **[North Star NS-8]** fold in a "Table house rules" section (a `HouseRuleSummary`, 3.13) so the rules screen reflects the *actual* table config, not just canon.
 
 ### 3.11 Networking layer ([net/ws.ts](packages/client/src/net/ws.ts))
@@ -345,12 +345,12 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 | Basic | `maxOneMeldPerTurn` | off | A.1.6 |
 | Basic | `layoffRequiresPriorMeld` | off | A.1.6 |
 | Basic | `goingRummyFlat10` | off (bonus = ×2) | A.1.7 |
-| 500 Rum | `acesAlways15` | off (15, or 1 in A-2-3) | A.4.2 |
-| 500 Rum | `low5Scoring` | off | A.4.2 |
-| 500 Rum | `jokers` | off | A.4.5 |
-| 500 Rum | `unifiedObligation` | off (dive-only must-use) | A.4.4 |
-| 500 Rum | `setsRequireDistinctSuits` | off (same-suit allowed) | A.4.3 |
-| 500 Rum | `deal10For2P` | off (deal 13) | A.4.1 |
+| 500 Rummy | `acesAlways15` | off (15, or 1 in A-2-3) | A.4.2 |
+| 500 Rummy | `low5Scoring` | off | A.4.2 |
+| 500 Rummy | `jokers` | off | A.4.5 |
+| 500 Rummy | `unifiedObligation` | off (dive-only must-use) | A.4.4 |
+| 500 Rummy | `setsRequireDistinctSuits` | off (same-suit allowed) | A.4.3 |
+| 500 Rummy | `deal10For2P` | off (deal 13) | A.4.1 |
 | Gin | *(none in v1 — canonical only)* | — | A.2 |
 
 - **Structure:**

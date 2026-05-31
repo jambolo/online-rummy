@@ -189,7 +189,7 @@ function handleHandEnd(room: Room, state: GameState): void {
 
   if (engine.isGameOver(state.scoreSheet)) {
     room.status = 'ended';
-    // rules.md A.4.7: highest cumulative wins at crossover (handles multi-crossover for 500 Rum).
+    // rules.md A.4.7: highest cumulative wins at crossover (handles multi-crossover for 500 Rummy).
     const gameWinner = state.players.length > 0
       ? state.players.reduce((a, b) => (b.score > a.score ? b : a))
       : undefined;

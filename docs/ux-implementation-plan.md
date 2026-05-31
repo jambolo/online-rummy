@@ -364,7 +364,7 @@ files:   + src/theme/variations.ts
 steps:
   1. Export VARIATION_ACCENT: Record<Variant, { accent: string; label: string }>.
      - basic:  accent var(--accent-self) (cyan), label "Classic Rummy"
-     - rum500: label "500 Rum"  [DECISION: keep cyan (matches current pairing) OR assign a
+     - rum500: label "500 Rummy"  [DECISION: keep cyan (matches current pairing) OR assign a
                 distinct accent for true per-variation identity — default keep cyan, flag in PR]
      - gin:    accent var(--accent-attention) (amber), label "Gin Rummy"
   2. Export a helper variationAccent(variant) and variationLabel(variant).

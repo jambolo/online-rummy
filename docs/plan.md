@@ -6,7 +6,7 @@ Compressed reference. Reload before resuming work.
 
 | Area | Choice |
 | --- | --- |
-| Game variations v1 | Basic Rummy, Gin Rummy, 500 Rum |
+| Game variations v1 | Basic Rummy, Gin Rummy, 500 Rummy |
 | Scale | Hobby <50 concurrent |
 | Auth | Guest nickname + 5-letter room code, signed cookie session id |
 | Transport | WebSocket, JSON, native `ws` lib (not socket.io) |
@@ -92,9 +92,9 @@ type PublicState = {
   turnPlayerId: string;
   phase: Phase;
   discardTop: Card | null;
-  discardPile: Card[];          // full pile bottom-to-top; basic ignores, 500 Rum pile-dive reads it
+  discardPile: Card[];          // full pile bottom-to-top; basic ignores, 500 Rummy pile-dive reads it
   stockSize: number;
-  mustMeldCardId: string | null;  // 500 Rum: pile-dive obligation; null otherwise
+  mustMeldCardId: string | null;  // 500 Rummy: pile-dive obligation; null otherwise
   ginKnockerId: string | null;    // Gin: knocker id during layoff phase / scoring; null otherwise
 };
 
@@ -109,7 +109,7 @@ type C2S =
   | { t: 'join'; roomCode: string; name: string; sessionId?: string }
   | { t: 'start' }
   | { t: 'draw'; from: 'stock' | 'discard' }
-  | { t: 'drawFromPile'; cardId: string }   // 500 rum dive
+  | { t: 'drawFromPile'; cardId: string }   // 500 rummy dive
   | { t: 'meld'; cardIds: string[] }
   | { t: 'layoff'; meldId: string; cardId: string }
   | { t: 'discard'; cardId: string }
@@ -165,7 +165,7 @@ the interface.
 | --- | --- | --- |
 | Basic | A.1 | 2-7P (1 deck for 2-6P, 2 decks combined for 7P), deals {2:10,3:7,4:7,5:6,6:6,7:10}, ace low only, draw stock\|top-discard, multiple melds per turn allowed, drew-discard cannot re-discard same turn, layoff unrestricted (no prior-meld requirement), going-rummy = score×2 |
 | Gin | A.2 | 2P, 10 cards, ace low; first-upcard offered non-dealer→dealer→stock (A.2.2); no mid-turn melding (melds revealed only at knock/gin); knock at deadwood ≤10; gin = +20 + opp deadwood (no layoff vs gin); non-gin knock = opp lays off onto knocker's melds, knocker scores `opp_dw − knocker_dw`; undercut (opp_dw ≤ knocker_dw after layoff) = opp +10 + diff; stock-depletion (stock ≤ 2 after a no-knock discard) = hand cancelled, same dealer re-deals (A.2.3); box +20 per hand won, game ≥100, shutout +100 (`[BIC-G]`); winner deals next hand (A.2.2) |
-| 500 Rum | A.4 | 2-8P (1 deck ≤4P, else 2 decks), deal 13 (2P) else 7, ace high or low not both, A=15 (1 in A-2-3), pile dive (take all above selected, must use selected), lay off others' melds → self credit, score=melds−hand, target ≥500 |
+| 500 Rummy | A.4 | 2-8P (1 deck ≤4P, else 2 decks), deal 13 (2P) else 7, ace high or low not both, A=15 (1 in A-2-3), pile dive (take all above selected, must use selected), lay off others' melds → self credit, score=melds−hand, target ≥500 |
 
 Cite section IDs in code comments (e.g. `// rules.md A.1.6 step 4`).
 
@@ -211,7 +211,7 @@ Canonical rules only. No house rules are in scope.
 | Ace direction | Low only | A.2.7 |
 | Card scoring | A=1, 2-10=pip, JQK=10 | A.2.7 |
 
-### 500 Rum
+### 500 Rummy
 
 | Rule | Pick |
 | --- | --- |
@@ -270,7 +270,7 @@ create -> lobby -> playing -> ended -> destroyed
 - If only 1 active player remains in 3+P after forfeits: they win current hand.
 - Lobby disconnect: held 60s for reconnect via sessionId cookie. After 60s remove from lobby.
 
-## Engine FSM (basic + 500 rum)
+## Engine FSM (basic + 500 rummy)
 
 ```text
 state: { phase, turnPlayerId, drewFromDiscardId?, mustMeldCardId? }
@@ -298,7 +298,7 @@ discard(cardId):
   if hand.empty: end hand, score (going-rummy bonus ×2)
   else: advance turn, phase='draw'
 
---- 500 Rum ---
+--- 500 Rummy ---
 draw(from='stock'):
   require phase==='draw'; phase='meld'
 
@@ -320,7 +320,7 @@ meld(cardIds):
   phase stays 'meld'  ← multiple melds allowed per turn
 
 layoff(meldId, cardId):
-  (no own-meld requirement — 500 Rum allows immediate layoff onto anyone's meld)
+  (no own-meld requirement — 500 Rummy allows immediate layoff onto anyone's meld)
   validateMeld(targetMeld.cards + card)
   meldedBy[cardId] = playerId; if mustMeldCardId===cardId → mustMeldCardId=null
 
@@ -363,7 +363,7 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 | M3 | Wire engine to WS; play basic rummy hand 2 browsers | 3-5d |
 | M4 | Client polish: hand fan, drag-drop, discard, meld zone, chat | 4-6d |
 | M4.5 | Re-deal (multi-hand game); How to Play modal for Basic Rummy | 1-2d |
-| M5 | 500 Rum game variation (pile dive UX); How to Play modal for 500 Rum | 3-4d |
+| M5 | 500 Rummy game variation (pile dive UX); How to Play modal for 500 Rummy | 3-4d |
 | M6 | Gin game variation; How to Play modal for Gin | 2-3d |
 | M7 | Deploy: Cloudflare Tunnel + manual local host (no structured logs, no metrics) | <1d |
 | M8 | PixiJS card layer | 1-2w |
@@ -382,10 +382,10 @@ v1 = M1-M7. M8 after.
 - **Content shape per game variation:**
   - Objective — win condition (go out / knock / reach score target)
   - Turn flow — draw → meld/layoff (optional) → discard; note game-variation deviations
-  - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rum: pile dive
+  - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rummy: pile dive
   - Scoring — point values per card, how hand score is computed, game target
   - Active house rules — list only the locked picks from plan.md (e.g. ace low, layoff unrestricted, going-rummy ×2)
-- **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rum) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
+- **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rummy) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
 - **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
 - **No protocol change needed** — the game variation is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
 
@@ -419,18 +419,18 @@ v1 = M1-M7. M8 after.
 - **`createBasicGame` optional `firstPlayerIndex`.** When `undefined`, calls `rng(0, players.length)` (hi exclusive) to pick randomly. When provided explicitly, skips the RNG call — so the deck shuffle uses the same RNG sequence as before the parameter was added. All engine tests pass `0` explicitly to preserve pre-existing deck order.
 - **`isGameOver` in client store.** Set on `gameOver` event, cleared on `gameStarted`. `ScoreOverlay` reads it to show "Game Over!" vs "Hand Over" heading and "Play Again" vs "New Hand" button label.
 - **`finalHands` cleared on phase transition, not on `gameStarted`.** Clearing on `gameStarted` would wipe the card breakdown while the overlay is still visible (it disappears only when the subsequent `state` message sets `phase → draw`). The store clears `finalHands` when it detects `phase === 'ended' → phase !== 'ended'`.
-- **`sortCardsDesc` takes `pointsFor` parameter.** ScoreOverlay card sort: primary = scoring value desc (`pointsFor`), secondary = `RANK_INDEX` desc (tiebreaker within same-value group, e.g. K > Q > J > 10), tertiary = suit order (S > H > D > C). Keeping `pointsFor` as a caller-supplied function prevents conflating rank position with scoring value — critical for 500 Rum where Ace = 15 pts but `RANK_INDEX.A = 0`.
+- **`sortCardsDesc` takes `pointsFor` parameter.** ScoreOverlay card sort: primary = scoring value desc (`pointsFor`), secondary = `RANK_INDEX` desc (tiebreaker within same-value group, e.g. K > Q > J > 10), tertiary = suit order (S > H > D > C). Keeping `pointsFor` as a caller-supplied function prevents conflating rank position with scoring value — critical for 500 Rummy where Ace = 15 pts but `RANK_INDEX.A = 0`.
 - **Suit symbols in `ActionBar`.** The draw-from-discard button was rendering raw `'C'`/`'D'`/`'H'`/`'S'` from `discardTop.suit`. Fixed with `SUIT_SYMBOL` map (♣♦♥♠). All other runtime suit display was already using symbols via `Card.tsx`.
 - **Run meld display order.** `applyMeld` now sorts `cardIds` by `RANK_INDEX` after creating the meld (same fix that `applyLayoff` already had). Fixes melds displayed out of sequence when the player selects cards in non-ascending order.
 
 ## M5 implementation notes
 
 - **Ace direction inferred from meld shape, not declared.** Locked simplification of rules.md A.4.3: A-2-3 → ace plays low (1 pt in scoring), Q-K-A → ace plays high (15 pt), set of aces → 15 pt each, ace in hand → 15 pt. `runAceDirection(cards)` in `meld.ts` reads the run's neighbours (presence of `2` ⇒ low, presence of `K` ⇒ high). Removed the planned per-hand ace declaration UX entirely — no extra protocol surface needed.
-- **`MeldOptions.aceEitherEnd`** is the 500 Rum-specific knob in `meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap.
+- **`MeldOptions.aceEitherEnd`** is the 500 Rummy-specific knob in `meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap.
 - **`GameState.mustMeldCardId`** enforces rules.md A.4.4 pile-dive obligation: set to the selected card's id in `applyDrawFromPile`. `applyMeld`/`applyLayoff` clear it when the card is used. `applyDiscard` throws `ERR_MUST_USE_PILE_CARD` while non-null. **Distinct from simple top-discard draw:** `applyDraw {from:'discard'}` takes only the top card, sets `drewFromDiscardId` (cannot re-discard same turn), and does NOT set `mustMeldCardId` — matches standard rules.md A.4.4 (single top card has no must-use obligation). The unified-obligation house rule is host-configurable and currently off.
-- **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rum scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (harmless; its scoring doesn't read it).
-- **500 Rum allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` has no own-meld prerequisite (basic-only constraint, A.1.6 step 3 [WP], host-configurable house rule — currently off, no engine state needed). Phase stays at `'meld'` after a 500 Rum meld so the player can keep melding/laying off until they discard.
-- **PublicState gained `discardPile: Card[]` and `mustMeldCardId: string | null`.** Pile is always populated bottom-to-top; basic clients ignore it, 500 Rum reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak.
+- **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rummy scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (harmless; its scoring doesn't read it).
+- **500 Rummy allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` has no own-meld prerequisite (basic-only constraint, A.1.6 step 3 [WP], host-configurable house rule — currently off, no engine state needed). Phase stays at `'meld'` after a 500 Rummy meld so the player can keep melding/laying off until they discard.
+- **PublicState gained `discardPile: Card[]` and `mustMeldCardId: string | null`.** Pile is always populated bottom-to-top; basic clients ignore it, 500 Rummy reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak.
 - **`variantFns(v)` in `ws.ts`** routes per-variant engine fns. Replaces direct `basic.*` imports in handlers. `scripted-player.ts` dispatches the same way via `state.variant`. Adding Gin will only require a third branch in both files.
 - **Pile-dive picker (`PileDiveModal.tsx`)** renders the discardPile top-first. Hovering a card highlights every card that will be taken (selected card + everything above it in the pile). Click sends `{ t: 'drawFromPile', cardId }`.
 - **Multi-crossover game-over rule** (rules.md A.4.7: highest at crossover wins). Already handled by `handleHandEnd` — it picks the player with the highest cumulative `score` after the hand is scored, so two players crossing 500 in the same hand resolve correctly.

@@ -289,7 +289,7 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
 }
 
 // Card point values per variant. Basic / Gin: rules.md A.1.8 (ace = 1).
-// 500 Rum: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
+// 500 Rummy: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
 function cardPtsBasic(c: Card): number { return cardPoints(c, 1); }
 function cardPts500(c: Card): number { return cardPoints(c, 15); }
 function handPts(cards: Card[], ptsFn: (c: Card) => number): number {

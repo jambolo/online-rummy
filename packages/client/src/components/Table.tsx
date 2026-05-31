@@ -6,10 +6,10 @@ import CardComponent from "./Card";
 import PileDiveModal from "./PileDiveModal";
 import { t, sectionLabel } from "../theme/tokens";
 
-// 500 Rum meld options: ace-either-end (rules.md A.4.3).
+// 500 Rummy meld options: ace-either-end (rules.md A.4.3).
 const RUM500_OPTS = { aceHigh: false, roundTheCorner: false, aceEitherEnd: true } as const;
 
-// 500 Rum pile-dive preflight — checks if `selected` could anchor a run given the
+// 500 Rummy pile-dive preflight — checks if `selected` could anchor a run given the
 // other same-suit cards available. Mirror of server canUseSelectedInMeldOrLayoff
 // (packages/server/src/engine/variants/rum500.ts). UX hint only; server is authoritative.
 function canFormRunWith(others: Card[], selected: Card): boolean {
@@ -51,7 +51,7 @@ export default function Table() {
   const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
   const pileHasCards = publicState.discardPileSize > 0;
 
-  // 500 Rum interactive picker: only when it is the player's turn to draw.
+  // 500 Rummy interactive picker: only when it is the player's turn to draw.
   const interactive = is500 && canDraw;
 
   function drawStock() {

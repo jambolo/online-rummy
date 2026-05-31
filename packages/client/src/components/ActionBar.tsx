@@ -106,13 +106,13 @@ export default function ActionBar() {
     send({ t: "meld", cardIds: sel });
   }
 
-  // Layoff opts per game variation (mirrors server: basic ace-low, 500 Rum ace-either-end).
+  // Layoff opts per game variation (mirrors server: basic ace-low, 500 Rummy ace-either-end).
   const layoffOpts = is500
     ? { aceHigh: false, roundTheCorner: false, aceEitherEnd: true }
     : { aceHigh: false, roundTheCorner: false };
 
   // Could `card` currently be laid off onto a meld on the table? (non-gin only)
-  // Basic requires the player to already have a meld (rules.md A.1.6); 500 Rum does not (A.4.6).
+  // Basic requires the player to already have a meld (rules.md A.1.6); 500 Rummy does not (A.4.6).
   function canLayoffCard(card: Card): boolean {
     if (isGin) return false;
     if (!is500 && myMeldsCount === 0) return false;

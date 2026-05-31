@@ -11,14 +11,14 @@ interface Props {
   onPick?: (cardId: string, isTopCard: boolean) => void;
   onClose: () => void;
   // When provided, cards for which canPick(cardId) returns false are grayed out and not
-  // clickable. Used for 500 Rum pile-dive preflight (rules.md A.4.4) so the player cannot
+  // clickable. Used for 500 Rummy pile-dive preflight (rules.md A.4.4) so the player cannot
   // pick a deep card they cannot legally meld or lay off.
   canPick?: (cardId: string, idx: number) => boolean;
   // Read-only viewer (any-time discard pile inspection). No clicks, no highlight, no hint.
   readOnly?: boolean;
 }
 
-// 500 Rum (rules.md A.4.4): pile dive — pick any card from the discard pile; selected card
+// 500 Rummy (rules.md A.4.4): pile dive — pick any card from the discard pile; selected card
 // + every card above it goes to your hand, and the selected card must be used immediately.
 // Also reused as a read-only pile viewer (any variant, any time).
 export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly = false }: Props) {

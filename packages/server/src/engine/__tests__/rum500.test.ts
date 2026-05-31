@@ -359,7 +359,7 @@ describe('applyDrawFromPile', () => {
 
 describe('rum500 turn flow', () => {
   it('allows multiple melds in one turn', () => {
-    // 500 Rum rules silent on per-turn meld cap → permit (unlike basic)
+    // 500 Rummy rules silent on per-turn meld cap → permit (unlike basic)
     const state = twoPlayerGame();
     applyDraw(state, 'p1', 'stock');
     const setA = [c('9', 'C', 'a1'), c('9', 'D', 'a2'), c('9', 'H', 'a3')];
