@@ -15,7 +15,9 @@ export default function Home() {
   const notice = useAppStore((s) => s.notice);
   const dismissNotice = useAppStore((s) => s.dismissNotice);
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(
+    () => sessionStorage.getItem("playerName") ?? localStorage.getItem("playerName") ?? "",
+  );
   const [variant, setVariant] = useState<Variant>("basic");
   const [joinCode, setJoinCode] = useState("");
   const [mode, setMode] = useState<"create" | "join">("create");
@@ -24,6 +26,8 @@ export default function Home() {
     e.preventDefault();
     const n = name.trim();
     if (!n || !connected) return;
+    sessionStorage.setItem("playerName", n);
+    localStorage.setItem("playerName", n);
     send({ t: "create", variant, name: n });
   }
 
@@ -32,6 +36,8 @@ export default function Home() {
     const n = name.trim();
     const code = joinCode.trim().toUpperCase();
     if (!n || !code || !connected) return;
+    sessionStorage.setItem("playerName", n);
+    localStorage.setItem("playerName", n);
     send({ t: "join", roomCode: code, name: n });
   }
 
