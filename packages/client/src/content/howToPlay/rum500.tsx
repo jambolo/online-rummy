@@ -1,10 +1,11 @@
 // rules.md A.4 + plan.md "House rule picks > 500 Rummy"
 import { t } from "../../theme/tokens";
+import { variationAccent } from "../../theme/variations";
 
 export default function Rum500Rules() {
   const h3Style: React.CSSProperties = {
     fontSize: 14,
-    color: t.accentSelf,
+    color: variationAccent("rum500"),
     marginBottom: 6,
     marginTop: 0,
   };

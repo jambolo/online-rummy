@@ -11,6 +11,7 @@ import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
 import Modal from "../components/Modal";
 import { t } from "../theme/tokens";
+import { variationAccent, variationLabel } from "../theme/variations";
 import { useBreakpoint } from "../theme/useBreakpoint";
 
 // Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
@@ -212,12 +213,16 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: "center" }}>Room {roomCode}</h2>
         <div
           style={{
-            color: t.text60,
             fontSize: 13,
             marginBottom: 20,
           }}
         >
-          {variant} · share code with friends
+          {variant && (
+            <span style={{ color: variationAccent(variant), fontWeight: "bold" }}>
+              {variationLabel(variant)}
+            </span>
+          )}
+          <span style={{ color: t.text60 }}> · share code with friends</span>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -401,6 +406,17 @@ function ScoreOverlay() {
       <h2 id="score-overlay-title" style={{ textAlign: "center", marginBottom: 4 }}>
         {isGameOver ? "Game Over!" : "Hand Over"}
       </h2>
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 12,
+          color: variationAccent(publicState.variant),
+          fontWeight: "bold",
+          marginBottom: 2,
+        }}
+      >
+        {variationLabel(publicState.variant)}
+      </div>
       <div
         style={{
           textAlign: "center",
@@ -660,6 +676,21 @@ export default function Room() {
           alt="Rum Runner"
           style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0 }}
         />
+        {/* NS-7: game-variation identity chip (friendly label + accent). */}
+        <span
+          style={{
+            alignSelf: "center",
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: "bold",
+            color: variationAccent(publicState.variant),
+            border: `1px solid ${variationAccent(publicState.variant)}`,
+            borderRadius: t.radiusChip,
+            padding: "3px 8px",
+          }}
+        >
+          {variationLabel(publicState.variant)}
+        </span>
         <div style={{ flex: 1 }}>
           <OpponentStrip />
         </div>

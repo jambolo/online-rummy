@@ -2,12 +2,9 @@ import { useState } from "react";
 import type { Variant } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import { t } from "../theme/tokens";
+import { variationLabel } from "../theme/variations";
 
-const VARIANT_LABELS: Record<Variant, string> = {
-  basic: "Classic Rummy",
-  gin: "Gin Rummy",
-  rum500: "500 Rummy",
-};
+const VARIANTS: Variant[] = ["basic", "gin", "rum500"];
 
 export default function Home() {
   const connected = useAppStore((s) => s.connected);
@@ -171,9 +168,9 @@ export default function Home() {
               onChange={(e) => setVariant(e.target.value as Variant)}
               style={{ width: "100%", marginBottom: 16 }}
             >
-              {(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => (
+              {VARIANTS.map((v) => (
                 <option key={v} value={v}>
-                  {VARIANT_LABELS[v]}
+                  {variationLabel(v)}
                 </option>
               ))}
             </select>

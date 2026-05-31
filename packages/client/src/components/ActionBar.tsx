@@ -3,6 +3,7 @@ import type { Card, Suit } from "@online-rummy/shared";
 import { cardPoints, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import { t } from "../theme/tokens";
+import { variationAccent } from "../theme/variations";
 import { useBreakpoint } from "../theme/useBreakpoint";
 import Modal from "./Modal";
 
@@ -186,7 +187,9 @@ export default function ActionBar() {
         style={{
           fontSize: 13,
           fontWeight: "bold",
-          color: isMyTurn ? t.accentPositive : t.text55,
+          // My turn keeps the green turn cue [V7]; otherwise tint with the
+          // game-variation accent (NS-7 identity).
+          color: isMyTurn ? t.accentPositive : variationAccent(publicState.variant),
           minWidth: isMobile ? 0 : 160,
           flexBasis: isMobile ? "100%" : "auto",
         }}

@@ -4,17 +4,12 @@ import Rum500Rules from "../content/howToPlay/rum500";
 import GinRules from "../content/howToPlay/gin";
 import Modal from "./Modal";
 import { t } from "../theme/tokens";
+import { variationLabel } from "../theme/variations";
 
 interface Props {
   variant: Variant;
   onClose: () => void;
 }
-
-const TITLES: Record<Variant, string> = {
-  basic: "Classic Rummy",
-  gin: "Gin Rummy",
-  rum500: "500 Rummy",
-};
 
 export default function HowToPlayModal({ variant, onClose }: Props) {
   return (
@@ -40,7 +35,7 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
         }}
       >
         <h2 id="how-to-play-title" style={{ fontSize: 18, margin: 0 }}>
-          How to Play — {TITLES[variant]}
+          How to Play — {variationLabel(variant)}
         </h2>
         <button
           onClick={onClose}

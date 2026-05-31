@@ -46,6 +46,11 @@ export const t = {
   accentMeldCredit:    'var(--accent-meld-credit)',
   accentDeadwoodBadge: 'var(--accent-deadwood-badge)',
 
+  // Per-game-variation identity accents (NS-7) — distinct from semantic accents.
+  variationBasic:  'var(--variation-basic)',
+  variationRum500: 'var(--variation-rum500)',
+  variationGin:    'var(--variation-gin)',
+
   // Radius (numeric — React CSSProperties takes px numbers)
   radiusCard:    12,
   radiusPanel:   8,

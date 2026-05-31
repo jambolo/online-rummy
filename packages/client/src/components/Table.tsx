@@ -5,6 +5,7 @@ import { useAppStore } from "../store";
 import CardComponent from "./Card";
 import PileDiveModal from "./PileDiveModal";
 import { t, sectionLabel } from "../theme/tokens";
+import { variationAccent } from "../theme/variations";
 
 // 500 Rummy meld options: ace-either-end (rules.md A.4.3).
 const RUM500_OPTS = { aceHigh: false, roundTheCorner: false, aceEitherEnd: true } as const;
@@ -47,6 +48,7 @@ export default function Table() {
   // accept-upcard action (Gin-only; basic/500Rum never enter this phase).
   const upcardOfferPhase = publicState.phase === "firstUpcardOffer";
   const is500 = publicState.variant === "rum500";
+  const accent = variationAccent(publicState.variant);
   const canDraw = isMyTurn && drawPhase;
   const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
   const pileHasCards = publicState.discardPileSize > 0;
@@ -100,7 +102,7 @@ export default function Table() {
     <div style={{ display: "flex", gap: 24, alignItems: "flex-end" }}>
       {/* Stock pile */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ ...sectionLabel, marginBottom: 4 }}>
+        <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>
           Stock ({publicState.stockSize})
         </div>
         <div
@@ -132,7 +134,7 @@ export default function Table() {
 
       {/* Discard pile */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ ...sectionLabel, marginBottom: 4 }}>
+        <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>
           Discard ({publicState.discardPileSize})
           {is500 && publicState.discardPileSize > 1 && " · dive"}
         </div>

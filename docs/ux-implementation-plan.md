@@ -6,7 +6,7 @@
 >
 > **Authoritative sources (read before editing):** [docs/ux-design.md](ux-design.md) (the UIDD — binding §4 guardrails), [docs/branding.md](branding.md) (NS-2 visual direction), [docs/plan.md](plan.md) (house-rule picks, architecture), [docs/rules.md](rules.md) (rule citations). When this plan and the UIDD disagree, the UIDD wins; update both in the same change (UIDD rule [E8]).
 
-**Progress (as of 2026-05-30):** Phase A (NS-1 tokens) and Phase B (NS-6 a11y) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3 landed (commits 5073f18, 9d8a5de). All other phases (NS-7, NS-2, NS-4, NS-8, NS-5, NS-3, smaller gaps) not started. See §4 master checklist.
+**Progress (as of 2026-05-30):** Phase A (NS-1 tokens), Phase B (NS-6 a11y), Phase C (NS-4 responsive), and Phase D (NS-7 variation theming) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3, T-NS4-1, T-NS4-2, T-NS7-1, T-NS7-2 landed (commits 5073f18, 9d8a5de, 0cc149b, e6a1fb7). Remaining phases (NS-2, NS-8, NS-5, NS-3, smaller gaps) not started. See §4 master checklist.
 
 ---
 
@@ -183,14 +183,17 @@ This is the single source of truth for the token migration. Names are the semant
 
 | Token | Value | Meaning |
 | --- | --- | --- |
-| `--accent-self` | `#7fd4ff` cyan | "(you)" tag, chat sender, Basic/500 rule headings |
+| `--accent-self` | `#7fd4ff` cyan | "(you)" tag, chat sender |
 | `--accent-host` | `#ffd700` gold | "host" tag |
-| `--accent-attention` | `#ffd166` amber | mustMeld outline, pile-dive highlight, Gin rule headings, knock hints, **house-rule deviation chips (NS-8)** |
+| `--accent-attention` | `#ffd166` amber | mustMeld outline, pile-dive highlight, knock hints, **house-rule deviation chips (NS-8)** |
 | `--accent-positive` | `#7fff7f` green | active-turn outline, positive delta, deadwood-OK |
 | `--accent-negative` | `#ff7f7f` salmon | negative delta, "forfeited", Leave text |
 | `--accent-gin` | `#6a0dad` purple | "Gin!" button |
 | `--accent-meld-credit` | `#2a7a2a` | "+pts" badge on melded cards |
 | `--accent-deadwood-badge` | `#555` | pts badge on unmelded cards |
+| `--variation-basic` | `#7fd4ff` cyan | Classic Rummy identity accent (NS-7) |
+| `--variation-rum500` | `#ff9f5a` orange | 500 Rummy identity accent (NS-7) |
+| `--variation-gin` | `#ffd166` amber | Gin Rummy identity accent (NS-7) |
 
 ### 3.5 Type & space
 
@@ -363,10 +366,10 @@ depends: T-NS1-1
 files:   + src/theme/variations.ts
 steps:
   1. Export VARIATION_ACCENT: Record<Variant, { accent: string; label: string }>.
-     - basic:  accent var(--accent-self) (cyan), label "Classic Rummy"
-     - rum500: label "500 Rummy"  [DECISION: keep cyan (matches current pairing) OR assign a
-                distinct accent for true per-variation identity — default keep cyan, flag in PR]
-     - gin:    accent var(--accent-attention) (amber), label "Gin Rummy"
+     Each variation has a DEDICATED identity token (decoupled from semantic accents):
+     - basic:  accent var(--variation-basic) (cyan), label "Classic Rummy"
+     - rum500: accent var(--variation-rum500) (orange), label "500 Rummy"
+     - gin:    accent var(--variation-gin) (amber), label "Gin Rummy"
   2. Export a helper variationAccent(variant) and variationLabel(variant).
 guards:  terminology — label strings use friendly names; code keys stay 'basic'|'rum500'|'gin'.
 accept:  single import point for per-variation accent + label.
@@ -683,12 +686,12 @@ Phase B — NS-6 a11y
   [x] T-NS6-1 modal primitive (focus trap, role, Esc)     (commit 9d8a5de; issue #20)
   [x] T-NS6-2 non-color cues                              (commit 9d8a5de; issue #21)
   [x] T-NS6-3 reduced-motion + keyboard reorder           (commit 9d8a5de; issues #22,#23)
-Phase C — NS-4 responsive
+Phase C — NS-4 responsive                                (commit 0cc149b; issues #10,#11,#12,#13)
   [x] T-NS4-1 breakpoint helper + Room reflow
   [x] T-NS4-2 chat drawer + ActionBar fit
-Phase D — NS-7 variation theming
-  [ ] T-NS7-1 accent map + friendly labels
-  [ ] T-NS7-2 apply across surfaces
+Phase D — NS-7 variation theming                         (commit e6a1fb7; issues #25,#26,#27)
+  [x] T-NS7-1 accent map + friendly labels
+  [x] T-NS7-2 apply across surfaces
 Phase E — NS-2 speakeasy re-skin
   [ ] T-NS2-1 typography faces
   [ ] T-NS2-2 re-skin token values + card back + copy

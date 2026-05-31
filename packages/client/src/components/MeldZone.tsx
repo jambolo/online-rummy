@@ -3,6 +3,7 @@ import { validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
 import { t, sectionLabel } from "../theme/tokens";
+import { variationAccent } from "../theme/variations";
 
 // Can `newCard` extend `meld`? Uses shared validateMeld with gin opts (ace low only).
 function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
@@ -223,7 +224,7 @@ export default function MeldZone() {
 
   return (
     <div>
-      <div style={{ ...sectionLabel, marginBottom: 6 }}>
+      <div style={{ ...sectionLabel, color: variationAccent(publicState.variant), marginBottom: 6 }}>
         Melds on table
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

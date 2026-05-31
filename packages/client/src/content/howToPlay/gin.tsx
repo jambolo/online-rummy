@@ -1,10 +1,11 @@
 // rules.md A.2 + plan.md "House rule picks > Gin Rummy"
 import { t } from "../../theme/tokens";
+import { variationAccent } from "../../theme/variations";
 
 export default function GinRules() {
   const h3Style: React.CSSProperties = {
     fontSize: 14,
-    color: t.accentAttention,
+    color: variationAccent("gin"),
     marginBottom: 6,
     marginTop: 0,
   };
