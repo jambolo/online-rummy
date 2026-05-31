@@ -137,17 +137,43 @@ export default function Table() {
           {is500 && publicState.discardPileSize > 1 && " · dive"}
         </div>
         {publicState.discardTop ? (
-          <CardComponent
-            card={publicState.discardTop}
-            {...(pileHasCards
-              ? {
-                  onClick: handleDiscardClick,
-                  style: canDrawDiscard
-                    ? { boxShadow: "0 0 10px rgba(74,158,255,0.6)" } // NS-1 one-off
-                    : { cursor: "pointer" },
-                }
-              : {})}
-          />
+          <div style={{ position: "relative", display: "inline-block" }}>
+            {/* 500 Rummy: edges of buried cards peek out to the right so pile depth
+                is visible without opening the dive modal. */}
+            {is500 &&
+              Array.from({
+                length: Math.min(publicState.discardPileSize - 1, 6),
+              }).map((_, i) => (
+                <div
+                  key={i}
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 7 * (i + 1),
+                    width: 56,
+                    height: 80,
+                    border: `2px solid ${t.cardBorder}`,
+                    borderRadius: t.radiusControl,
+                    background: t.cardFace,
+                    // Closer edges (smaller i) paint above deeper ones; top card
+                    // sits above all (zIndex below).
+                    zIndex: 100 - (i + 1),
+                  }}
+                />
+              ))}
+            <CardComponent
+              card={publicState.discardTop}
+              {...(pileHasCards
+                ? {
+                    onClick: handleDiscardClick,
+                    style: canDrawDiscard
+                      ? { position: "relative", zIndex: 100, boxShadow: "0 0 10px rgba(74,158,255,0.6)" } // NS-1 one-off
+                      : { position: "relative", zIndex: 100, cursor: "pointer" },
+                  }
+                : { style: { position: "relative", zIndex: 100 } })}
+            />
+          </div>
         ) : (
           <div
             style={{
