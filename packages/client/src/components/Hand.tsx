@@ -15,6 +15,7 @@ import {
 import type { Card } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
+import { t, sectionLabel } from "../theme/tokens";
 
 interface SortableCardProps {
   card: Card;
@@ -44,7 +45,7 @@ function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
         transform: transformCss,
         transition,
         opacity: isDragging ? 0.4 : 1,
-        zIndex: isDragging ? 10 : undefined,
+        zIndex: isDragging ? t.zCardDrag : undefined,
       }}
       {...attributes}
       {...listeners}
@@ -56,9 +57,9 @@ function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
         {...(mustMeld
           ? {
               style: {
-                outline: "3px solid #ffd166",
+                outline: `3px solid ${t.accentAttention}`,
                 outlineOffset: 1,
-                borderRadius: 6,
+                borderRadius: t.radiusControl,
               },
             }
           : {})}
@@ -103,20 +104,12 @@ export default function Hand() {
   return (
     <div
       style={{
-        background: "rgba(0,0,0,0.2)",
-        borderRadius: 8,
+        background: t.surfacePanelMuted,
+        borderRadius: t.radiusPanel,
         padding: "12px 16px",
       }}
     >
-      <div
-        style={{
-          fontSize: 11,
-          color: "rgba(255,255,255,0.6)",
-          marginBottom: 8,
-          textTransform: "uppercase",
-          letterSpacing: 1,
-        }}
-      >
+      <div style={{ ...sectionLabel, marginBottom: 8 }}>
         Your Hand ({ordered.length})
       </div>
       <DndContext

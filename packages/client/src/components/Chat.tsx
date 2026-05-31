@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { useAppStore } from "../store";
+import { t, sectionLabel } from "../theme/tokens";
 
 export default function Chat() {
   const chatMessages = useAppStore((s) => s.chatMessages);
@@ -25,21 +26,13 @@ export default function Chat() {
         display: "flex",
         flexDirection: "column",
         width: 220,
-        background: "rgba(0,0,0,0.25)",
-        borderRadius: 8,
+        background: t.surfacePanelMuted, // NS-1 one-off: was 0.25; normalized to surfacePanelMuted (0.2)
+        borderRadius: t.radiusPanel,
         overflow: "hidden",
         flexShrink: 0,
       }}
     >
-      <div
-        style={{
-          fontSize: 11,
-          color: "rgba(255,255,255,0.5)",
-          padding: "8px 10px 4px",
-          textTransform: "uppercase",
-          letterSpacing: 1,
-        }}
-      >
+      <div style={{ ...sectionLabel, padding: "8px 10px 4px" }}>
         Chat
       </div>
       <div
@@ -54,23 +47,23 @@ export default function Chat() {
         }}
       >
         {chatMessages.length === 0 && (
-          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>
+          <span style={{ color: t.text30, fontSize: 12 }}>
             No messages yet
           </span>
         )}
         {chatMessages.map((msg, i) => (
           <div key={i} style={{ fontSize: 12, wordBreak: "break-word" }}>
-            <span style={{ color: "#7fd4ff", fontWeight: "bold" }}>
+            <span style={{ color: t.accentSelf, fontWeight: "bold" }}>
               {msg.from}:
             </span>{" "}
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>{msg.text}</span>
+            <span style={{ color: t.text85 }}>{msg.text}</span>
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
       <form
         onSubmit={submit}
-        style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,0.1)" }} // NS-1 one-off: subtle separator
       >
         <input
           value={text}
@@ -81,7 +74,7 @@ export default function Chat() {
             flex: 1,
             background: "transparent",
             border: "none",
-            color: "#fff",
+            color: t.text100,
             padding: "8px 10px",
             outline: "none",
             fontSize: 12,
@@ -93,7 +86,7 @@ export default function Chat() {
           style={{
             borderRadius: 0,
             padding: "8px 12px",
-            background: "rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.08)", // NS-1 one-off: send button bg
             fontSize: 12,
           }}
         >

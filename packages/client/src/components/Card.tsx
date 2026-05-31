@@ -1,4 +1,5 @@
 import type { Card, Suit } from "@online-rummy/shared";
+import { t } from "../theme/tokens";
 
 const SUIT_SYMBOL: Record<Suit, string> = {
   C: "♣",
@@ -32,8 +33,8 @@ export default function CardComponent({
   const sym = SUIT_SYMBOL[card.suit];
 
   const cornerStyle: React.CSSProperties = compact
-    ? { fontWeight: "bold", lineHeight: 1 }          // inherits fontSize from outer (set by caller)
-    : { fontSize: 16, fontWeight: "bold", lineHeight: 1 }; // hardcoded for full-size
+    ? { fontWeight: "bold", lineHeight: 1 }
+    : { fontSize: 16, fontWeight: "bold", lineHeight: 1 };
 
   return (
     <div
@@ -43,10 +44,10 @@ export default function CardComponent({
         height: 80,
         // textAlign: left prevents inheriting "center" from Table wrappers.
         textAlign: "left",
-        border: `2px solid ${selected ? "#4a9eff" : "#bbb"}`,
-        borderRadius: 6,
-        background: dimmed ? "#e8e8e8" : "#fff",
-        color: isRed ? "#c0392b" : "#111",
+        border: `2px solid ${selected ? t.focusRing : t.cardBorder}`,
+        borderRadius: t.radiusControl,
+        background: dimmed ? t.cardFaceDimmed : t.cardFace,
+        color: isRed ? t.cardRed : t.cardBlack,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -56,8 +57,8 @@ export default function CardComponent({
         transform: selected ? "translateY(-10px)" : "none",
         transition: "transform 0.1s, border-color 0.1s, box-shadow 0.1s",
         boxShadow: selected
-          ? "0 4px 12px rgba(74,158,255,0.5)"
-          : "1px 2px 4px rgba(0,0,0,0.25)",
+          ? "0 4px 12px rgba(74,158,255,0.5)" // NS-1 one-off: focus-ring at 50% opacity
+          : "1px 2px 4px rgba(0,0,0,0.25)",    // NS-1 one-off: card drop shadow
         opacity: dimmed ? 0.5 : 1,
         flexShrink: 0,
         ...style,
@@ -70,7 +71,7 @@ export default function CardComponent({
 
       {/* Center suit — full-size only */}
       {!compact && (
-        <div style={{ fontSize: 30, textAlign: "center", lineHeight: 1 }}>
+        <div style={{ fontSize: 30, textAlign: "center", lineHeight: 1 }}> {/* NS-1 one-off: 30px not in type scale */}
           {sym}
         </div>
       )}

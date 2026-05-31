@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Card } from "@online-rummy/shared";
 import CardComponent from "./Card";
+import { t } from "../theme/tokens";
 
 interface Props {
   pile: Card[];
@@ -24,8 +25,6 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
   // Pile is stored bottom-to-top in protocol; render top-first for natural picking.
   const ordered = [...pile].reverse();
   const reverseIdx = (i: number) => pile.length - 1 - i;
-  // Top card is index 0 here. In 500 Rum, top-only pick degrades to a plain top-card
-  // draw (no must-meld) — see rules.md A.4.4.
   const isTop = (i: number) => i === 0;
   const willTake = (i: number) => !readOnly && hoverIdx !== null && i <= hoverIdx;
   const pickable = (i: number, c: Card) =>
@@ -42,24 +41,24 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: t.scrim,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 200,
+        zIndex: t.zModal,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: "#1a2a4a",
-          border: "2px solid rgba(255,255,255,0.2)",
-          borderRadius: 12,
+          background: t.surfaceModalNavy,
+          border: `2px solid ${t.borderModal}`,
+          borderRadius: t.radiusCard,
           padding: 24,
           width: "min(720px, calc(100vw - 32px))",
           maxHeight: "80vh",
           overflow: "auto",
-          color: "#fff",
+          color: t.text100,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -81,7 +80,7 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
               fontSize: 22,
               padding: "0 6px",
               lineHeight: 1,
-              color: "rgba(255,255,255,0.6)",
+              color: t.text60,
               cursor: "pointer",
             }}
           >
@@ -91,7 +90,7 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
         <div
           style={{
             fontSize: 12,
-            color: "rgba(255,255,255,0.55)",
+            color: t.text55,
             marginBottom: 14,
           }}
         >
@@ -121,10 +120,10 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
                   cursor: readOnly ? "default" : ok ? "pointer" : "not-allowed",
                   opacity: !readOnly && !ok ? 0.35 : 1,
                   outline: highlight
-                    ? "3px solid #ffd166"
+                    ? `3px solid ${t.accentAttention}`
                     : "3px solid transparent",
                   outlineOffset: 1,
-                  borderRadius: 8,
+                  borderRadius: 8, // NS-1 one-off: wrapper radius, between panel(8) and card(12)
                   transition: "outline-color 0.1s, opacity 0.1s",
                 }}
                 title={
@@ -147,7 +146,7 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
             style={{
               marginTop: 12,
               fontSize: 12,
-              color: "#ffd166",
+              color: t.accentAttention,
             }}
           >
             {isTop(hoverIdx)

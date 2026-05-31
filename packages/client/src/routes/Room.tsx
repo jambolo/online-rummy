@@ -9,6 +9,7 @@ import MeldZone from "../components/MeldZone";
 import ActionBar from "../components/ActionBar";
 import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
+import { t } from "../theme/tokens";
 
 // Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
 function ConfirmModal({
@@ -29,18 +30,18 @@ function ConfirmModal({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: t.scrim,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 200,
+        zIndex: t.zModal,
       }}
     >
       <div
         style={{
-          background: "#1a4a1a",
-          border: "2px solid rgba(255,255,255,0.2)",
-          borderRadius: 12,
+          background: t.surfaceModalGreen,
+          border: `2px solid ${t.borderModal}`,
+          borderRadius: t.radiusCard,
           padding: 28,
           width: 320,
           textAlign: "center",
@@ -52,11 +53,11 @@ function ConfirmModal({
             onClick={onCancel}
             style={{
               flex: 1,
-              background: "rgba(255,255,255,0.1)",
-              border: "1px solid rgba(255,255,255,0.2)",
-              color: "#fff",
+              background: "rgba(255,255,255,0.1)", // NS-1 one-off: cancel button bg
+              border: `1px solid ${t.borderModal}`,
+              color: t.text100,
               padding: "8px 0",
-              borderRadius: 6,
+              borderRadius: t.radiusControl,
               cursor: "pointer",
             }}
           >
@@ -66,11 +67,11 @@ function ConfirmModal({
             onClick={onConfirm}
             style={{
               flex: 1,
-              background: "rgba(174,42,26,0.85)",
-              border: "1px solid rgba(174,42,26,1)",
-              color: "#fff",
+              background: "rgba(174,42,26,0.85)", // NS-1 one-off: btn-danger at 85%
+              border: "1px solid rgba(174,42,26,1)", // NS-1 one-off: btn-danger solid
+              color: t.text100,
               padding: "8px 0",
-              borderRadius: 6,
+              borderRadius: t.radiusControl,
               cursor: "pointer",
             }}
           >
@@ -93,11 +94,11 @@ function LeaveButton({ style }: { style?: React.CSSProperties }) {
         onClick={() => setConfirming(true)}
         style={{
           background: "transparent",
-          border: "1px solid rgba(255,127,127,0.4)",
-          color: "rgba(255,127,127,0.85)",
+          border: "1px solid rgba(255,127,127,0.4)", // NS-1 one-off: accent-negative at 40%
+          color: "rgba(255,127,127,0.85)",            // NS-1 one-off: accent-negative at 85%
           fontSize: 12,
           padding: "4px 10px",
-          borderRadius: 5,
+          borderRadius: 5, // NS-1 one-off: between chip(4) and control(6)
           cursor: "pointer",
           flexShrink: 0,
           ...style,
@@ -118,7 +119,6 @@ function LeaveButton({ style }: { style?: React.CSSProperties }) {
 }
 
 // Prompt shown when another player has gone silent past the disconnect threshold.
-// "Cancel Game" tears the game down for everyone; "Keep Waiting" snoozes the warning.
 function DisconnectWarningModal() {
   const warning = useAppStore((s) => s.disconnectWarning);
   const leaveGame = useAppStore((s) => s.leaveGame);
@@ -150,8 +150,8 @@ function OpponentStrip() {
         <div
           key={p.id}
           style={{
-            background: "rgba(0,0,0,0.2)",
-            borderRadius: 6,
+            background: t.surfacePanelMuted,
+            borderRadius: t.radiusControl,
             padding: "6px 12px",
             display: "flex",
             gap: 10,
@@ -159,22 +159,22 @@ function OpponentStrip() {
             opacity: p.status === "forfeited" ? 0.45 : 1,
             outline:
               publicState.turnPlayerId === p.id
-                ? "2px solid #7fff7f"
+                ? `2px solid ${t.accentPositive}`
                 : "none",
           }}
         >
           <span style={{ fontWeight: "bold", fontSize: 14 }}>{p.name}</span>
           {p.id === myPlayerId && (
-            <span style={{ fontSize: 11, color: "#7fd4ff" }}>you</span>
+            <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>
           )}
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+          <span style={{ fontSize: 12, color: t.text60 }}>
             {p.handCount} cards
           </span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+          <span style={{ fontSize: 12, color: t.text60 }}>
             {p.score}pts
           </span>
           {p.status === "forfeited" && (
-            <span style={{ fontSize: 11, color: "#ff7f7f" }}>forfeited</span>
+            <span style={{ fontSize: 11, color: t.accentNegative }}>forfeited</span>
           )}
         </div>
       ))}
@@ -204,8 +204,8 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
     >
       <div
         style={{
-          background: "rgba(0,0,0,0.35)",
-          borderRadius: 12,
+          background: t.surfacePanel,
+          borderRadius: t.radiusCard,
           padding: 32,
           width: 360,
         }}
@@ -218,7 +218,7 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: "center" }}>Room {roomCode}</h2>
         <div
           style={{
-            color: "rgba(255,255,255,0.6)",
+            color: t.text60,
             fontSize: 13,
             marginBottom: 20,
           }}
@@ -235,15 +235,15 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
                 gap: 8,
                 alignItems: "center",
                 padding: "6px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.08)",
+                borderBottom: "1px solid rgba(255,255,255,0.08)", // NS-1 one-off: subtle row divider
               }}
             >
               <span style={{ flex: 1 }}>{p.name}</span>
               {p.id === hostId && (
-                <span style={{ fontSize: 11, color: "#ffd700" }}>host</span>
+                <span style={{ fontSize: 11, color: t.accentHost }}>host</span>
               )}
               {p.id === myPlayerId && (
-                <span style={{ fontSize: 11, color: "#7fd4ff" }}>you</span>
+                <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>
               )}
             </div>
           ))}
@@ -262,7 +262,7 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           <div
             style={{
               textAlign: "center",
-              color: "rgba(255,255,255,0.5)",
+              color: t.text50,
               fontSize: 13,
             }}
           >
@@ -276,11 +276,11 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
             width: "100%",
             marginTop: 12,
             background: "transparent",
-            border: "1px solid rgba(255,255,255,0.2)",
-            color: "rgba(255,255,255,0.6)",
+            border: `1px solid ${t.borderModal}`,
+            color: t.text60,
             fontSize: 13,
             padding: "8px 0",
-            borderRadius: 6,
+            borderRadius: t.radiusControl,
             cursor: "pointer",
           }}
         >
@@ -303,9 +303,6 @@ function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
   return cards.reduce((s, c) => s + ptsFn(c), 0);
 }
 const SUIT_ORDER: Record<string, number> = { S: 3, H: 2, D: 1, C: 0 };
-// pointsFor: variant-specific scoring value (e.g. Ace=1 basic, Ace=15 500rum)
-// RANK_INDEX: positional sequence A=0..K=12, always fixed — used only as tiebreaker
-//             when two cards share the same scoring value (e.g. K/Q/J/10 all = 10pts)
 function sortCardsDesc(cards: Card[], pointsFor: (c: Card) => number): Card[] {
   return [...cards].sort((a, b) => {
     const pts = pointsFor(b) - pointsFor(a);
@@ -345,25 +342,25 @@ function ScoreOverlay() {
         style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(0,0,0,0.65)",
+          background: t.scrim,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 100,
+          zIndex: t.zScoreOverlay,
         }}
       >
         <div
           style={{
-            background: "#1a4a1a",
-            border: "2px solid rgba(255,255,255,0.2)",
-            borderRadius: 12,
+            background: t.surfaceModalGreen,
+            border: `2px solid ${t.borderModal}`,
+            borderRadius: t.radiusCard,
             padding: 32,
             width: 340,
             textAlign: "center",
           }}
         >
           <h2 style={{ marginBottom: 8 }}>Hand Cancelled</h2>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: t.text70, marginBottom: 20 }}>
             Stock ran low before anyone knocked. No score this hand — same dealer re-deals.
           </div>
           {sorted.map((p) => (
@@ -373,7 +370,7 @@ function ScoreOverlay() {
                 display: "flex",
                 justifyContent: "space-between",
                 padding: "6px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
                 fontSize: 13,
               }}
             >
@@ -394,7 +391,7 @@ function ScoreOverlay() {
               style={{
                 textAlign: "center",
                 marginTop: 20,
-                color: "rgba(255,255,255,0.5)",
+                color: t.text50,
                 fontSize: 13,
               }}
             >
@@ -414,18 +411,18 @@ function ScoreOverlay() {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: t.scrim,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 100,
+        zIndex: t.zScoreOverlay,
       }}
     >
       <div
         style={{
-          background: "#1a4a1a",
-          border: "2px solid rgba(255,255,255,0.2)",
-          borderRadius: 12,
+          background: t.surfaceModalGreen,
+          border: `2px solid ${t.borderModal}`,
+          borderRadius: t.radiusCard,
           padding: 32,
           width: 340,
         }}
@@ -437,7 +434,7 @@ function ScoreOverlay() {
           style={{
             textAlign: "center",
             fontSize: 12,
-            color: "rgba(255,255,255,0.5)",
+            color: t.text50,
             marginBottom: 20,
           }}
         >
@@ -458,7 +455,7 @@ function ScoreOverlay() {
               key={p.id}
               style={{
                 padding: "10px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
               }}
             >
               {/* Name + scores row */}
@@ -481,10 +478,10 @@ function ScoreOverlay() {
                     style={{
                       color:
                         delta > 0
-                          ? "#7fff7f"
+                          ? t.accentPositive
                           : delta < 0
-                            ? "#ff7f7f"
-                            : "rgba(255,255,255,0.4)",
+                            ? t.accentNegative
+                            : t.text40,
                       fontSize: 13,
                     }}
                   >
@@ -500,9 +497,9 @@ function ScoreOverlay() {
                 </span>
               </div>
 
-              {/* Gin result — shows knock/gin/undercut label and deadwood for each player */}
+              {/* Gin result */}
               {isGin && ginInfo && (
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>
+                <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
                   {p.id === ginInfo.knockerId
                     ? ginInfo.result === "gin"
                       ? `Gin! — 0 deadwood (+20 gin bonus, +20 box)`
@@ -514,23 +511,14 @@ function ScoreOverlay() {
                       : `${ginInfo.defenderDeadwood} deadwood`}
                 </div>
               )}
-              {/* Score explanation — basic only; 500 Rum delta covers many sources */}
+              {/* Score explanation — basic only */}
               {!is500 && !isGin && isWinner && delta > 0 && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "rgba(255,255,255,0.5)",
-                    marginTop: 3,
-                  }}
-                >
+                <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
                   Won hand — scored {delta} pts from opponents' unmelded cards
                 </div>
               )}
 
-              {/* Melded cards credited to this player (rules.md A.4.6 — layoffs credit
-                  the placer, not the meld owner). Shown for all variants; basic uses
-                  same placer == owner. Server pre-computes per-card pts (500 Rum ace
-                  varies by run direction). */}
+              {/* Melded cards credited to this player */}
               {(() => {
                 const credited = [...(meldCredits[p.id] ?? [])].sort(
                   (a, b) => b.pts - a.pts,
@@ -539,13 +527,7 @@ function ScoreOverlay() {
                 const meldedPts = credited.reduce((s, x) => s + x.pts, 0);
                 return (
                   <div style={{ marginTop: 6 }}>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "rgba(255,255,255,0.5)",
-                        marginBottom: 4,
-                      }}
-                    >
+                    <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
                       {p.id === myPlayerId ? "Your" : `${p.name}'s`} melded cards (+{meldedPts} pts):
                     </div>
                     <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
@@ -562,7 +544,7 @@ function ScoreOverlay() {
                               bottom: 2,
                               right: 3,
                               fontSize: 9,
-                              color: "#2a7a2a",
+                              color: t.accentMeldCredit,
                               fontWeight: "bold",
                             }}
                           >
@@ -575,16 +557,10 @@ function ScoreOverlay() {
                 );
               })()}
 
-              {/* Unmelded cards breakdown — visible for all players */}
+              {/* Unmelded cards breakdown */}
               {playerCards.length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(255,255,255,0.5)",
-                      marginBottom: 4,
-                    }}
-                  >
+                  <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
                     {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
                   </div>
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
@@ -601,7 +577,7 @@ function ScoreOverlay() {
                             bottom: 2,
                             right: 3,
                             fontSize: 9,
-                            color: "#555",
+                            color: t.accentDeadwoodBadge,
                             fontWeight: "bold",
                           }}
                         >
@@ -629,7 +605,7 @@ function ScoreOverlay() {
             style={{
               textAlign: "center",
               marginTop: 20,
-              color: "rgba(255,255,255,0.5)",
+              color: t.text50,
               fontSize: 13,
             }}
           >
@@ -685,8 +661,8 @@ export default function Room() {
       {lastError && (
         <div
           style={{
-            background: "rgba(174,42,26,0.8)",
-            borderRadius: 6,
+            background: "rgba(174,42,26,0.8)", // NS-1 one-off: btn-danger at 80%
+            borderRadius: t.radiusControl,
             padding: "8px 12px",
             display: "flex",
             justifyContent: "space-between",
@@ -719,11 +695,11 @@ export default function Room() {
           onClick={() => setShowHelp(true)}
           style={{
             background: "transparent",
-            border: "1px solid rgba(255,255,255,0.2)",
-            color: "rgba(255,255,255,0.6)",
+            border: `1px solid ${t.borderModal}`,
+            color: t.text60,
             fontSize: 12,
             padding: "4px 10px",
-            borderRadius: 5,
+            borderRadius: 5, // NS-1 one-off: between chip(4) and control(6)
             cursor: "pointer",
             flexShrink: 0,
           }}

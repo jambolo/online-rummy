@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Variant } from "@online-rummy/shared";
 import { useAppStore } from "../store";
+import { t } from "../theme/tokens";
 
 const VARIANT_LABELS: Record<Variant, string> = {
   basic: "Classic Rummy",
@@ -54,8 +55,8 @@ export default function Home() {
       >
       <div
         style={{
-          background: "rgba(0,0,0,0.35)",
-          borderRadius: 12,
+          background: t.surfacePanel,
+          borderRadius: t.radiusCard,
           padding: 32,
           width: 360,
         }}
@@ -69,9 +70,9 @@ export default function Home() {
         {!connected && (
           <div
             style={{
-              background: "rgba(174,42,26,0.3)",
-              border: "1px solid rgba(174,42,26,0.6)",
-              borderRadius: 6,
+              background: "rgba(174,42,26,0.3)",   // NS-1 one-off: btn-danger at 30%
+              border: "1px solid rgba(174,42,26,0.6)", // NS-1 one-off: btn-danger at 60%
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
@@ -84,9 +85,9 @@ export default function Home() {
         {notice && (
           <div
             style={{
-              background: "rgba(40,90,160,0.35)",
-              border: "1px solid rgba(80,140,220,0.6)",
-              borderRadius: 6,
+              background: "rgba(40,90,160,0.35)",   // NS-1 one-off: info-banner bg (no token)
+              border: "1px solid rgba(80,140,220,0.6)", // NS-1 one-off: info-banner border
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
@@ -108,8 +109,8 @@ export default function Home() {
         {lastError && (
           <div
             style={{
-              background: "rgba(174,42,26,0.8)",
-              borderRadius: 6,
+              background: "rgba(174,42,26,0.8)", // NS-1 one-off: btn-danger at 80%
+              borderRadius: t.radiusControl,
               padding: "8px 12px",
               marginBottom: 16,
               fontSize: 13,
@@ -148,13 +149,10 @@ export default function Home() {
               onClick={() => setMode(m)}
               style={{
                 flex: 1,
-                borderRadius: m === "create" ? "4px 0 0 4px" : "0 4px 4px 0",
-                background:
-                  mode === m
-                    ? "rgba(255,255,255,0.2)"
-                    : "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                color: "#fff",
+                borderRadius: m === "create" ? `${t.radiusChip}px 0 0 ${t.radiusChip}px` : `0 ${t.radiusChip}px ${t.radiusChip}px 0`,
+                background: mode === m ? t.borderModal : "rgba(255,255,255,0.05)", // NS-1 one-off: tab inactive
+                border: `1px solid ${t.borderModal}`,
+                color: t.text100,
                 fontSize: 13,
               }}
             >

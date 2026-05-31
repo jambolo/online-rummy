@@ -10,11 +10,75 @@
     <link rel="manifest" href="/site.webmanifest" />
     <title>Rum Runner: The Ultimate Rummy Club</title>
     <style>
+      :root {
+        /* Surface & brand */
+        --surface-felt:        #1a6b1a;
+        --surface-panel:       rgba(0,0,0,0.35);
+        --surface-panel-muted: rgba(0,0,0,0.2);
+        --surface-modal-green: #1a4a1a;
+        --surface-modal-navy:  #1a2a4a;
+        --scrim:               rgba(0,0,0,0.65);
+        --border-modal:        rgba(255,255,255,0.2);
+        --card-face:           #fff;
+        --card-face-dimmed:    #e8e8e8;
+        --card-back:           #1a3a8a;
+        --card-border:         #bbb;
+        --card-red:            #c0392b;
+        --card-black:          #111;
+
+        /* Text ramp (white at decreasing opacity) */
+        --text-100: #fff;
+        --text-85:  rgba(255,255,255,0.85);
+        --text-70:  rgba(255,255,255,0.7);
+        --text-60:  rgba(255,255,255,0.6);
+        --text-55:  rgba(255,255,255,0.55);
+        --text-50:  rgba(255,255,255,0.5);
+        --text-45:  rgba(255,255,255,0.45);
+        --text-40:  rgba(255,255,255,0.4);
+        --text-30:  rgba(255,255,255,0.3);
+
+        /* Controls */
+        --btn-default:       #2a7a2a;
+        --btn-default-hover: #3a9a3a;
+        --btn-primary:       #1a7aae;
+        --btn-primary-hover: #2a8abe;
+        --btn-danger:        #ae2a1a;
+        --btn-danger-hover:  #c03a2a;
+        --focus-ring:        #4a9eff;
+
+        /* Semantic accents */
+        --accent-self:           #7fd4ff;
+        --accent-host:           #ffd700;
+        --accent-attention:      #ffd166;
+        --accent-positive:       #7fff7f;
+        --accent-negative:       #ff7f7f;
+        --accent-gin:            #6a0dad;
+        --accent-meld-credit:    #2a7a2a;
+        --accent-deadwood-badge: #555;
+
+        /* Radius */
+        --radius-card:    12px;
+        --radius-panel:   8px;
+        --radius-control: 6px;
+        --radius-chip:    4px;
+
+        /* z-index */
+        --z-card-drag:     10;
+        --z-score-overlay: 100;
+        --z-modal:         200;
+
+        /* Font weights */
+        --weight-regular:  400;
+        --weight-medium:   500;
+        --weight-semibold: 600;
+        --weight-bold:     700;
+      }
+
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: system-ui, -apple-system, sans-serif;
-        background: #1a6b1a;
-        color: #fff;
+        background: var(--surface-felt);
+        color: var(--text-100);
         min-height: 100vh;
       }
       button {
@@ -22,27 +86,27 @@
         font-family: inherit;
         font-size: 14px;
         border: none;
-        border-radius: 4px;
+        border-radius: var(--radius-chip);
         padding: 6px 14px;
-        background: #2a7a2a;
-        color: #fff;
+        background: var(--btn-default);
+        color: var(--text-100);
         transition: background 0.15s;
       }
-      button:hover:not(:disabled) { background: #3a9a3a; }
+      button:hover:not(:disabled) { background: var(--btn-default-hover); }
       button:disabled { opacity: 0.45; cursor: default; }
-      button.primary { background: #1a7aae; }
-      button.primary:hover:not(:disabled) { background: #2a8abe; }
-      button.danger { background: #ae2a1a; }
-      button.danger:hover:not(:disabled) { background: #c03a2a; }
+      button.primary { background: var(--btn-primary); }
+      button.primary:hover:not(:disabled) { background: var(--btn-primary-hover); }
+      button.danger { background: var(--btn-danger); }
+      button.danger:hover:not(:disabled) { background: var(--btn-danger-hover); }
       input, select {
         font-family: inherit;
         font-size: 14px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
+        border: 1px solid #ccc; /* NS-1 one-off: input border, lighter than --card-border */
+        border-radius: var(--radius-chip);
         padding: 6px 10px;
         outline: none;
       }
-      input:focus, select:focus { border-color: #4a9eff; }
+      input:focus, select:focus { border-color: var(--focus-ring); }
     </style>
   </head>
   <body>

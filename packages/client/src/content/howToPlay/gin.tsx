@@ -1,8 +1,10 @@
 // rules.md A.2 + plan.md "House rule picks > Gin Rummy"
+import { t } from "../../theme/tokens";
+
 export default function GinRules() {
   const h3Style: React.CSSProperties = {
     fontSize: 14,
-    color: "#ffd166",
+    color: t.accentAttention,
     marginBottom: 6,
     marginTop: 0,
   };
@@ -21,7 +23,7 @@ export default function GinRules() {
   };
   const noteStyle: React.CSSProperties = {
     fontSize: 12,
-    color: "rgba(255,255,255,0.5)",
+    color: t.text50,
     marginTop: -10,
     marginBottom: 16,
   };
@@ -146,7 +148,7 @@ export default function GinRules() {
               ["Box bonus", "+20 to the hand winner"],
             ].map(([label, val]) => (
               <tr key={label} style={{ verticalAlign: "top" }}>
-                <td style={{ padding: "3px 12px 3px 0", color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap" }}>
+                <td style={{ padding: "3px 12px 3px 0", color: t.text70, whiteSpace: "nowrap" }}>
                   {label}
                 </td>
                 <td style={{ padding: "3px 0" }}>{val}</td>
@@ -177,7 +179,7 @@ export default function GinRules() {
               ["J, Q, K", "10 pts each"],
             ].map(([label, val]) => (
               <tr key={label}>
-                <td style={{ padding: "3px 12px 3px 0", color: "rgba(255,255,255,0.7)" }}>
+                <td style={{ padding: "3px 12px 3px 0", color: t.text70 }}>
                   {label}
                 </td>
                 <td style={{ padding: "3px 0", textAlign: "right" }}>{val}</td>

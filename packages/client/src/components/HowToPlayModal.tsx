@@ -2,6 +2,7 @@ import type { Variant } from "@online-rummy/shared";
 import BasicRules from "../content/howToPlay/basic";
 import Rum500Rules from "../content/howToPlay/rum500";
 import GinRules from "../content/howToPlay/gin";
+import { t } from "../theme/tokens";
 
 interface Props {
   variant: Variant;
@@ -20,25 +21,25 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: t.scrim,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 200,
+        zIndex: t.zModal,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: "#1a2a4a",
-          border: "2px solid rgba(255,255,255,0.2)",
-          borderRadius: 12,
+          background: t.surfaceModalNavy,
+          border: `2px solid ${t.borderModal}`,
+          borderRadius: t.radiusCard,
           padding: 28,
           width: 480,
           maxWidth: "calc(100vw - 32px)",
           maxHeight: "80vh",
           overflowY: "auto",
-          color: "#fff",
+          color: t.text100,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -60,7 +61,7 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
               fontSize: 22,
               padding: "0 6px",
               lineHeight: 1,
-              color: "rgba(255,255,255,0.6)",
+              color: t.text60,
               cursor: "pointer",
             }}
           >
