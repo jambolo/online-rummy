@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { Card, Suit } from "@online-rummy/shared";
 import { cardPoints, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import { t } from "../theme/tokens";
+import Modal from "./Modal";
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
 
@@ -77,6 +79,9 @@ export default function ActionBar() {
   const removeGinLayoff = useAppStore((s) => s.removeGinLayoff);
   const clearGinLayoffs = useAppStore((s) => s.clearGinLayoffs);
 
+  // Set when a discard is held pending confirmation because the card could be laid off.
+  const [pendingDiscardId, setPendingDiscardId] = useState<string | null>(null);
+
   if (!publicState) return null;
 
   const isMyTurn = publicState.turnPlayerId === myPlayerId;
@@ -101,10 +106,40 @@ export default function ActionBar() {
     send({ t: "meld", cardIds: sel });
   }
 
+  // Layoff opts per game variation (mirrors server: basic ace-low, 500 Rum ace-either-end).
+  const layoffOpts = is500
+    ? { aceHigh: false, roundTheCorner: false, aceEitherEnd: true }
+    : { aceHigh: false, roundTheCorner: false };
+
+  // Could `card` currently be laid off onto a meld on the table? (non-gin only)
+  // Basic requires the player to already have a meld (rules.md A.1.6); 500 Rum does not (A.4.6).
+  function canLayoffCard(card: Card): boolean {
+    if (isGin) return false;
+    if (!is500 && myMeldsCount === 0) return false;
+    return publicState!.players.some((p) =>
+      p.melds.some((m) => {
+        const meldCards = m.cards ?? [];
+        return meldCards.length > 0 && validateMeld([...meldCards, card], layoffOpts);
+      }),
+    );
+  }
+
   function doDiscard() {
     const cardId = sel[0];
     if (!cardId) return;
+    const card = (privateState?.hand ?? []).find((c) => c.id === cardId);
+    if (card && canLayoffCard(card)) {
+      setPendingDiscardId(cardId);
+      return;
+    }
     send({ t: "discard", cardId });
+    clearSelect();
+  }
+
+  function confirmDiscard() {
+    if (!pendingDiscardId) return;
+    send({ t: "discard", cardId: pendingDiscardId });
+    setPendingDiscardId(null);
     clearSelect();
   }
 
@@ -398,6 +433,34 @@ export default function ActionBar() {
           Clear {sel.length} selected
         </button>
       )}
+
+      {/* Confirm discard of a card that could still be laid off. */}
+      {pendingDiscardId && (() => {
+        const card = (privateState?.hand ?? []).find((c) => c.id === pendingDiscardId);
+        return (
+          <Modal
+            ariaLabel="Confirm discard"
+            onClose={() => setPendingDiscardId(null)}
+            panelStyle={{
+              background: t.surfacePanel,
+              padding: 20,
+              maxWidth: 360,
+              color: t.text100,
+            }}
+          >
+            <div style={{ fontSize: 14, marginBottom: 16 }}>
+              {card ? `${card.rank}${SUIT_SYMBOL[card.suit]}` : "This card"} can be laid
+              off on a meld. Discard it anyway?
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setPendingDiscardId(null)}>Cancel</button>
+              <button className="danger" onClick={confirmDiscard}>
+                Discard anyway
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
