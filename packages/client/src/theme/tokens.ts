@@ -4,8 +4,13 @@ import type { CSSProperties } from 'react';
 // Runtime values are declared in index.html :root — this module provides
 // type-safe aliases so components never repeat a raw var() string.
 export const t = {
+  // Typography faces (NS-2)
+  fontDisplay: 'var(--font-display)',
+  fontBody:    'var(--font-body)',
+
   // Surface & brand
   surfaceFelt:       'var(--surface-felt)',
+  feltBase:          'var(--felt-base)',
   surfacePanel:      'var(--surface-panel)',
   surfacePanelMuted: 'var(--surface-panel-muted)',
   surfaceModalGreen: 'var(--surface-modal-green)',
@@ -16,6 +21,7 @@ export const t = {
   cardFaceDimmed:    'var(--card-face-dimmed)',
   cardBack:          'var(--card-back)',
   cardBorder:        'var(--card-border)',
+  brass:             'var(--brass)',
   cardRed:           'var(--card-red)',
   cardBlack:         'var(--card-black)',
 
@@ -72,6 +78,7 @@ export const t = {
 // Section-label idiom [V5] — promoted from repeated inline cluster.
 // Usage: <div style={{ ...sectionLabel, marginBottom: 4 }}>
 export const sectionLabel: CSSProperties = {
+  fontFamily: t.fontDisplay,
   fontSize: 11,
   textTransform: 'uppercase',
   letterSpacing: 1,

@@ -3,6 +3,7 @@ import type { Variant } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import { t } from "../theme/tokens";
 import { variationLabel } from "../theme/variations";
+import { copy } from "../content/copy";
 
 const VARIANTS: Variant[] = ["basic", "gin", "rum500"];
 
@@ -36,11 +37,31 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <img
-        src="/rum-runner-banner.png"
-        alt="Rum Runner: The Ultimate Rummy Club"
-        style={{ width: "100%", display: "block", maxHeight: 180, objectFit: "cover", objectPosition: "center" }}
-      />
+      {/* NS-2 / T-GAP-1: art-directed banner — fluid height, top-anchored crop keeps the
+          RR wordmark in frame, and a bottom gradient dissolves the image into the felt. */}
+      <div style={{ position: "relative", width: "100%", flexShrink: 0 }}>
+        <img
+          src="/rum-runner-banner.png"
+          alt="Rum Runner: The Ultimate Rummy Club"
+          style={{
+            width: "100%",
+            display: "block",
+            height: "clamp(120px, 24vw, 200px)",
+            objectFit: "cover",
+            objectPosition: "center 28%",
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            // Fade the lower edge into the deep-emerald felt for a seamless join.
+            background: `linear-gradient(to bottom, transparent 55%, ${t.feltBase} 100%)`,
+            pointerEvents: "none",
+          }}
+        />
+      </div>
       <div
         style={{
           flex: 1,
@@ -75,7 +96,7 @@ export default function Home() {
               fontSize: 13,
             }}
           >
-            Connecting to server…
+            {copy.home.connecting}
           </div>
         )}
 
@@ -128,12 +149,12 @@ export default function Home() {
 
         {/* Name */}
         <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-          Your name
+          {copy.home.nameLabel}
         </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Alice"
+          placeholder={copy.home.namePlaceholder}
           maxLength={20}
           style={{ width: "100%", marginBottom: 16 }}
         />
@@ -153,7 +174,7 @@ export default function Home() {
                 fontSize: 13,
               }}
             >
-              {m === "create" ? "Create Room" : "Join Room"}
+              {m === "create" ? copy.home.createTab : copy.home.joinTab}
             </button>
           ))}
         </div>
@@ -161,7 +182,7 @@ export default function Home() {
         {mode === "create" && (
           <form onSubmit={handleCreate}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-              Game variation
+              {copy.home.variationLabel}
             </label>
             <select
               value={variant}
@@ -180,7 +201,7 @@ export default function Home() {
               disabled={!name.trim() || !connected}
               style={{ width: "100%" }}
             >
-              Create Room
+              {copy.home.createCta}
             </button>
           </form>
         )}
@@ -188,12 +209,12 @@ export default function Home() {
         {mode === "join" && (
           <form onSubmit={handleJoin}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-              Room code
+              {copy.home.codeLabel}
             </label>
             <input
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="5-letter code"
+              placeholder={copy.home.codePlaceholder}
               maxLength={5}
               style={{ width: "100%", marginBottom: 16, textTransform: "uppercase" }}
             />
@@ -203,7 +224,7 @@ export default function Home() {
               disabled={!name.trim() || joinCode.trim().length !== 5 || !connected}
               style={{ width: "100%" }}
             >
-              Join Room
+              {copy.home.joinCta}
             </button>
           </form>
         )}

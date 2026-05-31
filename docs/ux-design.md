@@ -1,6 +1,6 @@
 # Rum Runner — User-Interface Design Document (UIDD)
 
-> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.4.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress (2026-05-30):** NS-1 (design-token layer) and NS-6 (accessibility & motion baseline) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. NS-2/3/4/5/7/8 not yet started; "current reality" notes below for those items remain accurate.
+> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.4.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress (2026-05-30):** NS-1 (design tokens), NS-6 (a11y & motion), NS-4 (responsive), NS-7 (variation theming), and NS-2 (speakeasy re-skin) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. The token VALUES in §2.3 below are the post-NS-2 speakeasy palette (parchment text ramp, charcoal-navy panels, brass edges, deep-emerald felt gradient, branded RR card back, Poiret One / Work Sans faces). NS-3/5/8 not yet started; "current reality" notes for those items remain accurate.
 >
 > **Audience:** Human developers extending the client, and future LLM sessions implementing or refactoring the UI.
 >
@@ -135,7 +135,7 @@ The app is a **two-route SPA** switched by a single store value: `roomCode === n
 
 #### Typography
 
-- **Family:** `system-ui, -apple-system, sans-serif` (single stack, global). Buttons/inputs inherit via `font-family: inherit`. **[North Star]** introduce an art-deco display face + humanist body face under a `--font-display` / `--font-body` token (NS-2).
+- **Family (post-NS-2):** `--font-display` = `'Poiret One', 'Century Gothic', 'Futura', sans-serif` (geometric art-deco; applied to `h1–h4` + the section-label idiom + logo contexts); `--font-body` = `'Work Sans', system-ui, -apple-system, sans-serif` (humanist; `body` default, inherited by buttons/inputs). Faces load via a Google Fonts `@import` at the top of the `index.html` `<style>` block (no framework; [V1]-compliant).
 - **Type scale (de-facto, px):**
 
 | Size | Usage |
@@ -157,33 +157,34 @@ The app is a **two-route SPA** switched by a single store value: `roomCode === n
 
 #### Color Semantics
 
-The codebase has **no token layer**; the following table reverse-engineers the de-facto semantic palette from repeated literals. **This table is the canonical mapping to adopt for NS-1.**
+All values live in the `:root` token layer (`index.html`) with typed aliases in [src/theme/tokens.ts](packages/client/src/theme/tokens.ts). The values below are the **post-NS-2 speakeasy palette** (the original "Functional Felt" literals are preserved in git history at commit 5073f18).
 
 **Core surface & brand:**
 
-| Semantic token (proposed) | Current literal | Usage |
+| Semantic token | Value (post-NS-2) | Usage |
 | --- | --- | --- |
-| `--surface-felt` (app bg) | `#1a6b1a` | `body` background |
-| `--surface-panel` | `rgba(0,0,0,0.35)` | Home/Lobby cards |
-| `--surface-panel-muted` | `rgba(0,0,0,0.2)` / `0.25` / `0.15` | Hand, Chat, opponent chip, meld pile |
-| `--surface-modal-green` | `#1a4a1a` | ScoreOverlay, ConfirmModal |
-| `--surface-modal-navy` | `#1a2a4a` | HowToPlay, PileDive |
+| `--surface-felt` (app bg) | deep-emerald felt gradient (vignette + lit-top, `#17533a`→`#0b2a1e`) | `body` background (fixed-attachment) |
+| `--surface-panel` | `rgba(20,26,34,0.72)` | Home/Lobby cards (charcoal-navy) |
+| `--surface-panel-muted` | `rgba(12,17,24,0.5)` | Hand, Chat, opponent chip, meld pile |
+| `--surface-modal-green` | `#143726` | ScoreOverlay, ConfirmModal |
+| `--surface-modal-navy` | `#131d2e` | HowToPlay, PileDive |
 | `--scrim` | `rgba(0,0,0,0.65)` | All modal backdrops |
-| `--border-modal` | `rgba(255,255,255,0.2)` | 2px modal borders |
-| `--card-face` | `#fff` | Card background |
-| `--card-face-dimmed` | `#e8e8e8` | Dimmed card |
-| `--card-back` | `#1a3a8a` | Stock back, meld placeholder |
-| `--card-border` | `#bbb` | Default card border |
-| `--card-red` | `#c0392b` | ♦♥ suits |
-| `--card-black` | `#111` | ♣♠ suits |
+| `--border-modal` | `rgba(198,160,75,0.45)` | 2px modal/pile borders (brass edge) |
+| `--brass` | `#c6a04b` | NS-2 metal accent (borders, RR monogram) |
+| `--card-face` | `#f4eedd` | Card background (aged parchment) |
+| `--card-face-dimmed` | `#e3dcc6` | Dimmed card |
+| `--card-back` | `#0f2138` | Stock back (brass RR monogram drawn over it), meld placeholder |
+| `--card-border` | `#c9b27a` | Default card border (brass-tinted) |
+| `--card-red` | `#a82a23` | ♦♥ suits |
+| `--card-black` | `#15110c` | ♣♠ suits |
 
-**Text ramp (white at decreasing opacity):** `#fff` (primary) → `rgba(255,255,255,0.85)` (chat body) → `0.7` → `0.6` (section labels) → `0.55` → `0.5` → `0.45` → `0.4` → `0.3` (empty-state placeholder). **[North Star]** rebase onto aged-parchment off-white for low-light comfort (NS-2).
+**Text ramp (NS-2, aged-parchment off-white at decreasing opacity):** `#f3ebd8` (primary) → `rgba(243,235,216,0.85)` (chat body) → `0.70` → `0.60` (section labels) → `0.55` → `0.50` → `0.45` → `0.40` → `0.30` (empty-state placeholder).
 
 **Action / control colors (global `index.html`):**
 
 | Token | Base / Hover | Usage |
 | --- | --- | --- |
-| `--btn-default` | `#2a7a2a` / `#3a9a3a` | Neutral button |
+| `--btn-default` | `#1f6b3a` / `#2a8a4d` | Neutral button (deepened for NS-2) |
 | `--btn-primary` | `#1a7aae` / `#2a8abe` | Primary action (`.primary`) |
 | `--btn-danger` | `#ae2a1a` / `#c03a2a` | Destructive (`.danger`) |
 | `--focus-ring` | `#4a9eff` | Input/select focus, **card selected border**, selection shadow |
@@ -229,7 +230,7 @@ All components are function components consuming the single Zustand store via **
 - **State management:** Reads `connected`, `send`, `lastError`/`dismissError`, `notice`/`dismissNotice`. Local `useState`: `name`, `variant`, `joinCode`, `mode` ('create'|'join'). Submits `{ t: 'create' }` or `{ t: 'join' }`.
 - **Structure:** Full-height column → banner image → centered 360-wide translucent card → logo → conditional status banners (connecting / notice / error) → name input → create/join segmented tabs → game-variation `<select>` (create) or 5-char code input (join) → primary submit.
 - **Styling constraints:** Card `bg rgba(0,0,0,0.35), radius 12, padding 32, width 360`. Tabs are two `flex:1` buttons with conjoined radii (`4px 0 0 4px` / `0 4px 4px 0`) and active state via `rgba(255,255,255,0.2)` vs `0.05`. Error banner uses danger hue `rgba(174,42,26,0.8)`; notice uses info-blue; connecting uses danger-tint. Join code input forces `textTransform: uppercase` and `maxLength 5`; submit disabled until `name && code.length===5 && connected`.
-- **Aspirations & Gaps:** Game-variation choice is a bare native `<select>` showing un-themed labels — **[North Star]** elevate to themed game-variation cards with art and per-game-variation accent (NS-7). No room discovery/browser (NS-5). Fixed 360 width is acceptable on mobile but the banner `maxHeight 180` crop is not art-directed. Branding terminology ("Enter the High-Stakes Room") not applied. **[North Star NS-8]** an expandable "House rules" disclosure (`HouseRuleConfig`, 3.12) belongs in this create form, seeded with the selected game variation's canonical defaults.
+- **Aspirations & Gaps:** Game-variation choice is a bare native `<select>` showing un-themed labels — **[North Star]** elevate to themed game-variation cards with art and per-game-variation accent (NS-7). No room discovery/browser (NS-5). Fixed 360 width is acceptable on mobile; the banner is now art-directed (T-GAP-1/#34) — fluid `clamp(120px,24vw,200px)` height, top-anchored crop keeping the wordmark in frame, and a bottom gradient dissolving into `--felt-base`. Branding terminology is now applied — the create CTA reads "Enter the High-Stakes Room", join "Slip in the Back Door", sourced from [src/content/copy.ts](packages/client/src/content/copy.ts) (T-GAP-2). **[North Star NS-8]** an expandable "House rules" disclosure (`HouseRuleConfig`, 3.12) belongs in this create form, seeded with the selected game variation's canonical defaults.
 
 ### 3.2 `Room` (shell + sub-components) ([routes/Room.tsx](packages/client/src/routes/Room.tsx))
 
@@ -272,7 +273,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 - **State:** Pure presentational. Props: `card`, `selected`, `dimmed`, `compact`, `onClick`, `style`.
 - **Structure:** A 56×80 `<div>`, column, space-between, padding `3px 5px`. Top-left corner (rank over suit). Full-size adds center 22px symbol + rotated bottom-right corner; `compact` hides both (corner inherits caller `fontSize`).
 - **Styling constraints:** Border `2px solid` `#4a9eff` if selected else `#bbb`. Background `#fff` (or `#e8e8e8` dimmed). Suit color `#c0392b` (♦♥) / `#111` (♣♠). Selected → `translateY(-10px)` + blue glow shadow; default shadow `1px 2px 4px rgba(0,0,0,0.25)`. `transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s`. **Explicitly sets `textAlign: left`** to defeat inherited centering from Table wrappers. `userSelect: none`, `flexShrink: 0`.
-- **Aspirations & Gaps:** This is the **single highest-leverage North Star target (NS-3).** The HTML/CSS card is the documented v1 stand-in for a PixiJS sprite. Card back is a plain blue gradient, not the branded RR monogram (NS-2). Selection is color + lift only (NS-6). **Any animation/skin upgrade must keep the same `Props` contract** so callers (Hand, MeldZone, Table, ScoreOverlay, PileDive) are untouched.
+- **Aspirations & Gaps:** This is the **single highest-leverage North Star target (NS-3).** The HTML/CSS card is the documented v1 stand-in for a PixiJS sprite. Card faces are now aged parchment (`--card-face`); the stock-pile back carries the branded brass RR monogram (NS-2, rendered in [Table.tsx](packages/client/src/components/Table.tsx) as an inline SVG `data:` background over `--card-back`). Selection is color + lift only (NS-6). **Any animation/skin upgrade must keep the same `Props` contract** so callers (Hand, MeldZone, Table, ScoreOverlay, PileDive) are untouched.
 
 ### 3.4 `Hand` ([components/Hand.tsx](packages/client/src/components/Hand.tsx))
 
@@ -319,7 +320,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 - **State:** Reads `chatMessages`, `send`. Local `text`; auto-scrolls to bottom on new message via `bottomRef`.
 - **Structure:** Fixed 220-wide column panel (`bg rgba(0,0,0,0.25), radius 8`), uppercase "Chat" label, scrollable message list (sender in cyan bold + body), bottom input + Send (disabled when empty, `maxLength 200`).
-- **Aspirations & Gaps:** Fixed-width side panel does not reflow on mobile — **[North Star]** collapsible drawer / bottom-sheet on small screens (NS-4). No emotes, no system messages styled distinctly, no unread indicator. Thematic "The Backroom" framing (NS-5) not applied.
+- **Aspirations & Gaps:** Fixed-width side panel does not reflow on mobile — **[North Star]** collapsible drawer / bottom-sheet on small screens (NS-4). No emotes, no system messages styled distinctly, no unread indicator (T-GAP-3, still open). Thematic "The Backroom" title is now applied (header label + mobile drawer toggle), from [src/content/copy.ts](packages/client/src/content/copy.ts).
 
 ### 3.10 `HowToPlayModal` ([components/HowToPlayModal.tsx](packages/client/src/components/HowToPlayModal.tsx)) + content
 
@@ -448,11 +449,11 @@ Popover / lobby block:
 [V2] MUST reuse the semantic color set in Section 2.3. WHEN a new literal is needed
      THEN it MUST map to an existing semantic token meaning; if none fits, add it to
      the Section 2.3 table in the same change. MUST NOT scatter ad-hoc hex values.
-     Canonical anchors (do not redefine):
-       felt #1a6b1a · primary btn #1a7aae · danger #ae2a1a · focus/selected #4a9eff
+     Canonical anchors — reference the TOKEN, not the literal; values are post-NS-2:
+       primary btn #1a7aae · danger #ae2a1a · focus/selected #4a9eff · brass #c6a04b
        self cyan #7fd4ff · host gold #ffd700 · attention amber #ffd166
        positive green #7fff7f · negative salmon #ff7f7f · gin purple #6a0dad
-       modal-green #1a4a1a · modal-navy #1a2a4a · scrim rgba(0,0,0,0.65)
+       (semantic accents unchanged by NS-2; surface/text/card values re-skinned — see §2.3)
 
 [V3] Modals MUST follow the established pattern: position:fixed, inset:0,
      background rgba(0,0,0,0.65), centered flex, and an inner panel with

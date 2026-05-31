@@ -10,6 +10,15 @@ import { variationAccent } from "../theme/variations";
 // 500 Rummy meld options: ace-either-end (rules.md A.4.3).
 const RUM500_OPTS = { aceHigh: false, roundTheCorner: false, aceEitherEnd: true } as const;
 
+// NS-2: branded RR card back — brass art-deco frame + monogram over the navy --card-back.
+const CARD_BACK_MONOGRAM = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 80">` +
+    `<rect x="4" y="4" width="48" height="72" rx="4" fill="none" stroke="#c6a04b" stroke-width="1.5"/>` +
+    `<rect x="8.5" y="8.5" width="39" height="63" rx="3" fill="none" stroke="#c6a04b" stroke-width="0.75" opacity="0.55"/>` +
+    `<text x="28" y="47" text-anchor="middle" font-family="Georgia,serif" font-size="24" font-weight="700" letter-spacing="-3" fill="#c6a04b">RR</text>` +
+    `</svg>`
+)}")`;
+
 // 500 Rummy pile-dive preflight — checks if `selected` could anchor a run given the
 // other same-suit cards available. Mirror of server canUseSelectedInMeldOrLayoff
 // (packages/server/src/engine/variants/rum500.ts). UX hint only; server is authoritative.
@@ -113,9 +122,10 @@ export default function Table() {
             border: `2px solid ${t.borderModal}`,
             borderRadius: t.radiusControl,
             background: t.cardBack,
-            backgroundImage:
-              "repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 2px, transparent 0, transparent 50%)",
-            backgroundSize: "8px 8px",
+            backgroundImage: publicState.stockSize === 0 ? "none" : CARD_BACK_MONOGRAM,
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
             cursor: canDraw ? "pointer" : "default",
             display: "flex",
             alignItems: "center",
@@ -128,7 +138,7 @@ export default function Table() {
             transition: "box-shadow 0.15s",
           }}
         >
-          {publicState.stockSize === 0 ? "—" : publicState.stockSize}
+          {publicState.stockSize === 0 ? "—" : ""}
         </div>
       </div>
 

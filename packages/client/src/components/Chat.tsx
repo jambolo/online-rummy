@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { useAppStore } from "../store";
 import { t, sectionLabel } from "../theme/tokens";
 import { useBreakpoint } from "../theme/useBreakpoint";
+import { copy } from "../content/copy";
 
 export default function Chat() {
   const chatMessages = useAppStore((s) => s.chatMessages);
@@ -39,7 +40,7 @@ export default function Chat() {
       >
         {chatMessages.length === 0 && (
           <span style={{ color: t.text30, fontSize: 12 }}>
-            No messages yet
+            {copy.chat.empty}
           </span>
         )}
         {chatMessages.map((msg, i) => (
@@ -59,7 +60,7 @@ export default function Chat() {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Say something…"
+          placeholder={copy.chat.placeholder}
           maxLength={200}
           style={{
             flex: 1,
@@ -104,7 +105,7 @@ export default function Chat() {
               textAlign: "left",
             }}
           >
-            💬 Chat{chatMessages.length > 0 ? ` (${chatMessages.length})` : ""}
+            💬 {copy.chat.title}{chatMessages.length > 0 ? ` (${chatMessages.length})` : ""}
           </button>
         )}
         {open && (
@@ -140,7 +141,7 @@ export default function Chat() {
                   padding: "8px 10px 4px",
                 }}
               >
-                <span style={sectionLabel}>Chat</span>
+                <span style={sectionLabel}>{copy.chat.title}</span>
                 <button
                   onClick={() => setOpen(false)}
                   style={{ background: "transparent", padding: "2px 8px", fontSize: 16 }}
@@ -170,7 +171,7 @@ export default function Chat() {
       }}
     >
       <div style={{ ...sectionLabel, padding: "8px 10px 4px" }}>
-        Chat
+        {copy.chat.title}
       </div>
       {body}
     </div>

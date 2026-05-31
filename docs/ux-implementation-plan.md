@@ -6,7 +6,7 @@
 >
 > **Authoritative sources (read before editing):** [docs/ux-design.md](ux-design.md) (the UIDD — binding §4 guardrails), [docs/branding.md](branding.md) (NS-2 visual direction), [docs/plan.md](plan.md) (house-rule picks, architecture), [docs/rules.md](rules.md) (rule citations). When this plan and the UIDD disagree, the UIDD wins; update both in the same change (UIDD rule [E8]).
 
-**Progress (as of 2026-05-30):** Phase A (NS-1 tokens), Phase B (NS-6 a11y), Phase C (NS-4 responsive), and Phase D (NS-7 variation theming) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3, T-NS4-1, T-NS4-2, T-NS7-1, T-NS7-2 landed (commits 5073f18, 9d8a5de, 0cc149b, e6a1fb7). Remaining phases (NS-2, NS-8, NS-5, NS-3, smaller gaps) not started. See §4 master checklist.
+**Progress (as of 2026-05-30):** Phase A (NS-1 tokens), Phase B (NS-6 a11y), Phase C (NS-4 responsive), Phase D (NS-7 variation theming), and Phase E (NS-2 speakeasy re-skin) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3, T-NS4-1, T-NS4-2, T-NS7-1, T-NS7-2, T-NS2-1, T-NS2-2 landed (commits 5073f18, 9d8a5de, 0cc149b, e6a1fb7). T-GAP-2 (central copy module) also done with Phase E. Remaining phases (NS-8, NS-5, NS-3, T-GAP-3) not started. See §4 master checklist.
 
 ---
 
@@ -66,8 +66,6 @@ Rules:
 - If a step maps to no issue, say so. Silence is not acceptable; the user audits coverage step by step.
 
 ### 0.2 Issue → step map
-
-Resolve an issue only on the step in its **Resolves** column; report it as **Partial** on every earlier step in its **Advanced-by** column.
 
 Resolve an issue only on the step in its **Resolves** column; report it as **Partial** on every earlier step in its **Advanced-by** column.
 
@@ -689,12 +687,12 @@ Phase B — NS-6 a11y
 Phase C — NS-4 responsive                                (commit 0cc149b; issues #10,#11,#12,#13)
   [x] T-NS4-1 breakpoint helper + Room reflow
   [x] T-NS4-2 chat drawer + ActionBar fit
-Phase D — NS-7 variation theming                         (commit e6a1fb7; issues #25,#26,#27)
+Phase D — NS-7 variation theming                         (commit e6a1fb7; resolves #24,#26,#27; #25 partial — themed-art cards unscoped)
   [x] T-NS7-1 accent map + friendly labels
   [x] T-NS7-2 apply across surfaces
-Phase E — NS-2 speakeasy re-skin
-  [ ] T-NS2-1 typography faces
-  [ ] T-NS2-2 re-skin token values + card back + copy
+Phase E — NS-2 speakeasy re-skin  ✅ COMPLETE  (resolves #4,#34,#35; #16 advanced — closes at T-GAP-3)
+  [x] T-NS2-1 typography faces                            (issue #4 partial → resolved by T-NS2-2)
+  [x] T-NS2-2 re-skin token values + card back + copy     (issues #4,#34,#35; T-GAP-1 banner + T-GAP-2 copy folded in)
 Phase F — NS-8 house rules
   [ ] T-NS8-1 shared registry + types
   [ ] T-NS8-2 protocol + state plumbing
@@ -707,7 +705,7 @@ Phase G — NS-5 identity/progression
 Phase H — NS-3 PixiJS (M8)
   [ ] T-NS3-1 Pixi card behind Card contract
 Phase I — smaller gaps
-  [ ] T-GAP-2 central copy module
+  [x] T-GAP-2 central copy module                         (src/content/copy.ts; done with Phase E)
   [ ] T-GAP-3 chat system/unread/emotes
   (T-GAP-1/4/5 folded)
 ```
