@@ -11,6 +11,7 @@ import Chat from "../components/Chat";
 import HowToPlayModal from "../components/HowToPlayModal";
 import Modal from "../components/Modal";
 import { t } from "../theme/tokens";
+import { useBreakpoint } from "../theme/useBreakpoint";
 
 // Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
 function ConfirmModal({
@@ -200,7 +201,7 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           background: t.surfacePanel,
           borderRadius: t.radiusCard,
           padding: 32,
-          width: 360,
+          width: "min(360px, 92vw)",
         }}
       >
         <img
@@ -596,6 +597,7 @@ export default function Room() {
   const lastError = useAppStore((s) => s.lastError);
   const dismissError = useAppStore((s) => s.dismissError);
   const [showHelp, setShowHelp] = useState(false);
+  const isMobile = useBreakpoint() === "mobile";
 
   const helpVariant = publicState?.variant ?? variant;
 
@@ -679,8 +681,17 @@ export default function Room() {
         <LeaveButton />
       </div>
 
-      {/* Main area */}
-      <div style={{ flex: 1, display: "flex", gap: 10, minHeight: 0 }}>
+      {/* Main area. On mobile Chat becomes a bottom-sheet drawer (out of flow); the
+          table column takes full width. [E6] desktop row layout unchanged at >900. */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          gap: 10,
+          minHeight: 0,
+        }}
+      >
         <div
           style={{
             flex: 1,
@@ -688,6 +699,7 @@ export default function Room() {
             flexDirection: "column",
             gap: 10,
             overflow: "auto",
+            minWidth: 0,
           }}
         >
           <Table />

@@ -684,8 +684,8 @@ Phase B — NS-6 a11y
   [x] T-NS6-2 non-color cues                              (commit 9d8a5de; issue #21)
   [x] T-NS6-3 reduced-motion + keyboard reorder           (commit 9d8a5de; issues #22,#23)
 Phase C — NS-4 responsive
-  [ ] T-NS4-1 breakpoint helper + Room reflow
-  [ ] T-NS4-2 chat drawer + ActionBar fit
+  [x] T-NS4-1 breakpoint helper + Room reflow
+  [x] T-NS4-2 chat drawer + ActionBar fit
 Phase D — NS-7 variation theming
   [ ] T-NS7-1 accent map + friendly labels
   [ ] T-NS7-2 apply across surfaces

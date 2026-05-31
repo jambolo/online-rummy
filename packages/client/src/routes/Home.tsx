@@ -58,7 +58,7 @@ export default function Home() {
           background: t.surfacePanel,
           borderRadius: t.radiusCard,
           padding: 32,
-          width: 360,
+          width: "min(360px, 92vw)",
         }}
       >
         <img

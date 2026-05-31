@@ -3,6 +3,7 @@ import type { Card, Suit } from "@online-rummy/shared";
 import { cardPoints, validateMeld } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import { t } from "../theme/tokens";
+import { useBreakpoint } from "../theme/useBreakpoint";
 import Modal from "./Modal";
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: "♣", D: "♦", H: "♥", S: "♠" };
@@ -81,6 +82,8 @@ export default function ActionBar() {
 
   // Set when a discard is held pending confirmation because the card could be laid off.
   const [pendingDiscardId, setPendingDiscardId] = useState<string | null>(null);
+
+  const isMobile = useBreakpoint() === "mobile";
 
   if (!publicState) return null;
 
@@ -184,7 +187,8 @@ export default function ActionBar() {
           fontSize: 13,
           fontWeight: "bold",
           color: isMyTurn ? t.accentPositive : t.text55,
-          minWidth: 160,
+          minWidth: isMobile ? 0 : 160,
+          flexBasis: isMobile ? "100%" : "auto",
         }}
       >
         {isMyTurn
@@ -217,12 +221,14 @@ export default function ActionBar() {
             onClick={() => send({ t: "draw", from: "stock" })}
             disabled={publicState.stockSize === 0}
           >
-            Draw from stock ({publicState.stockSize})
+            {isMobile ? "Draw" : "Draw from stock"} ({publicState.stockSize})
           </button>
           {publicState.discardTop && (
             <button onClick={() => send({ t: "draw", from: "discard" })}>
-              Draw {publicState.discardTop.rank}
-              {SUIT_SYMBOL[publicState.discardTop.suit]} from discard
+              {isMobile ? "Take " : "Draw "}
+              {publicState.discardTop.rank}
+              {SUIT_SYMBOL[publicState.discardTop.suit]}
+              {isMobile ? "" : " from discard"}
             </button>
           )}
         </>
@@ -275,7 +281,7 @@ export default function ActionBar() {
 
           {sel.length === 1 && !knockMeldedIds.has(sel[0]!) && (
             <button className="danger" onClick={doDiscard}>
-              Discard selected
+              {isMobile ? "Discard" : "Discard selected"}
             </button>
           )}
 
@@ -408,7 +414,7 @@ export default function ActionBar() {
               disabled={mustMeldBlock}
               title={mustMeldBlock ? "Place the dived card first" : undefined}
             >
-              Discard selected
+              {isMobile ? "Discard" : "Discard selected"}
             </button>
           )}
 
