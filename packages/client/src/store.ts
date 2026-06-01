@@ -40,6 +40,13 @@ function friendlyError(code: string, raw: string): string {
   return ERROR_MESSAGES[code] ?? raw;
 }
 
+// All card ids currently sitting in any player's melds (includes laid-off cards).
+function meldedCardIds(ps: PublicState): Set<string> {
+  const ids = new Set<string>();
+  for (const p of ps.players) for (const m of p.melds) for (const id of m.cardIds) ids.add(id);
+  return ids;
+}
+
 interface ChatMessage {
   from: string;
   text: string;
@@ -101,6 +108,11 @@ interface AppState {
   isGameOver: boolean;
   // Gin (rules.md A.2.3): set when the server emits handCancelled (stock-depletion). Cleared on next gameStarted.
   handCancelled: boolean;
+  // Card ids melded or laid off during the most recent melding turn (basic/rum500 only).
+  // Persist through the following opponent turn, then clear — see "state" handler.
+  meldHighlights: string[];
+  // Player whose cards are currently highlighted (for same-turn accumulation vs replace).
+  meldHighlightOwnerId: string | null;
 
   setConnected(v: boolean): void;
   send(msg: C2S): void;
@@ -156,6 +168,8 @@ const HOME_RESET = {
   ginLayoffs: [],
   isGameOver: false,
   handCancelled: false,
+  meldHighlights: [],
+  meldHighlightOwnerId: null,
   playerLastSeen: {},
   disconnectWarning: null,
 } satisfies Partial<AppState>;
@@ -195,6 +209,8 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   ginLayoffs: [],
   isGameOver: false,
   handCancelled: false,
+  meldHighlights: [],
+  meldHighlightOwnerId: null,
 
   setConnected: (v) => set({ connected: v }),
 
@@ -269,6 +285,39 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const ginDefenderMelds = msg.public.phase === 'draw' ? [] : s.ginDefenderMelds;
           const ginLayoffs = msg.public.phase === 'draw' ? [] : s.ginLayoffs;
 
+          // Meld/layoff highlight (rules: highlight cards placed this turn; persist until
+          // the next player draws). Only variations that meld mid-game.
+          let meldHighlights = s.meldHighlights;
+          let meldHighlightOwnerId = s.meldHighlightOwnerId;
+          const midMeldVariation =
+            msg.public.variant === "basic" || msg.public.variant === "rum500";
+          if (handJustStarted || !midMeldVariation || msg.public.phase === "ended") {
+            meldHighlights = [];
+            meldHighlightOwnerId = null;
+          } else if (s.publicState) {
+            // Clear once a different player has drawn — i.e. their turn is past the draw
+            // phase. The end-of-turn discard hands off with phase 'draw', so highlights
+            // survive into the next player's pre-draw, then clear the moment they draw.
+            if (
+              meldHighlightOwnerId !== null &&
+              msg.public.turnPlayerId !== meldHighlightOwnerId &&
+              msg.public.phase !== "draw"
+            ) {
+              meldHighlights = [];
+              meldHighlightOwnerId = null;
+            }
+            // Cards newly placed on the table since the last state = this action's
+            // meld/layoff. Accumulate within a turn; replace when a new player places.
+            const prevMelded = meldedCardIds(s.publicState);
+            const added = [...meldedCardIds(msg.public)].filter((id) => !prevMelded.has(id));
+            if (added.length > 0) {
+              const actor = msg.public.turnPlayerId;
+              meldHighlights =
+                meldHighlightOwnerId === actor ? [...meldHighlights, ...added] : added;
+              meldHighlightOwnerId = actor;
+            }
+          }
+
           // A state broadcast proves the server just processed a game action —
           // refresh last-seen for all non-self players. Active gameplay suppresses
           // keepalive pings (incoming state resets lastActivity), so without this,
@@ -284,7 +333,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           }
 
           if (msg.private === undefined) {
-            return { publicState: msg.public, playerLastSeen, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs };
+            return { publicState: msg.public, playerLastSeen, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs, meldHighlights, meldHighlightOwnerId };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
@@ -312,6 +361,8 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             knockMelds,
             ginDefenderMelds,
             ginLayoffs,
+            meldHighlights,
+            meldHighlightOwnerId,
           };
         });
         break;

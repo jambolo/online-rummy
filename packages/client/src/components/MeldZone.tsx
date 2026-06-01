@@ -23,6 +23,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   const myPlayerId = useAppStore((s) => s.myPlayerId);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const lookupCard = useAppStore((s) => s.lookupCard);
+  const meldHighlights = useAppStore((s) => s.meldHighlights);
   const send = useAppStore((s) => s.send);
   const addGinLayoff = useAppStore((s) => s.addGinLayoff);
   const ginLayoffs = useAppStore((s) => s.ginLayoffs);
@@ -114,6 +115,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
               key={id}
               card={card}
               compact
+              highlighted={meldHighlights.includes(id)}
               style={{ width: 40, height: 56, fontSize: 14 }}
             />
           ) : (
