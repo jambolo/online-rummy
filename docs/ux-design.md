@@ -1,6 +1,6 @@
 # Rum Runner — User-Interface Design Document (UIDD)
 
-> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.4.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress (2026-05-30):** NS-1 (design tokens), NS-6 (a11y & motion), NS-4 (responsive), NS-7 (variation theming), and NS-2 (speakeasy re-skin) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. The token VALUES in §2.3 below are the post-NS-2 speakeasy palette (parchment text ramp, charcoal-navy panels, brass edges, deep-emerald felt gradient, branded RR card back, Poiret One / Work Sans faces). NS-3/5/8 not yet started; "current reality" notes for those items remain accurate.
+> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.5.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress:** NS-1 (design tokens), NS-6 (a11y & motion), NS-4 (responsive), NS-7 (variation theming), and NS-2 (speakeasy re-skin) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. Also landed out-of-plan (logged in §4.1 of the implementation plan): mid-turn meld highlight (basic/rum500 — Card `highlighted` prop, store `meldHighlights`/`meldHighlightOwnerId`), `playerName` persistence in `sessionStorage`, and the 500 Rummy discard pile-count label. The token VALUES in §2.3 below are the post-NS-2 speakeasy palette (parchment text ramp, charcoal-navy panels, brass edges, deep-emerald felt gradient, branded RR card back, Poiret One / Work Sans faces). NS-3/5/8 not yet started; "current reality" notes for those items remain accurate.
 >
 > **Audience:** Human developers extending the client, and future LLM sessions implementing or refactoring the UI.
 >
@@ -217,9 +217,9 @@ All components are function components consuming the single Zustand store via **
 ### 3.0 Global State Model ([store.ts](packages/client/src/store.ts))
 
 - **Single store, flat shape.** Identity (`myPlayerId`, `pendingName`, `sessionId`), room (`roomCode`, `variant`, `hostId`, `lobbyPlayers`), game (`publicState`, `privateState`), and UI (`selectedCardIds`, `handOrder`, `chatMessages`, `lastError`, `notice`) all live in one object.
-- **Reactive ingestion.** `handleMessage` switches on `msg.t` (`lobby` | `state` | `keepalive` | `chat` | `error` | `event`) and `set`s derived slices. Hand-end snapshotting (`prevScores`), final-hand breakdowns (`finalHands`, `meldCredits`, `handDeadwood`, `ginInfo`), and Gin staging buffers (`knockMelds`, `ginDefenderMelds`, `ginLayoffs`) are all maintained here.
+- **Reactive ingestion.** `handleMessage` switches on `msg.t` (`lobby` | `state` | `keepalive` | `chat` | `error` | `event`) and `set`s derived slices. Hand-end snapshotting (`prevScores`), final-hand breakdowns (`finalHands`, `meldCredits`, `handDeadwood`, `ginInfo`), Gin staging buffers (`knockMelds`, `ginDefenderMelds`, `ginLayoffs`), and the mid-turn meld-highlight bookkeeping (`meldHighlights`, `meldHighlightOwnerId` — track cards just placed in basic/rum500, persist through the next player's pre-draw window, clear the moment they draw) are all maintained here.
 - **Card cache.** `cardCache: Record<id, Card>` is populated from every private-hand broadcast so melded cards (which leave the hand) can still be rendered; `lookupCard(id)` reads it.
-- **Identity inference.** The server never says "you are X"; the client matches `pendingName` against `lobby.players[].name` on the first `lobby` message.
+- **Identity inference.** The server never says "you are X"; the client matches `pendingName` against `lobby.players[].name` on the first `lobby` message. `pendingName` is persisted to `sessionStorage.playerName` (alongside `sessionId` and `roomCode`) and restored on next load so the create/join form pre-populates across sessions.
 - **Liveness.** `playerLastSeen` is refreshed by keepalive/event/chat and by every `state` broadcast for non-self players; `checkDisconnects` (30s interval from App) raises `disconnectWarning` after 5min silence.
 - **`myPlayerId === hostId`** is the host check used to gate Start / Re-deal / New Hand controls (and, under NS-8, the `HouseRuleConfig` editor).
 
@@ -270,9 +270,9 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 ### 3.3 `Card` ([components/Card.tsx](packages/client/src/components/Card.tsx))
 
-- **State:** Pure presentational. Props: `card`, `selected`, `dimmed`, `compact`, `onClick`, `style`.
+- **State:** Pure presentational. Props: `card`, `selected`, `dimmed`, `compact`, `highlighted`, `onClick`, `style`.
 - **Structure:** A 56×80 `<div>`, column, space-between, padding `3px 5px`. Top-left corner (rank over suit). Full-size adds center 22px symbol + rotated bottom-right corner; `compact` hides both (corner inherits caller `fontSize`).
-- **Styling constraints:** Border `2px solid` `#4a9eff` if selected else `#bbb`. Background `#fff` (or `#e8e8e8` dimmed). Suit color `#c0392b` (♦♥) / `#111` (♣♠). Selected → `translateY(-10px)` + blue glow shadow; default shadow `1px 2px 4px rgba(0,0,0,0.25)`. `transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s`. **Explicitly sets `textAlign: left`** to defeat inherited centering from Table wrappers. `userSelect: none`, `flexShrink: 0`.
+- **Styling constraints:** Border `2px solid` — `--focus-ring` if selected, amber `#e3a33b` if `highlighted` (used by MeldZone to flag cards placed since the previous draw), else `--card-border`. Background `--card-face` (or `--card-face-dimmed` when `dimmed`). Suit color `--card-red` (♦♥) / `--card-black` (♣♠). Selected → `translateY(-10px)` + blue glow shadow; `highlighted` → amber glow shadow; default shadow `1px 2px 4px rgba(0,0,0,0.25)`. `transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s` (suppressed when `useReducedMotion()` is true). **Explicitly sets `textAlign: left`** to defeat inherited centering from Table wrappers. `userSelect: none`, `flexShrink: 0`.
 - **Aspirations & Gaps:** This is the **single highest-leverage North Star target (NS-3).** The HTML/CSS card is the documented v1 stand-in for a PixiJS sprite. Card faces are now aged parchment (`--card-face`); the stock-pile back carries the branded brass RR monogram (NS-2, rendered in [Table.tsx](packages/client/src/components/Table.tsx) as an inline SVG `data:` background over `--card-back`). Selection is color + lift only (NS-6). **Any animation/skin upgrade must keep the same `Props` contract** so callers (Hand, MeldZone, Table, ScoreOverlay, PileDive) are untouched.
 
 ### 3.4 `Hand` ([components/Hand.tsx](packages/client/src/components/Hand.tsx))
@@ -298,9 +298,9 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 ### 3.7 `MeldZone` ([components/MeldZone.tsx](packages/client/src/components/MeldZone.tsx))
 
-- **State:** Reads `publicState`, `myPlayerId`, `ginDefenderMelds`, `lookupCard`, `privateState`. Sub-component `MeldPile` additionally reads `selectedCardIds`, `ginLayoffs`, `send`, `addGinLayoff`.
-- **Structure:** "Melds on table" label → flex-wrap row of `MeldPile`s (self melds sorted first), then synthetic **pending** piles for staged Gin defender melds. Empty state: italic "No melds yet". Each `MeldPile`: owner·kind label, compact 40×56 cards, optional `+` layoff button, plus staged-layoff ghost cards (opacity 0.55).
-- **Styling constraints:** Pile `bg rgba(0,0,0,0.15), radius 6, padding 6×10`. Pending pile → `bg rgba(255,200,0,0.08), dashed border rgba(255,200,0,0.4), opacity 0.7`. Layoff `+` shown when allowed (Basic requires own meld; 500 Rummy does not; Gin uses the layoff-phase path). Run order maintained server-side; missing cards render as blue placeholder backs.
+- **State:** Reads `publicState`, `myPlayerId`, `ginDefenderMelds`, `lookupCard`, `privateState`, `meldHighlights`. Sub-component `MeldPile` additionally reads `selectedCardIds`, `ginLayoffs`, `send`, `addGinLayoff`.
+- **Structure:** "Melds on table" label → flex-wrap row of `MeldPile`s (self melds sorted first), then synthetic **pending** piles for staged Gin defender melds. Empty state: italic "No melds yet". Each `MeldPile`: owner·kind label, compact 40×56 cards, optional `+` layoff button, plus staged-layoff ghost cards (opacity 0.55). Cards whose id appears in `meldHighlights` render via `<Card highlighted>` (amber border + glow) so the cards a player just placed remain visually flagged through the **next** opponent's pre-draw window — a low-cost "what just changed" cue that does not depend on animation.
+- **Styling constraints:** Pile `bg rgba(0,0,0,0.15), radius 6, padding 6×10`. Pending pile → `bg rgba(255,200,0,0.08), dashed border rgba(255,200,0,0.4), opacity 0.7`. Layoff `+` shown when allowed (Basic requires own meld; 500 Rummy does not; Gin uses the layoff-phase path). Layoff validity is checked client-side with the shared `validateMeld` from `@online-rummy/shared` (no client mirror — Phase 6 refactor). Run order maintained server-side; missing cards render as blue placeholder backs.
 - **Aspirations & Gaps:** Clear pending/staged visual language (dashed + ghost). **[North Star]** drag-to-layoff (drop a hand card on a pile) instead of select-then-`+` (NS-3/NS-4); per-game-variation accent on pile chrome (NS-7).
 
 ### 3.8 `ActionBar` ([components/ActionBar.tsx](packages/client/src/components/ActionBar.tsx))
@@ -560,6 +560,7 @@ Popover / lobby block:
 | Entry / lobby forms | [src/routes/Home.tsx](packages/client/src/routes/Home.tsx) |
 | Game shell + overlays + score overlay | [src/routes/Room.tsx](packages/client/src/routes/Room.tsx) |
 | Card primitive (NS-3 target) | [src/components/Card.tsx](packages/client/src/components/Card.tsx) |
+| Shared modal primitive (NS-6) | [src/components/Modal.tsx](packages/client/src/components/Modal.tsx) |
 | Sortable hand | [src/components/Hand.tsx](packages/client/src/components/Hand.tsx) |
 | Stock/discard + dive entry | [src/components/Table.tsx](packages/client/src/components/Table.tsx) |
 | Pile-dive picker / pile viewer | [src/components/PileDiveModal.tsx](packages/client/src/components/PileDiveModal.tsx) |
@@ -569,6 +570,12 @@ Popover / lobby block:
 | Rules modal + per-game-variation content | [src/components/HowToPlayModal.tsx](packages/client/src/components/HowToPlayModal.tsx), [src/content/howToPlay/](packages/client/src/content/howToPlay/) |
 | WS transport / keep-alive / epoch | [src/net/ws.ts](packages/client/src/net/ws.ts) |
 | Wire protocol (C2S/S2C) | [packages/shared/src/protocol.ts](packages/shared/src/protocol.ts) |
+| Shared meld runtime (NS-1 cross-package) | [packages/shared/src/meld.ts](packages/shared/src/meld.ts) |
+| Design tokens (NS-1) | [src/theme/tokens.ts](packages/client/src/theme/tokens.ts) + [packages/client/index.html](packages/client/index.html) `:root` |
+| Game-variation accent + label (NS-7) | [src/theme/variations.ts](packages/client/src/theme/variations.ts) |
+| Responsive breakpoint hook (NS-4) | [src/theme/useBreakpoint.ts](packages/client/src/theme/useBreakpoint.ts) |
+| Reduced-motion hook (NS-6) | [src/theme/useReducedMotion.ts](packages/client/src/theme/useReducedMotion.ts) |
+| Central thematic copy (T-GAP-2) | [src/content/copy.ts](packages/client/src/content/copy.ts) |
 | Host house-rule editor (NS-8 target) | `src/components/HouseRuleConfig.tsx` (designed §3.12; not yet created) |
 | Active house-rule deviation display (NS-8 target) | `src/components/HouseRuleSummary.tsx` (designed §3.13; not yet created) |
 | House-rule registry + types (NS-8 target) | `packages/shared/src/houseRules.ts` (designed; not yet created) |

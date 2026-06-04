@@ -607,7 +607,7 @@ verify:  tsc --noEmit; 2-client manual across lobby/header/howto/score.
 
 Largest NEW surface. Requires persistence, which plan.md currently fixes as **"None, in-memory."** This phase is **blocked on a product decision** — do not start implementation tasks until resolved.
 
-### [T-NS5-0] DECISION GATE — persistence backend
+### [T-NS5-0] DECISION GATE — persistence backend  ✅ RESOLVED 2026-06-04
 
 ```text
 NS:      NS-5
@@ -615,10 +615,15 @@ depends: —
 type:    decision (no code)
 question: Accounts/Dossier/rank/history/stats need durable storage. plan.md says no DB.
 options:
-  a. Defer NS-5 entirely (keep guest-only) — recommended for v1 scope.
+  a. Defer NS-5 entirely (keep guest-only) — recommended for v1 scope.   ← CHOSEN
   b. Add a minimal persistence layer (e.g. SQLite/file) + auth — new architecture, large.
   c. Local-only progression (browser localStorage Dossier; no cross-device, no server trust).
-output:  record the choice in plan.md "Decisions" before any T-NS5-n task.
+DECISION: (a) defer. Recorded in plan.md "Decisions" → Persistence row.
+         All T-NS5-n tasks (Dossier, rank ladder, themed identity, history, room browser) are
+         blocked until this row is revisited. Avatars/rank on OpponentStrip, ScoreOverlay
+         rank-change announcement, and the Dossier/room-browser routes do NOT land in v1.
+         The thematic copy module (T-GAP-2, src/content/copy.ts) reserves the rank-ladder
+         strings so future NS-5 work can pick them up without re-deriving brand voice.
 ```
 
 ### [T-NS5-1…] (only if T-NS5-0 ≠ defer)
@@ -699,9 +704,9 @@ Phase F — NS-8 house rules
   [ ] T-NS8-3 engine consumption per flag (+ tests, flip supported)
   [ ] T-NS8-4 HouseRuleConfig editor
   [ ] T-NS8-5 HouseRuleSummary disclosure
-Phase G — NS-5 identity/progression
-  [ ] T-NS5-0 DECISION GATE (persistence)
-  [ ] T-NS5-1… (only if not deferred)
+Phase G — NS-5 identity/progression  (BLOCKED — see T-NS5-0)
+  [x] T-NS5-0 DECISION GATE (persistence)                 — defer (2026-06-04; recorded in plan.md Decisions)
+  [ ] T-NS5-1… BLOCKED until T-NS5-0 is revisited
 Phase H — NS-3 PixiJS (M8)
   [ ] T-NS3-1 Pixi card behind Card contract
 Phase I — smaller gaps
@@ -709,6 +714,12 @@ Phase I — smaller gaps
   [ ] T-GAP-3 chat system/unread/emotes
   (T-GAP-1/4/5 folded)
 ```
+
+### 4.1 Landed outside this plan (record-keeping)
+
+- **Mid-turn meld highlight** (commit cd9946c, 2026-06). When a player melds or lays off in basic/rum500, the placed cards render with an amber border + glow (Card `highlighted` prop, MeldZone `meldHighlights` state) until the **next** opponent draws. NS-6 [V7] compliant (non-color cue not strictly required — the amber border IS the cue) and complements the planned NS-3 deal/meld animation without depending on it. Store fields: `meldHighlights: string[]`, `meldHighlightOwnerId: string | null`. Out of scope for any tracked issue; logged here so future plans see it.
+- **Player-name persistence** (commit 70ac48e). `pendingName` now persists to `sessionStorage.playerName` alongside `sessionId`/`roomCode`; create/join form pre-populates on next load. Foundational quality-of-life touch; predates and partially enables NS-5 (T-NS5-0 still gated).
+- **500 Rummy discard pile count visible** (commit cee3cc1). `Table` discard slot now shows the pile depth label so players know a dive is available without opening `PileDiveModal`. Folded NS-7 / general-polish.
 
 ## 5. Definition of done (per task)
 

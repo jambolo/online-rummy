@@ -287,7 +287,7 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 
 > **TODO** — primary sources `[BIC-K]` and `[PG-K]` need re-verification for the relationship between A.3.4 (knock with face-down discard) and A.3.6 (going out without discard): are both legitimate end conditions in standard knock rummy, and does "going out" with zero deadwood differ from the A.3.5 Rummy bonus? Compiled text here implies both end conditions coexist, but primaries have not been re-checked since this file was first synthesized.
 >
-> **Blocks** Knock Rummy implementation (deferred — see `docs/refactor-plan.md` D3). Resolve this TODO before scoping that game variation.
+> **Blocks** Knock Rummy implementation (deferred, post-v1). Resolve this TODO before scoping that game variation.
 
 ---
 
