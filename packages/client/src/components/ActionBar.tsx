@@ -334,9 +334,9 @@ export default function ActionBar() {
             const submitLabel =
               totalActions === 0
                 ? knockerWentGin
-                  ? "Done (no melds)"
-                  : "Done (no melds or layoffs)"
-                : [
+                  ? "Submit (no melds)"
+                  : "Submit (no melds or layoffs)"
+                : `Submit ${[
                     ginDefenderMelds.length > 0
                       ? `${ginDefenderMelds.length} meld${ginDefenderMelds.length > 1 ? "s" : ""}`
                       : null,
@@ -345,7 +345,7 @@ export default function ActionBar() {
                       : null,
                   ]
                     .filter(Boolean)
-                    .join(" + ");
+                    .join(" + ")}`;
 
             return (
               <>
