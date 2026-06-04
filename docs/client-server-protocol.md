@@ -92,6 +92,7 @@ The state visible to all players.
   "discardPileSize": 3,
   "discardPile": [Card, ...],
   "stockSize": 24,
+  "meldedBy": { "cardId": "playerId", "...": "..." },
   "mustMeldCardId": "string" | null,
   "ginKnockerId": "string" | null
 }
@@ -100,6 +101,8 @@ The state visible to all players.
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
 
 `discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rummy uses this for the pile-dive picker and other game variations may ignore it.
+
+`meldedBy` maps each card id on the table to the id of the player who placed it (melded or laid off). Because layoffs append to another player's meld, the placer can differ from the meld's `ownerId`; use `meldedBy` to attribute laid-off cards to the player who laid them off — e.g. for an interim per-player meld/layoff score. Cards not on the table are absent. In Gin no cards are placed until knock time, so it is effectively empty during play.
 
 `mustMeldCardId` is set in 500 Rummy when the current turn player drew via pile dive and has not yet placed the picked card in a meld or layoff. While non-null, that player cannot discard. Always `null` in `basic` and `gin`.
 

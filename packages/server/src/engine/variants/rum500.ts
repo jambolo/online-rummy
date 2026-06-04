@@ -2,7 +2,7 @@ import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
-import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
+import { cardPoints, validateMeld as coreMeldCheck, runAceDirection, score500MeldCard } from '@online-rummy/shared';
 import type { GameState, Rum500State, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
 import {
   advanceTurn as baseAdvanceTurn,
@@ -21,28 +21,10 @@ function r500(state: GameState): Rum500State {
   return state.variantState;
 }
 
-// 500-Rum-specific scoring helpers (rules.md A.4.2, A.4.7).
-// Moved here from engine/meld.ts in Phase 1 because they encode 500-specific
-// ace direction + pile-context point rules that don't generalize across variants.
-
-// Direction the ace plays in a run. Returns null for runs without ace and for sets.
-// rules.md A.4.2: A=1 when in A-2-3 sequence, otherwise 15.
-export function runAceDirection(cards: Card[]): 'low' | 'high' | null {
-  if (!cards.some((c) => c.rank === 'A')) return null;
-  if (cards.some((c) => c.rank === '2')) return 'low';
-  if (cards.some((c) => c.rank === 'K')) return 'high';
-  return null;
-}
-
-// 500 Rummy per-card meld scoring (rules.md A.4.2, A.4.7).
-// Set: each card scored at base value, aces 15.
-// Run: aces 1 if A-2-3 run, else 15.
-export function score500MeldCard(card: Card, allCards: Card[]): number {
-  const allSameRank = allCards.every((c) => c.rank === allCards[0]?.rank);
-  if (allSameRank) return cardPoints(card, 15);
-  const ace = runAceDirection(allCards);
-  return cardPoints(card, ace === 'low' ? 1 : 15);
-}
+// 500-Rum-specific scoring helpers (runAceDirection, score500MeldCard) now live in
+// @online-rummy/shared so the client can compute interim meld scores with identical
+// rules. Re-exported here to preserve existing server-side import paths.
+export { runAceDirection, score500MeldCard };
 
 // rules.md A.4 — 500 Rummy (a.k.a. Pinochle Rummy)
 // House rule picks: plan.md "House rule picks (locked) > 500 Rummy"

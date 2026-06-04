@@ -110,6 +110,7 @@ function buildPublicState(room: Room, state: GameState): PublicState {
     discardPileSize: state.discardPile.length,
     discardPile: [...state.discardPile],
     stockSize: state.stock.length,
+    meldedBy: Object.fromEntries(state.meldedBy),
     variantPublic: buildVariantPublic(state),
   };
 }
