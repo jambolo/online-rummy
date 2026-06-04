@@ -292,8 +292,9 @@ describe('applyKnock', () => {
     return state;
   }
 
-  it('gin (0 deadwood) — declares all 10 remaining cards as melds, hand becomes empty', () => {
-    // rules.md A.2.4: gin = knocker deadwood 0 after face-down discard.
+  it('gin (0 deadwood) — declares all 10 remaining cards as melds, hand becomes empty, defender gets layoff turn', () => {
+    // rules.md A.2.4: gin = knocker deadwood 0 after face-down discard. The defender
+    // still gets a 'layoff' turn to group their own melds (but cannot lay off — see below).
     // 11 cards: 3 runs totalling 10 (4+3+3) + 1 face-down discard.
     const hand = [
       c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
@@ -308,7 +309,9 @@ describe('applyKnock', () => {
       ['g8', 'g9', 'g10'],
     ], 'g_disc');
 
-    expect(state.phase).toBe('ended');
+    expect(state.phase).toBe('layoff');
+    expect(state.variantState.ginKnockerId).toBe('p1');
+    expect(state.turnPlayerId).toBe('p2'); // defender's turn to arrange melds
     expect(state.players[0]?.hand).toHaveLength(0); // gin: all remaining cards in melds
     expect(state.players[0]?.melds).toHaveLength(3);
     // face-down discard should be on the pile
@@ -622,23 +625,50 @@ describe('applyGinLayoff', () => {
     ])).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
   });
 
-  it('gin (0 deadwood knock) skips layoff phase — goes straight to ended', () => {
-    // 11 cards: 10 in melds (4+3+3) + 1 face-down discard
-    const hand = [
+  it('gin (0 deadwood) → defender may group own melds but cannot lay off (rules.md A.2.4)', () => {
+    // p1 goes gin (3 runs). p2 holds a 7-set plus a lone 5♣ that *would* legally extend
+    // p1's A-2-3-4♣ run — but no layoff is allowed against gin.
+    const p1Hand = [
       c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
       c('A', 'D', 'g5'), c('2', 'D', 'g6'), c('3', 'D', 'g7'),
       c('A', 'H', 'g8'), c('2', 'H', 'g9'), c('3', 'H', 'g10'),
       c('K', 'S', 'g_disc'),
     ];
+    const p2Hand = [
+      c('7', 'C', 'd7c'), c('7', 'D', 'd7d'), c('7', 'H', 'd7h'),
+      c('5', 'C', 'd5c'),
+    ];
     const state = twoPlayerGame();
-    state.players[0]!.hand = [...hand];
-    for (const card of hand) state.cardRegistry.set(card.id, card);
+    state.players[0]!.hand = [...p1Hand];
+    state.players[1]!.hand = [...p2Hand];
+    for (const card of [...p1Hand, ...p2Hand]) state.cardRegistry.set(card.id, card);
     state.phase = 'discard';
     applyKnock(state, 'p1', [
       ['g1', 'g2', 'g3', 'g4'], ['g5', 'g6', 'g7'], ['g8', 'g9', 'g10'],
     ], 'g_disc');
-    expect(state.phase).toBe('ended'); // no layoff for gin
-    expect(state.turnPlayerId).toBe('p1'); // turn stays with knocker
+
+    // Gin still hands the defender a layoff turn to arrange their own melds.
+    expect(state.phase).toBe('layoff');
+    expect(state.turnPlayerId).toBe('p2');
+
+    // Laying off onto the knocker is rejected even though 5♣ legally extends the run.
+    const runMeldId = state.players[0]!.melds.find(m => m.cardIds.includes('g1'))!.id;
+    expect(() =>
+      applyGinLayoff(state, 'p2', [{ cardId: 'd5c', meldId: runMeldId }]),
+    ).toThrow('ERR_NO_LAYOFF_AGAINST_GIN');
+
+    // But the defender may group their own meld: 7♣7♦7♥ melds → only 5♣ (5 pts) left.
+    applyGinLayoff(state, 'p2', [], [['d7c', 'd7d', 'd7h']]);
+    expect(state.phase).toBe('ended');
+    expect(state.players[1]!.melds).toHaveLength(1);
+    expect(state.players[1]!.hand.map(c => c.id)).toEqual(['d5c']);
+    expect(ginDeadwood(state.players[1]!)).toBe(5);
+
+    // Knocker's gin score reflects the *reduced* defender deadwood (5, not 19).
+    // 5 + 20 gin + 20 box = 45.
+    const scores = ginVariant.scoreHand(state);
+    expect(scores.get('p1')).toBe(45);
+    expect(scores.get('p2')).toBe(0);
   });
 });
 

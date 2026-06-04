@@ -58,8 +58,9 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
         throw new Error('ERR_NOT_IMPLEMENTED:knock');
       }
       engine.applyKnock(state, playerId, action.melds, action.discardId);
-      // Gin (0 deadwood) advances directly to 'ended' — hand ends now.
-      // Non-gin knock advances to 'layoff' — defender turn, broadcast both hands.
+      // Any knock (gin or regular) advances to 'layoff' so the defender can arrange their
+      // melds — broadcast both hands. The hand ends on the defender's ginLayoff. Falls
+      // back to 'ended' only when there is no active defender.
       return state.phase === 'ended' ? { kind: 'handEnded' } : { kind: 'stateAll' };
     }
     case 'ginLayoff': {

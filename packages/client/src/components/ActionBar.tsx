@@ -93,6 +93,16 @@ export default function ActionBar() {
   const sel = selectedCardIds;
   const is500 = publicState.variant === "rum500";
   const isGin = publicState.variant === "gin";
+  // Gin: did the knocker go gin (0 deadwood)? Their hand is empty after the knock. When
+  // true the defender may group their own melds but cannot lay off (rules.md A.2.4).
+  const ginKnockerId =
+    publicState.variantPublic.variant === "gin"
+      ? publicState.variantPublic.data.ginKnockerId
+      : null;
+  const knockerWentGin =
+    isGin &&
+    ginKnockerId !== null &&
+    publicState.players.find((p) => p.id === ginKnockerId)?.handCount === 0;
   const mustMeldCardId =
     publicState.variantPublic.variant === 'rum500'
       ? publicState.variantPublic.data.mustMeldCardId
@@ -194,9 +204,15 @@ export default function ActionBar() {
           flexBasis: isMobile ? "100%" : "auto",
         }}
       >
-        {isMyTurn
-          ? (isGin && phase === "discard" ? "Discard or knock" : PHASE_LABEL[phase] ?? phase)
-          : `${turnPlayerName}: ${PHASE_LABEL[phase] ?? phase}`}
+        {(() => {
+          // Against gin the defender's "layoff" phase is meld-grouping only — relabel.
+          const lbl =
+            phase === "layoff" && knockerWentGin
+              ? "Arrange your melds"
+              : PHASE_LABEL[phase] ?? phase;
+          if (!isMyTurn) return `${turnPlayerName}: ${lbl}`;
+          return isGin && phase === "discard" ? "Discard or knock" : lbl;
+        })()}
       </div>
 
       {/* ── First-upcard offer (Gin only, rules.md A.2.2) ── */}
@@ -301,7 +317,8 @@ export default function ActionBar() {
         </>
       )}
 
-      {/* ── Gin layoff phase (defender: declare own melds + lay off onto knocker's melds) ── */}
+      {/* ── Gin layoff phase (defender: declare own melds; lay off onto knocker's melds
+            only after a regular knock — no layoff against gin, rules.md A.2.4) ── */}
       {isGin && phase === "layoff" && (
         <>
           {isMyTurn && (() => {
@@ -316,7 +333,9 @@ export default function ActionBar() {
             const totalActions = ginDefenderMelds.length + ginLayoffs.length;
             const submitLabel =
               totalActions === 0
-                ? "Done (no melds or layoffs)"
+                ? knockerWentGin
+                  ? "Done (no melds)"
+                  : "Done (no melds or layoffs)"
                 : [
                     ginDefenderMelds.length > 0
                       ? `${ginDefenderMelds.length} meld${ginDefenderMelds.length > 1 ? "s" : ""}`
@@ -380,7 +399,9 @@ export default function ActionBar() {
 
                 {sel.length === 0 && totalActions === 0 && (
                   <span style={{ fontSize: 12, color: t.text45 }}>
-                    Select 3+ cards to declare a meld, or select 1 card then click + on a meld to lay off
+                    {knockerWentGin
+                      ? "Opponent went gin — group your melds to reduce deadwood. No layoff allowed."
+                      : "Select 3+ cards to declare a meld, or select 1 card then click + on a meld to lay off"}
                   </span>
                 )}
               </>
@@ -389,7 +410,9 @@ export default function ActionBar() {
 
           {!isMyTurn && (
             <span style={{ fontSize: 12, color: t.text55 }}>
-              Opponent is declaring melds and laying off…
+              {knockerWentGin
+                ? "Opponent is arranging their melds…"
+                : "Opponent is declaring melds and laying off…"}
             </span>
           )}
         </>

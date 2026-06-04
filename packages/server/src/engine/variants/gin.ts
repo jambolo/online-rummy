@@ -392,15 +392,18 @@ export function applyKnock(
 
   gs(state).ginKnockerId = playerId;
 
-  if (dw === 0) {
-    // Gin (rules.md A.2.4): defender cannot lay off — end hand immediately.
-    state.phase = 'ended';
+  // rules.md A.2.4: the defender always gets a turn to arrange their hand before scoring.
+  // After a regular knock they may also lay off onto the knocker's melds; after gin they
+  // may only group their own melds to reduce deadwood — no layoff (enforced in
+  // applyGinLayoff). Either way phase → 'layoff' and the turn passes to the defender.
+  state.phase = 'layoff';
+  const activePlayers = state.players.filter(p => p.status === 'active');
+  const defenderPlayer = activePlayers.find(p => p.id !== playerId);
+  if (defenderPlayer) {
+    state.turnPlayerId = defenderPlayer.id;
   } else {
-    // Knock: give defender a chance to lay off on knocker's melds (rules.md A.2.3).
-    state.phase = 'layoff';
-    const activePlayers = state.players.filter(p => p.status === 'active');
-    const defenderPlayer = activePlayers.find(p => p.id !== playerId);
-    if (defenderPlayer) state.turnPlayerId = defenderPlayer.id;
+    // No active opponent (e.g. forfeited) — nothing to arrange, end immediately.
+    state.phase = 'ended';
   }
 }
 
@@ -419,6 +422,14 @@ export function applyGinLayoff(
   if (!defender) throw new Error('ERR_PLAYER_NOT_FOUND');
   const knocker = state.players.find(p => p.id === gs(state).ginKnockerId);
   if (!knocker) throw new Error('ERR_PLAYER_NOT_FOUND');
+
+  // rules.md A.2.4 "No layoff against gin": if the knocker went gin (0 deadwood), the
+  // defender may still group their own melds (ownMelds) to reduce deadwood, but may NOT
+  // lay off onto the knocker's melds. After a gin knock the knocker's hand is empty, so
+  // their deadwood is 0.
+  if (ginDeadwood(knocker) === 0 && layoffs.length > 0) {
+    throw new Error('ERR_NO_LAYOFF_AGAINST_GIN');
+  }
 
   // --- Step 1: validate and apply the defender's own meld declarations ---
   // (rules.md A.2.4 step 3: "separates their own melds from deadwood")

@@ -231,7 +231,7 @@ Canonical rules only. No house rules are in scope.
 | Re-discard drawn-discard card | Forbidden same turn | A.2.3 |
 | Stock depletion → cancelled hand | After any discard, if `stock.length ≤ 2` and the hand wasn't ended by a knock, hand is cancelled — no scoring; `GameState.cancelledHand=true`; server emits `handCancelled` event; host re-deals with same dealer | A.2.3 |
 | Knock threshold | Deadwood ≤ 10 | A.2.4 |
-| Layoff | Non-gin knock: opp lays off onto knocker's melds; no layoff against gin | A.2.4 |
+| Layoff | After any knock the opp groups their own melds first; after a regular (non-gin) knock the opp may also lay off onto knocker's melds. No layoff against gin (own melds still reduce deadwood) | A.2.4 |
 | Knock score | knocker scores `opp_dw − knocker_dw` | A.2.4 |
 | Gin bonus | +20 + opp deadwood | A.2.4 |
 | Undercut | tie or worse → opp scores `(knocker_dw − opp_dw) + 10`; tie favors defender | A.2.4 |
@@ -373,9 +373,8 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 - `draw(from)`: require `phase === 'draw'`; if `from === 'discard'` set `drewFromDiscardId`; phase = `'discard'`.
 - `discard(cardId)`: require `phase === 'discard'`, no re-discard of drawn card. After the discard, if `stock.length ≤ 2` (rules.md A.2.3 stock-depletion), set `phase = 'ended'`, `cancelledHand = true`, return `{ handEnded: true, cancelled: true }` so the WS layer emits a `handCancelled` event (no scoring; same dealer re-deals). Otherwise advance turn.
 - `knock(melds?, discardId)`: require `phase === 'discard'`. `discardId` required — card removed from hand and pushed to discard pile before deadwood is computed from remaining 10 cards (rules.md A.2.4). Card must not be in any declared meld (`ERR_CANNOT_DISCARD_MELDED_CARD`). Deadwood = sum of unmelded cards (A=1); reject if deadwood > 10. Apply melds, set `ginKnockerId`.
-  - If deadwood === 0 → gin: phase = `'ended'`, defender cannot lay off.
-  - Else: phase = `'layoff'`, `turnPlayerId` switches to defender for layoff phase.
-- `ginLayoff(layoffs[], ownMelds?)`: defender first declares `ownMelds` (validated, applied to `defender.melds`), then lays off `layoffs` onto knocker's melds. `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. Phase = `'ended'`.
+  - Either way phase = `'layoff'` and `turnPlayerId` switches to the defender (rules.md A.2.4 — the defender always gets a turn to group their own melds before scoring). Falls back to `'ended'` only when there is no active defender (e.g. forfeit).
+- `ginLayoff(layoffs[], ownMelds?)`: defender first declares `ownMelds` (validated, applied to `defender.melds`), then lays off `layoffs` onto knocker's melds. `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. **No layoff against gin**: if the knocker went gin (deadwood 0), a non-empty `layoffs` is rejected with `ERR_NO_LAYOFF_AGAINST_GIN` — only `ownMelds` are allowed. Phase = `'ended'`.
 - `scoreHand`: knock → knocker `opp_dw − knocker_dw`; gin → knocker `+20 + opp_dw`; undercut (`opp_dw ≤ knocker_dw`) → defender `(knocker_dw − opp_dw) + 10`. Per-hand box +20 added to winner. At game crossover (cumulative ≥ 100) winner gains +100; +100 more if loser totals 0.
 - Re-deal first-player selection: gin **winner deals** next hand → loser plays first. Cancelled hand keeps the same dealer (rules.md A.2.2 + A.2.3). Logic lives in `ws.ts` start handler; cancelled flag carried on the previous `GameState`.
 

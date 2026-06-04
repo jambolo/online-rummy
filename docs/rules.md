@@ -157,7 +157,9 @@ A player may end the hand by **knocking** when their **deadwood** (sum of unmatc
 
 **Gin** = knock with **0 deadwood** — all 10 remaining cards form valid melds after the face-down final discard.
 
-**Layoff**: after a **non-gin** knock, the opponent may extend the **knocker's** melds with their own unmatched cards to reduce their deadwood. The knocker may **not** lay off onto the opponent's melds. **No layoff against gin**: if the knocker went gin, the opponent's deadwood is counted in full.
+**Layoff**: after a **non-gin** knock, the opponent may extend the **knocker's** melds with their own unmatched cards to reduce their deadwood. The knocker may **not** lay off onto the opponent's melds.
+
+**No layoff against gin**: if the knocker went gin, the opponent may **not** lay off onto the knocker's melds. The opponent still **forms their own sets and runs first** (per step 3 above) — only the cards left unmatched after the opponent's own melds count as deadwood. Forming one's own melds always reduces deadwood; laying off onto the knocker is the only thing gin forbids. ("Counted in full" therefore means *without the layoff reduction*, **not** that every card in the opponent's hand counts.)
 
 **Undercut**: if, after layoff, the opponent's deadwood is **less than or equal to** the knocker's deadwood, the knocker is **undercut** and the opponent scores instead. (Ties go to the opponent — the knocker must strictly beat the opponent's count to win the knock.)
 
@@ -166,7 +168,7 @@ Hand-scoring formulas:
 | Outcome | Score awarded to | Formula |
 | --- | --- | --- |
 | Knock wins | knocker | `opponent_deadwood − knocker_deadwood` |
-| Gin | knocker | `20 + opponent_deadwood` (no layoff) |
+| Gin | knocker | `20 + opponent_deadwood` (opponent forms own melds but cannot lay off) |
 | Undercut | opponent | `(knocker_deadwood − opponent_deadwood) + 10` |
 
 **Gin bonus 25** *(house rule)* `[PG-G, GR]`: gin awards `25 + opponent_deadwood` instead of `20 + ...`.
@@ -577,7 +579,7 @@ elif game == gin:
     constraint: if drew top_discard, cannot discard same card same turn
     no mid-turn melding (melds revealed only at knock/gin)
     knock if deadwood <= 10; final discard face-down
-    gin = deadwood 0 -> knocker +20 + opp_deadwood; opp cannot lay off
+    gin = deadwood 0 -> knocker +20 + opp_deadwood; opp forms own melds but cannot lay off onto knocker
     knock (non-gin) -> opp may lay off onto knocker's melds; knocker scores opp_dw - knocker_dw
     undercut (opp_dw <= knocker_dw after layoff) -> opp +10 + (knocker_dw - opp_dw)
     stock_depleted (2 left after 3rd-last taken + no-knock discard) -> hand cancelled, no score

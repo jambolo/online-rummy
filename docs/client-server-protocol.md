@@ -453,14 +453,14 @@ Gin only. Ends the hand by declaring meld groups and a face-down discard (rules.
 
 The server applies all declared melds, removes the discard, then computes **deadwood** = sum of remaining unmelded cards (A=1, 2-10=pip, J/Q/K=10). If deadwood > 10 the action is rejected with `ERR_CANNOT_KNOCK`.
 
-If `deadwood === 0` → **gin**: `phase` advances to `"ended"`; defender cannot lay off. `handleHandEnd` runs (see [discard hand-end response](#discard--discard-a-card-and-end-your-turn)).
+Either way, `phase` advances to `"layoff"`, `turnPlayerId` switches to the defender, and `PublicState.ginKnockerId` is set. The defender submits [`ginLayoff`](#ginlayoff--gin-defender-layoff) to finish the hand:
 
-Else **regular knock**: `phase` advances to `"layoff"`; `turnPlayerId` switches to the defender; `PublicState.ginKnockerId` is set. Defender submits [`ginLayoff`](#ginlayoff--gin-defender-layoff) to extend the knocker's melds with their own cards, then the hand ends.
+- **Regular knock** (`deadwood > 0`): the defender declares their own melds **and** may lay off onto the knocker's melds.
+- **Gin** (`deadwood === 0`): the defender declares their own melds **only** — laying off onto the knocker's melds is forbidden (rules.md A.2.4). The knocker's hand is empty, so clients detect gin via the knocker's `handCount === 0`.
 
-**Response:**
+(If there is no active defender — e.g. the opponent forfeited — `phase` goes straight to `"ended"` and `handleHandEnd` runs.)
 
-- **Gin:** event `wonHand` + optional `gameOver` + final `state` (same as discard hand-end).
-- **Regular knock:** `state` broadcast to all players (phase = `"layoff"`).
+**Response:** `state` broadcast to all players with `phase = "layoff"` and `turnPlayerId` = the defender. The hand-end events (`wonHand` + optional `gameOver` + final `state`) follow the defender's `ginLayoff`.
 
 **Errors:**
 
@@ -491,12 +491,12 @@ Else **regular knock**: `phase` advances to `"layoff"`; `turnPlayerId` switches 
 }
 ```
 
-Gin only. Submitted by the defender during `phase = "layoff"` after a non-gin knock (rules.md A.2.4 step 3). Ends the hand.
+Gin only. Submitted by the defender during `phase = "layoff"` after a knock — gin or regular (rules.md A.2.4 step 3). Ends the hand.
 
-- `ownMelds` (optional) — defender's own meld groups, separated from deadwood. Validated and applied first.
-- `layoffs` (required, may be empty) — extension cards onto the **knocker's** melds. Each entry's card must legally extend the named meld.
+- `ownMelds` (optional) — defender's own meld groups, separated from deadwood. Validated and applied first. Always permitted: the defender forms their own melds after both a gin and a regular knock, reducing their deadwood.
+- `layoffs` (required, may be empty) — extension cards onto the **knocker's** melds. Each entry's card must legally extend the named meld. **Forbidden after a gin knock** — a non-empty `layoffs` against gin returns `ERR_NO_LAYOFF_AGAINST_GIN`.
 
-Submit an empty `layoffs: []` (and no `ownMelds`) to skip layoff entirely.
+Submit an empty `layoffs: []` (and no `ownMelds`) to skip both entirely.
 
 Once processed, the server runs hand-end scoring. Defender's deadwood (post-layoff) is compared to knocker's deadwood — undercut goes to defender if defender's deadwood ≤ knocker's.
 
@@ -516,6 +516,7 @@ Once processed, the server runs hand-end scoring. Defender's deadwood (post-layo
 | `ERR_INVALID_MELD` | An `ownMelds` group is not a valid set or run |
 | `ERR_MELD_NOT_FOUND:<id>` | `meldId` does not match any meld in play |
 | `ERR_INVALID_LAYOFF` | The cardId does not legally extend the target meld |
+| `ERR_NO_LAYOFF_AGAINST_GIN` | `layoffs` is non-empty but the knocker went gin — only `ownMelds` are allowed |
 
 ---
 
@@ -791,7 +792,7 @@ The `"discard"` phase value exists but is not set by basic or 500 Rummy in v1. I
 - `"firstUpcardOffer"` — non-dealer offered the upcard first. Send `draw {from:"discard"}` to take it (advance to `"discard"`), or `passUpcard` to decline. On dealer's pass, phase becomes `"draw"` with turn back to non-dealer.
 - `"draw"` — draw from stock or discard top. Advances to `"discard"`. There is no `"meld"` phase in Gin — melds reveal only at knock time.
 - `"discard"` — choose `discard` (continue) or `knock` (end hand). A discard that reduces stock to ≤ 2 cards cancels the hand (rules.md A.2.3); a knock declares melds + face-down discard.
-- `"layoff"` — defender's phase after a non-gin knock. Defender submits `ginLayoff` to declare own melds + extend knocker's melds. Hand then ends.
+- `"layoff"` — defender's phase after a knock (gin or regular). Defender submits `ginLayoff` to declare their own melds, and — only after a regular knock — extend the knocker's melds. (No layoff against gin: `ERR_NO_LAYOFF_AGAINST_GIN`.) Hand then ends.
 - `"ended"` — hand over (either via knock/gin, hand-empty win, forfeit, or stock-depletion cancel).
 
 ### Example: A Full Turn with Meld and Layoff

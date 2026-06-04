@@ -74,7 +74,17 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
     (!ownMeldRequired || myMeldsCount > 0) &&
     selectedCardIds.length === 1;
 
-  // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.3).
+  // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.4).
+  // rules.md A.2.4 "No layoff against gin": if the knocker went gin the defender may only
+  // group their own melds — no layoff onto knocker melds. Detect gin via the knocker's
+  // empty hand (all 10 cards melded → handCount 0).
+  const ginKnockerId =
+    publicState.variantPublic.variant === "gin"
+      ? publicState.variantPublic.data.ginKnockerId
+      : null;
+  const knockerWentGin =
+    ginKnockerId !== null &&
+    publicState.players.find((p) => p.id === ginKnockerId)?.handCount === 0;
   const selectedCard = selectedCardIds.length === 1
     ? lookupCard(selectedCardIds[0]!)
     : undefined;
@@ -83,6 +93,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
     publicState.phase === "layoff" &&
     isTurnPlayer &&
     !pending &&
+    !knockerWentGin &&
     selectedCard !== undefined &&
     canLayoffOnMeld(meld, selectedCard);
 
