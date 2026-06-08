@@ -16,6 +16,9 @@ interface Props {
   dimmed?: boolean;
   /** Amber glow marking a card melded/laid off on the current (or just-prior) turn. */
   highlighted?: boolean;
+  /** Gin staging cue for cards in hand: 'meld' (grouped into a knock/defender meld, green)
+   *  or 'layoff' (staged onto a knocker meld, blue) — matches the ActionBar chip colors. */
+  marker?: "meld" | "layoff";
   /** Compact: show only top-left corner (no center symbol, no bottom corner).
    *  Use for small meld-zone cards. Caller controls text size via `style.fontSize`. */
   compact?: boolean;
@@ -28,6 +31,7 @@ export default function CardComponent({
   selected = false,
   dimmed = false,
   highlighted = false,
+  marker,
   compact = false,
   onClick,
   style,
@@ -39,17 +43,31 @@ export default function CardComponent({
     ? { fontWeight: "bold", lineHeight: 1 }
     : { fontSize: 16, fontWeight: "bold", lineHeight: 1 };
 
+  // Gin staging cue: green (grouped meld) / blue (staged layoff). Mirrors the
+  // ActionBar chip palette (--chip-meld / --chip-layoff). NS-1 one-off literals.
+  const markerColor =
+    marker === "meld" ? "#7fff7f" : marker === "layoff" ? "#64a0ff" : null;
+  const markerGlow =
+    marker === "meld"
+      ? "rgba(127,255,127,0.7)"
+      : marker === "layoff"
+      ? "rgba(100,160,255,0.7)"
+      : null;
+
   return (
     <div
       onClick={onClick}
       style={{
+        position: "relative",
         width: 56,
         height: 80,
         // textAlign: left prevents inheriting "center" from Table wrappers.
         textAlign: "left",
         border: `2px solid ${
-          selected ? t.focusRing : highlighted ? "#e3a33b" : t.cardBorder
-        }`, // NS-1 one-off: amber highlight for just-melded cards
+          selected
+            ? t.focusRing
+            : (markerColor ?? (highlighted ? "#e3a33b" : t.cardBorder))
+        }`, // NS-1 one-off: amber highlight / green-blue gin-staging marker
         borderRadius: t.radiusControl,
         background: dimmed ? t.cardFaceDimmed : t.cardFace,
         color: isRed ? t.cardRed : t.cardBlack,
@@ -63,6 +81,8 @@ export default function CardComponent({
         transition: "transform 0.1s, border-color 0.1s, box-shadow 0.1s",
         boxShadow: selected
           ? "0 4px 12px rgba(74,158,255,0.5)"   // NS-1 one-off: focus-ring at 50% opacity
+          : markerGlow
+          ? `0 0 8px 2px ${markerGlow}`         // NS-1 one-off: gin-staging marker glow
           : highlighted
           ? "0 0 8px 2px rgba(227,163,59,0.7)"  // NS-1 one-off: amber glow for just-melded cards
           : "1px 2px 4px rgba(0,0,0,0.25)",     // NS-1 one-off: card drop shadow
@@ -71,6 +91,26 @@ export default function CardComponent({
         ...style,
       }}
     >
+      {/* Non-color cue [V7] for the gin-staging marker: glyph badge. */}
+      {marker && markerColor && (
+        <div
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -6,
+            background: markerColor,
+            color: "#15110c",
+            fontSize: 9,
+            fontWeight: "bold",
+            lineHeight: 1,
+            borderRadius: 8,
+            padding: "2px 4px",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.4)",
+          }}
+        >
+          {marker === "meld" ? "✓" : "↪"}
+        </div>
+      )}
       {/* Top-left corner */}
       <div style={cornerStyle}>
         {card.rank}{sym}
