@@ -311,6 +311,7 @@ If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that fiel
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
 | `ERR_INVALID_MELD` | The cards do not form a valid set or run |
+| `ERR_CANNOT_PLAY_LAST_CARD` | 500 Rummy only: the meld would empty the hand. A player must retain a card to discard (rules.md A.4.8). The "last card may be played" house rule would lift this; not scaffolded |
 
 ---
 
@@ -345,6 +346,7 @@ The card must extend the target meld while keeping it valid. Multiple layoffs ar
 | `ERR_UNKNOWN_CARD:<id>` | The specified card ID is not recognized |
 | `ERR_MELD_NOT_FOUND` | `meldId` does not match any meld on the table |
 | `ERR_INVALID_LAYOFF` | Adding the card would make the target meld invalid. `msg` contains a specific reason (e.g. wrong suit, rank out of range, set full) |
+| `ERR_CANNOT_PLAY_LAST_CARD` | 500 Rummy only: laying off your last card. A player must retain a card to discard (rules.md A.4.8). The "last card may be played" house rule would lift this; not scaffolded |
 
 ---
 

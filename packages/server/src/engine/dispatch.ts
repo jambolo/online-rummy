@@ -30,12 +30,16 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
       engine.applyDrawFromPile(state, playerId, action.cardId);
       return { kind: 'state' };
     }
-    case 'meld':
-      engine.applyMeld(state, playerId, action.cardIds);
+    case 'meld': {
+      const r = engine.applyMeld(state, playerId, action.cardIds);
+      if (r.handEnded) return { kind: 'handEnded' };
       return { kind: 'state' };
-    case 'layoff':
-      engine.applyLayoff(state, playerId, action.meldId, action.cardId);
+    }
+    case 'layoff': {
+      const r = engine.applyLayoff(state, playerId, action.meldId, action.cardId);
+      if (r.handEnded) return { kind: 'handEnded' };
       return { kind: 'state' };
+    }
     case 'discard': {
       const r = engine.applyDiscard(state, playerId, action.cardId);
       if (r.cancelled === true) return { kind: 'handCancelled' };

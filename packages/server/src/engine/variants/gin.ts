@@ -132,8 +132,14 @@ export const ginVariant: VariantEngine = {
     createGinGame(roomId, players, rng, firstPlayerIndex),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
-  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
-  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyMeld: (state, playerId, cardIds) => {
+    applyMeld(state, playerId, cardIds);
+    return { handEnded: false };
+  },
+  applyLayoff: (state, playerId, meldId, cardId) => {
+    applyLayoff(state, playerId, meldId, cardId);
+    return { handEnded: false };
+  },
   applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
   applyKnock: (state, playerId, melds, discardId) => applyKnock(state, playerId, melds, discardId),
   applyGinLayoff: (state, playerId, layoffs, ownMelds) =>

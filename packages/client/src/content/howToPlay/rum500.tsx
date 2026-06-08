@@ -70,7 +70,9 @@ export default function Rum500Rules() {
             <strong>Discard</strong> — place one card face-up on the discard
             pile to end your turn. If you took the top discard card, you
             cannot discard it back this turn. If you did a pile dive, you must
-            meld or lay off the picked card before discarding anything.
+            meld or lay off the picked card before discarding anything. You{" "}
+            <strong>cannot play your last card</strong> — keep one card to
+            discard, so you always go out on a discard.
           </li>
         </ol>
       </section>

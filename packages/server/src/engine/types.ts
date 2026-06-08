@@ -108,8 +108,8 @@ export interface VariantEngine {
 
   // Core actions (required — all variants implement these)
   applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 'discard'): void;
-  applyMeld(state: GameState, playerId: PlayerId, cardIds: string[]): void;
-  applyLayoff(state: GameState, playerId: PlayerId, meldId: string, cardId: string): void;
+  applyMeld(state: GameState, playerId: PlayerId, cardIds: string[]): ApplyResult;
+  applyLayoff(state: GameState, playerId: PlayerId, meldId: string, cardId: string): ApplyResult;
   applyDiscard(state: GameState, playerId: PlayerId, cardId: string): ApplyResult;
 
   // Variant-specific actions (optional)

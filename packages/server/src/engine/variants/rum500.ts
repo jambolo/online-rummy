@@ -135,8 +135,14 @@ export const rum500Variant: VariantEngine = {
     createRum500Game(roomId, players, rng, firstPlayerIndex),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
-  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
-  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyMeld: (state, playerId, cardIds) => {
+    applyMeld(state, playerId, cardIds);
+    return { handEnded: false };
+  },
+  applyLayoff: (state, playerId, meldId, cardId) => {
+    applyLayoff(state, playerId, meldId, cardId);
+    return { handEnded: false };
+  },
   applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
   applyDrawFromPile: (state, playerId, cardId) => applyDrawFromPile(state, playerId, cardId),
 
@@ -328,6 +334,10 @@ export function applyMeld(
 
   if (!rum500Variant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
 
+  // rules.md A.4.8: 500 Rummy player cannot play their last card — must retain one to
+  // discard. (House rule "Last card may be played" would lift this; not scaffolded.)
+  if (cardIds.length >= player.hand.length) throw new Error('ERR_CANNOT_PLAY_LAST_CARD');
+
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
   const meld = {
     id: makeMeldId(),
@@ -346,6 +356,7 @@ export function applyMeld(
   if (vs.mustMeldCardId !== null && cardIds.includes(vs.mustMeldCardId)) {
     vs.mustMeldCardId = null;
   }
+
   // Multiple melds + layoffs allowed per turn — stay in meld phase until player discards.
   state.phase = 'meld';
 }
@@ -366,6 +377,10 @@ export function applyLayoff(
   if (!player.hand.find((c) => c.id === cardId)) {
     throw new Error(`ERR_CARD_NOT_IN_HAND:${cardId}`);
   }
+
+  // rules.md A.4.8: 500 Rummy player cannot play their last card — must retain one to
+  // discard. (House rule "Last card may be played" would lift this; not scaffolded.)
+  if (player.hand.length <= 1) throw new Error('ERR_CANNOT_PLAY_LAST_CARD');
 
   let targetMeld:
     | { id: string; kind: MeldKind; cardIds: string[]; ownerId: string }

@@ -81,13 +81,15 @@ Be first to dispose of all cards by forming **melds** (sets + runs), laying off,
 1. Draw 1: top of stock OR top of discard pile.
 2. (Optional) Meld. A player may place any number of melds per turn.
    - **Maximum one meld per turn** *(house rule)* `[PG-R]`: when enabled, the player may place at most one meld this turn.
-3. (Optional) Lay off cards onto own or others' existing melds.
+3. (Optional) Lay off cards onto own or others' existing melds. **If your hand is now empty, you go out immediately** (see A.1.7).
    - **Layoff requires prior meld** *(house rule)* `[WP]`: when enabled, the player may only lay off if they have already placed at least one of their own melds (on any earlier turn, or earlier in the current turn).
 4. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn.
 
 ### A.1.7 Going out + Rummy bonus
 
-Going out = dispose of all cards via meld/lay-off/final discard. Play ceases immediately.
+Going out = dispose of all cards via meld/lay-off/discard. A player goes out immediately when their hand becomes empty. Play ceases immediately.
+
+**Last card must be discarded** *(house rule)*: when enabled, a player's final card cannot be melded or laid off and must be discarded instead. Going out requires a final discard.
 
 **Going Rummy** (going out in a single turn with no prior melding or laying off): each opponent's unmelded card point total (the amount the winner would normally collect from them; see A.1.8) is **doubled** before being credited to the winner.
 
@@ -341,6 +343,12 @@ When laying off on another player's meld, place the card in front of yourself (y
 Net score (per hand, per player) = value of all cards the player **placed** (own melds + cards laid off onto own or others' melds, per A.4.6) − value of cards remaining in the player's hand. Card values per A.4.2; ace direction in runs determined per meld (A.4.3).
 
 Play continues across hands until one or more players' cumulative scores exceed **500**. If multiple players cross 500 in the same hand, the player with the highest cumulative score wins.
+
+### A.4.8 Going out
+
+A player goes out when their hand is empty. **A player may not play their last card** — the final card cannot be melded or laid off; it **must be discarded**. A player must always retain at least one card to discard, so going out happens only on the discard step.
+
+**Last card may be played** *(house rule)*: when enabled, the final card may be melded or laid off instead of discarded. The player goes out the moment their hand becomes empty, whether through melding, laying off, or discarding.
 
 ---
 

@@ -592,6 +592,49 @@ describe('rum500 turn flow', () => {
     expect(handEnded).toBe(true);
     expect(state.phase).toBe('ended');
   });
+
+  it('meld that would empty the hand is rejected (rules.md A.4.8)', () => {
+    // 500 Rummy: cannot play the last card — must retain one to discard.
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const set = [c('7', 'C', 'z1'), c('7', 'D', 'z2'), c('7', 'H', 'z3')];
+    set.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.hand = [...set]; // exactly the 3 meld cards, nothing else
+    expect(() => applyMeld(state, 'p1', ['z1', 'z2', 'z3'])).toThrow('ERR_CANNOT_PLAY_LAST_CARD');
+    expect(state.players[0]!.melds).toHaveLength(0);
+    expect(state.players[0]!.hand).toHaveLength(3);
+  });
+
+  it('layoff of the last hand card is rejected (rules.md A.4.8)', () => {
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const targetSet = [c('Q', 'C', 'w1'), c('Q', 'D', 'w2'), c('Q', 'H', 'w3')];
+    targetSet.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[1]!.melds.push({
+      id: 'qLast',
+      kind: 'set',
+      cardIds: ['w1', 'w2', 'w3'],
+      ownerId: 'p2',
+    });
+    const lo = c('Q', 'S', 'loLast');
+    state.cardRegistry.set(lo.id, lo);
+    state.players[0]!.hand = [lo]; // only one card left
+    expect(() => applyLayoff(state, 'p1', 'qLast', 'loLast')).toThrow('ERR_CANNOT_PLAY_LAST_CARD');
+    expect(state.players[0]!.hand).toHaveLength(1);
+  });
+
+  it('meld leaving one card in hand is allowed (does not go out)', () => {
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const set = [c('8', 'C', 'y1'), c('8', 'D', 'y2'), c('8', 'H', 'y3')];
+    const keep = c('2', 'S', 'keep');
+    [...set, keep].forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.hand = [...set, keep]; // 4 cards: meld 3, retain 1
+    applyMeld(state, 'p1', ['y1', 'y2', 'y3']);
+    expect(state.players[0]!.melds).toHaveLength(1);
+    expect(state.players[0]!.hand).toHaveLength(1);
+    expect(state.phase).toBe('meld');
+  });
 });
 
 // ---- scoring (meld credit minus hand) ----
