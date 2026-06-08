@@ -270,16 +270,16 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 ### 3.3 `Card` ([components/Card.tsx](packages/client/src/components/Card.tsx))
 
-- **State:** Pure presentational. Props: `card`, `selected`, `dimmed`, `compact`, `highlighted`, `onClick`, `style`.
-- **Structure:** A 56×80 `<div>`, column, space-between, padding `3px 5px`. Top-left corner (rank over suit). Full-size adds center 22px symbol + rotated bottom-right corner; `compact` hides both (corner inherits caller `fontSize`).
-- **Styling constraints:** Border `2px solid` — `--focus-ring` if selected, amber `#e3a33b` if `highlighted` (used by MeldZone to flag cards placed since the previous draw), else `--card-border`. Background `--card-face` (or `--card-face-dimmed` when `dimmed`). Suit color `--card-red` (♦♥) / `--card-black` (♣♠). Selected → `translateY(-10px)` + blue glow shadow; `highlighted` → amber glow shadow; default shadow `1px 2px 4px rgba(0,0,0,0.25)`. `transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s` (suppressed when `useReducedMotion()` is true). **Explicitly sets `textAlign: left`** to defeat inherited centering from Table wrappers. `userSelect: none`, `flexShrink: 0`.
-- **Aspirations & Gaps:** This is the **single highest-leverage North Star target (NS-3).** The HTML/CSS card is the documented v1 stand-in for a PixiJS sprite. Card faces are now aged parchment (`--card-face`); the stock-pile back carries the branded brass RR monogram (NS-2, rendered in [Table.tsx](packages/client/src/components/Table.tsx) as an inline SVG `data:` background over `--card-back`). Selection is color + lift only (NS-6). **Any animation/skin upgrade must keep the same `Props` contract** so callers (Hand, MeldZone, Table, ScoreOverlay, PileDive) are untouched.
+- **State:** Pure presentational. Props: `card`, `selected`, `dimmed`, `compact`, `highlighted`, `marker`, `onClick`, `style`.
+- **Structure:** A 56×80 `<div>`, column, space-between, padding `3px 5px`. Top-left corner (rank over suit). Full-size adds center 22px symbol + rotated bottom-right corner; `compact` hides both (corner inherits caller `fontSize`). Gin staging cues: optional badge overlay (top-right, 9px) marked "✓" (meld, green) or "↪" (layoff, blue) when `marker` prop set — non-color visual cue per [V7].
+- **Styling constraints:** Border `2px solid` — `--focus-ring` if selected, color from `marker` (green `#7fff7f` / blue `#64a0ff`) if staging cue, amber `#e3a33b` if `highlighted` (used by MeldZone to flag cards placed since the previous draw), else `--card-border`. Background `--card-face` (or `--card-face-dimmed` when `dimmed`). Suit color `--card-red` (♦♥) / `--card-black` (♣♠). Selected → `translateY(-10px)` + blue glow shadow; `marker` → colored glow shadow matching border; `highlighted` → amber glow shadow; default shadow `1px 2px 4px rgba(0,0,0,0.25)`. `transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s` (suppressed when `useReducedMotion()` is true). **Explicitly sets `textAlign: left`** to defeat inherited centering from Table wrappers. `userSelect: none`, `flexShrink: 0`.
+- **Aspirations & Gaps:** This is the **single highest-leverage North Star target (NS-3).** The HTML/CSS card is the documented v1 stand-in for a PixiJS sprite. Card faces are now aged parchment (`--card-face`); the stock-pile back carries the branded brass RR monogram (NS-2, rendered in [Table.tsx](packages/client/src/components/Table.tsx) as an inline SVG `data:` background over `--card-back`). Selection is color + lift only (NS-6). Gin staging markers (badge + border color + glow) add the [V7] non-color cue. **Any animation/skin upgrade must keep the same `Props` contract** so callers (Hand, MeldZone, Table, ScoreOverlay, PileDive) are untouched.
 
 ### 3.4 `Hand` ([components/Hand.tsx](packages/client/src/components/Hand.tsx))
 
-- **State:** Reads `privateState`, `publicState`, `handOrder`, `selectedCardIds`, `setHandOrder`. Derives `mustMeldCardId` (500 Rummy only, via `variantPublic` narrowing).
+- **State:** Reads `privateState`, `publicState`, `handOrder`, `selectedCardIds`, `setHandOrder`, and Gin staging buffers (`knockMelds`, `ginDefenderMelds`, `ginLayoffs`). Derives `mustMeldCardId` (500 Rummy only, via `variantPublic` narrowing) and per-card `marker` (Gin only: "meld" or "layoff" staging cue).
 - **Structure:** Panel (`bg rgba(0,0,0,0.2), radius 8, padding 12×16`) with uppercase "Your Hand (n)" label, then a dnd-kit `DndContext` → `SortableContext` (horizontal strategy) → flex-wrap row of `SortableCard`.
-- **Styling constraints:** `PointerSensor` with `activationConstraint: { distance: 6 }` so a tap toggles selection (`toggleSelect`) without starting a drag. Dragging card → `opacity 0.4, zIndex 10`. `mustMeld` card → `outline: 3px solid #ffd166`. Order is client-local (`handOrder` array of ids); cards filtered/merged against live hand on each `state`.
+- **Styling constraints:** `PointerSensor` with `activationConstraint: { distance: 6 }` so a tap toggles selection (`toggleSelect`) without starting a drag. Dragging card → `opacity 0.4, zIndex 10`. `mustMeld` card → `outline: 3px solid #ffd166`. **Gin staging markers:** cards in `knockMelds` or `ginDefenderMelds` render with `marker='meld'` (green badge + border); cards in `ginLayoffs` render with `marker='layoff'` (blue badge + border) — so grouped cards visually separate from loose deadwood during the knock/defender discard phases. Order is client-local (`handOrder` array of ids); cards filtered/merged against live hand on each `state`.
 - **Aspirations & Gaps:** Flat wrap, not a fanned/arc layout — **[North Star]** PixiJS fan with overlap and arc (NS-3). On small screens many cards wrap into many rows (NS-4). No keyboard reordering (NS-6).
 
 ### 3.5 `Table` ([components/Table.tsx](packages/client/src/components/Table.tsx))
@@ -548,6 +548,12 @@ Popover / lobby block:
      - Gin remains canonical-only in v1 (empty registry) per plan.md; adding Gin house
        rules is a deliberate scope change, not an incidental one.
 ```
+
+---
+
+### 4.2 Landed outside plan (continued)
+
+- **Gin-staging card markers** (commit 79f4dc7, 2026-06-07). During Gin `discard` (knocker) and `layoff` (defender) phases, cards staged in `knockMelds` / `ginDefenderMelds` / `ginLayoffs` render with colored border + badge (✓ meld green / ↪ layoff blue) so players visually distinguish grouped cards from loose deadwood. Hand component computes `markerFor(id)` from staging buffers; Card component renders the badge (top-right, 9px, non-color [V7] icon + matching border/glow). Out of scope for the NS plan; logged here. See UIDD §3.3/3.4.
 
 ---
 
