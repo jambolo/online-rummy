@@ -111,8 +111,9 @@ export default function GinRules() {
         </p>
         <ul style={ulStyle}>
           <li>
-            <strong>Gin</strong> (0 deadwood) — discard face-down; opponent cannot
-            lay off.
+            <strong>Gin</strong> (0 deadwood) — discard face-down. Your opponent
+            still arranges their own sets and runs to reduce their deadwood, but
+            <strong> cannot lay off</strong> onto your melds.
           </li>
           <li>
             <strong>Regular knock</strong> (1–10 deadwood) — discard face-down;
@@ -122,12 +123,15 @@ export default function GinRules() {
       </section>
 
       <section>
-        <h3 style={h3Style}>Layoff (after a regular knock)</h3>
+        <h3 style={h3Style}>After a knock — the defender's turn</h3>
         <p style={pStyle}>
-          After a regular knock (not gin), the <strong>defender</strong> may extend the
-          knocker's melds with cards from their own hand. Each card placed reduces the
-          defender's deadwood. The knocker cannot add to their own melds at this point.
-          Layoff is not allowed after gin.
+          After <em>any</em> knock the <strong>defender</strong> arranges their own
+          sets and runs; only the cards left over count as deadwood. After a{" "}
+          <strong>regular</strong> knock (not gin) they may <em>also</em> extend the
+          knocker's melds with cards from their hand — each card laid off reduces their
+          deadwood further. The knocker cannot add to their own melds at this point.
+          After <strong>gin</strong>, laying off onto the knocker is not allowed, but the
+          defender still forms their own melds to keep their deadwood as low as possible.
         </p>
       </section>
 
@@ -217,7 +221,10 @@ export default function GinRules() {
           </li>
           <li>No mid-turn melding — melds are revealed only at knock time.</li>
           <li>Knock threshold: deadwood <strong>≤ 10</strong>.</li>
-          <li>Layoff allowed after a regular knock; <strong>not</strong> after gin.</li>
+          <li>
+            Layoff onto the knocker allowed after a regular knock; <strong>not</strong>{" "}
+            after gin. (The defender forms their own melds either way.)
+          </li>
           <li>Box bonus: <strong>+20</strong> per hand won.</li>
           <li>Game bonus: <strong>+100</strong> on reaching 100 cumulative points.</li>
           <li>Shutout bonus: <strong>+100</strong> (opponent scored 0 all game).</li>

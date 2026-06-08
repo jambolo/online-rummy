@@ -98,23 +98,31 @@ describe('applyAction — gin paths', () => {
     expect(state.turnPlayerId).toBe('p2');
   });
 
-  it('gin knock (0 deadwood) returns { kind: "handEnded" }', () => {
+  it('gin knock (0 deadwood) returns { kind: "stateAll" }, advances to layoff, then ginLayoff returns { kind: "handEnded" }', () => {
     const state = ginGame();
-    const hand = [
+    const p1Hand = [
       c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
       c('A', 'D', 'g5'), c('2', 'D', 'g6'), c('3', 'D', 'g7'),
       c('A', 'H', 'g8'), c('2', 'H', 'g9'), c('3', 'H', 'g10'),
       c('K', 'S', 'g_disc'),
     ];
-    hand.forEach((card) => state.cardRegistry.set(card.id, card));
-    state.players[0]!.hand = [...hand];
+    const p2Hand = [c('7', 'C', 'd1'), c('8', 'D', 'd2'), c('9', 'H', 'd3')];
+    [...p1Hand, ...p2Hand].forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.hand = [...p1Hand];
+    state.players[1]!.hand = [...p2Hand];
     state.phase = 'discard';
-    const result = applyAction(state, 'p1', {
+    const knockResult = applyAction(state, 'p1', {
       t: 'knock',
       melds: [['g1', 'g2', 'g3', 'g4'], ['g5', 'g6', 'g7'], ['g8', 'g9', 'g10']],
       discardId: 'g_disc',
     });
-    expect(result).toEqual({ kind: 'handEnded' });
+    // Defender gets a layoff turn (to group own melds — not to lay off against gin).
+    expect(knockResult).toEqual({ kind: 'stateAll' });
+    expect(state.phase).toBe('layoff');
+    expect(state.turnPlayerId).toBe('p2');
+
+    const layoffResult = applyAction(state, 'p2', { t: 'ginLayoff', layoffs: [] });
+    expect(layoffResult).toEqual({ kind: 'handEnded' });
     expect(state.phase).toBe('ended');
   });
 

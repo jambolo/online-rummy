@@ -1,5 +1,5 @@
-import type { Card, Meld } from "@online-rummy/shared";
-import { validateMeld } from "@online-rummy/shared";
+import type { Card, Meld, PublicState } from "@online-rummy/shared";
+import { validateMeld, cardPoints, score500MeldCard } from "@online-rummy/shared";
 import { useAppStore } from "../store";
 import CardComponent from "./Card";
 import { t, sectionLabel } from "../theme/tokens";
@@ -10,6 +10,34 @@ function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
   const meldCards = meld.cards ?? [];
   if (meldCards.length === 0) return false;
   return validateMeld([...meldCards, newCard], { aceHigh: false, roundTheCorner: false });
+}
+
+// Interim on-table score per player: value of every card they placed (melded or laid
+// off), attributed via publicState.meldedBy. Only meaningful for 500 Rummy, where meld and
+// layoff points accumulate during play. Gin and Basic melds do not score points. 500 uses
+// per-meld ace direction (score500MeldCard).
+function computeInterimScores(
+  publicState: PublicState,
+  resolveCard: (id: string) => Card | undefined,
+): Map<string, number> | null {
+  if (publicState.variant !== "rum500") return null;
+  const is500 = true;
+  const scores = new Map<string, number>();
+  for (const player of publicState.players) scores.set(player.id, 0);
+
+  for (const player of publicState.players) {
+    for (const meld of player.melds) {
+      const meldCards = meld.cardIds
+        .map((id, i) => meld.cards?.[i] ?? resolveCard(id))
+        .filter((c): c is Card => c !== undefined);
+      for (const card of meldCards) {
+        const placer = publicState.meldedBy[card.id] ?? meld.ownerId;
+        const pts = is500 ? score500MeldCard(card, meldCards) : cardPoints(card, 1);
+        scores.set(placer, (scores.get(placer) ?? 0) + pts);
+      }
+    }
+  }
+  return scores;
 }
 
 interface MeldPileProps {
@@ -23,6 +51,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   const myPlayerId = useAppStore((s) => s.myPlayerId);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const lookupCard = useAppStore((s) => s.lookupCard);
+  const meldHighlights = useAppStore((s) => s.meldHighlights);
   const send = useAppStore((s) => s.send);
   const addGinLayoff = useAppStore((s) => s.addGinLayoff);
   const ginLayoffs = useAppStore((s) => s.ginLayoffs);
@@ -45,7 +74,17 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
     (!ownMeldRequired || myMeldsCount > 0) &&
     selectedCardIds.length === 1;
 
-  // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.3).
+  // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.4).
+  // rules.md A.2.4 "No layoff against gin": if the knocker went gin the defender may only
+  // group their own melds — no layoff onto knocker melds. Detect gin via the knocker's
+  // empty hand (all 10 cards melded → handCount 0).
+  const ginKnockerId =
+    publicState.variantPublic.variant === "gin"
+      ? publicState.variantPublic.data.ginKnockerId
+      : null;
+  const knockerWentGin =
+    ginKnockerId !== null &&
+    publicState.players.find((p) => p.id === ginKnockerId)?.handCount === 0;
   const selectedCard = selectedCardIds.length === 1
     ? lookupCard(selectedCardIds[0]!)
     : undefined;
@@ -54,6 +93,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
     publicState.phase === "layoff" &&
     isTurnPlayer &&
     !pending &&
+    !knockerWentGin &&
     selectedCard !== undefined &&
     canLayoffOnMeld(meld, selectedCard);
 
@@ -114,6 +154,7 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
               key={id}
               card={card}
               compact
+              highlighted={meldHighlights.includes(id)}
               style={{ width: 40, height: 56, fontSize: 14 }}
             />
           ) : (
@@ -222,11 +263,39 @@ export default function MeldZone() {
     a.id === myPlayerId ? -1 : 1
   );
 
+  // Interim meld/layoff score per player (basic + 500 Rummy only).
+  const interimScores = computeInterimScores(publicState, lookupCard);
+  const scoreRows = interimScores
+    ? [...publicState.players]
+        .sort((a) => (a.id === myPlayerId ? -1 : 1))
+        .map((p) => ({ id: p.id, name: p.name, pts: interimScores.get(p.id) ?? 0 }))
+        .filter((r) => r.pts > 0)
+    : [];
+
   return (
     <div>
       <div style={{ ...sectionLabel, color: variationAccent(publicState.variant), marginBottom: 6 }}>
         Melds on table
       </div>
+      {scoreRows.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            marginBottom: 8,
+            fontSize: 11,
+            color: t.text70,
+          }}
+        >
+          {scoreRows.map((r) => (
+            <span key={r.id}>
+              {r.name}{r.id === myPlayerId ? " (you)" : ""}:{" "}
+              <strong style={{ color: variationAccent(publicState.variant) }}>{r.pts}</strong>
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {sorted.map((player) =>
           player.melds.map((meld) => (

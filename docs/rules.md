@@ -81,13 +81,15 @@ Be first to dispose of all cards by forming **melds** (sets + runs), laying off,
 1. Draw 1: top of stock OR top of discard pile.
 2. (Optional) Meld. A player may place any number of melds per turn.
    - **Maximum one meld per turn** *(house rule)* `[PG-R]`: when enabled, the player may place at most one meld this turn.
-3. (Optional) Lay off cards onto own or others' existing melds.
+3. (Optional) Lay off cards onto own or others' existing melds. **If your hand is now empty, you go out immediately** (see A.1.7).
    - **Layoff requires prior meld** *(house rule)* `[WP]`: when enabled, the player may only lay off if they have already placed at least one of their own melds (on any earlier turn, or earlier in the current turn).
 4. Discard 1. If you drew the top discard, you may NOT discard that same card on the same turn.
 
 ### A.1.7 Going out + Rummy bonus
 
-Going out = dispose of all cards via meld/lay-off/final discard. Play ceases immediately.
+Going out = dispose of all cards via meld/lay-off/discard. A player goes out immediately when their hand becomes empty. Play ceases immediately.
+
+**Last card must be discarded** *(house rule)*: when enabled, a player's final card cannot be melded or laid off and must be discarded instead. Going out requires a final discard.
 
 **Going Rummy** (going out in a single turn with no prior melding or laying off): each opponent's unmelded card point total (the amount the winner would normally collect from them; see A.1.8) is **doubled** before being credited to the winner.
 
@@ -155,7 +157,9 @@ A player may end the hand by **knocking** when their **deadwood** (sum of unmatc
 
 **Gin** = knock with **0 deadwood** — all 10 remaining cards form valid melds after the face-down final discard.
 
-**Layoff**: after a **non-gin** knock, the opponent may extend the **knocker's** melds with their own unmatched cards to reduce their deadwood. The knocker may **not** lay off onto the opponent's melds. **No layoff against gin**: if the knocker went gin, the opponent's deadwood is counted in full.
+**Layoff**: after a **non-gin** knock, the opponent may extend the **knocker's** melds with their own unmatched cards to reduce their deadwood. The knocker may **not** lay off onto the opponent's melds.
+
+**No layoff against gin**: if the knocker went gin, the opponent may **not** lay off onto the knocker's melds. The opponent still **forms their own sets and runs first** (per step 3 above) — only the cards left unmatched after the opponent's own melds count as deadwood. Forming one's own melds always reduces deadwood; laying off onto the knocker is the only thing gin forbids. ("Counted in full" therefore means *without the layoff reduction*, **not** that every card in the opponent's hand counts.)
 
 **Undercut**: if, after layoff, the opponent's deadwood is **less than or equal to** the knocker's deadwood, the knocker is **undercut** and the opponent scores instead. (Ties go to the opponent — the knocker must strictly beat the opponent's count to win the knock.)
 
@@ -164,7 +168,7 @@ Hand-scoring formulas:
 | Outcome | Score awarded to | Formula |
 | --- | --- | --- |
 | Knock wins | knocker | `opponent_deadwood − knocker_deadwood` |
-| Gin | knocker | `20 + opponent_deadwood` (no layoff) |
+| Gin | knocker | `20 + opponent_deadwood` (opponent forms own melds but cannot lay off) |
 | Undercut | opponent | `(knocker_deadwood − opponent_deadwood) + 10` |
 
 **Gin bonus 25** *(house rule)* `[PG-G, GR]`: gin awards `25 + opponent_deadwood` instead of `20 + ...`.
@@ -287,7 +291,7 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 
 > **TODO** — primary sources `[BIC-K]` and `[PG-K]` need re-verification for the relationship between A.3.4 (knock with face-down discard) and A.3.6 (going out without discard): are both legitimate end conditions in standard knock rummy, and does "going out" with zero deadwood differ from the A.3.5 Rummy bonus? Compiled text here implies both end conditions coexist, but primaries have not been re-checked since this file was first synthesized.
 >
-> **Blocks** Knock Rummy implementation (deferred — see `docs/refactor-plan.md` D3). Resolve this TODO before scoping that game variation.
+> **Blocks** Knock Rummy implementation (deferred, post-v1). Resolve this TODO before scoping that game variation.
 
 ---
 
@@ -341,6 +345,12 @@ When laying off on another player's meld, place the card in front of yourself (y
 Net score (per hand, per player) = value of all cards the player **placed** (own melds + cards laid off onto own or others' melds, per A.4.6) − value of cards remaining in the player's hand. Card values per A.4.2; ace direction in runs determined per meld (A.4.3).
 
 Play continues across hands until one or more players' cumulative scores exceed **500**. If multiple players cross 500 in the same hand, the player with the highest cumulative score wins.
+
+### A.4.8 Going out
+
+A player goes out when their hand is empty. **A player may not play their last card** — the final card cannot be melded or laid off; it **must be discarded**. A player must always retain at least one card to discard, so going out happens only on the discard step.
+
+**Last card may be played** *(house rule)*: when enabled, the final card may be melded or laid off instead of discarded. The player goes out the moment their hand becomes empty, whether through melding, laying off, or discarding.
 
 ---
 
@@ -569,7 +579,7 @@ elif game == gin:
     constraint: if drew top_discard, cannot discard same card same turn
     no mid-turn melding (melds revealed only at knock/gin)
     knock if deadwood <= 10; final discard face-down
-    gin = deadwood 0 -> knocker +20 + opp_deadwood; opp cannot lay off
+    gin = deadwood 0 -> knocker +20 + opp_deadwood; opp forms own melds but cannot lay off onto knocker
     knock (non-gin) -> opp may lay off onto knocker's melds; knocker scores opp_dw - knocker_dw
     undercut (opp_dw <= knocker_dw after layoff) -> opp +10 + (knocker_dw - opp_dw)
     stock_depleted (2 left after 3rd-last taken + no-knock discard) -> hand cancelled, no score

@@ -63,3 +63,22 @@ export function cardPoints(card: Card, aceValue: 1 | 11 | 15 = 1): number {
   if (r === 'J' || r === 'Q' || r === 'K') return 10;
   return parseInt(r, 10);
 }
+
+// Direction the ace plays in a 500 Rummy run. Returns null for runs without ace
+// and for sets. rules.md A.4.2: A=1 when in A-2-3 sequence, otherwise 15.
+export function runAceDirection(cards: Card[]): 'low' | 'high' | null {
+  if (!cards.some((c) => c.rank === 'A')) return null;
+  if (cards.some((c) => c.rank === '2')) return 'low';
+  if (cards.some((c) => c.rank === 'K')) return 'high';
+  return null;
+}
+
+// 500 Rummy per-card meld scoring (rules.md A.4.2, A.4.7).
+// Set: each card scored at base value, aces 15.
+// Run: aces 1 if A-2-3 run, else 15.
+export function score500MeldCard(card: Card, allCards: Card[]): number {
+  const allSameRank = allCards.every((c) => c.rank === allCards[0]?.rank);
+  if (allSameRank) return cardPoints(card, 15);
+  const ace = runAceDirection(allCards);
+  return cardPoints(card, ace === 'low' ? 1 : 15);
+}

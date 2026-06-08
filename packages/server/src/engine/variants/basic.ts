@@ -108,8 +108,8 @@ export const basicVariant: VariantEngine = {
     createBasicGame(roomId, players, rng, firstPlayerIndex),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
-  applyMeld: (state, playerId, cardIds) => applyMeld(state, playerId, cardIds),
-  applyLayoff: (state, playerId, meldId, cardId) => applyLayoff(state, playerId, meldId, cardId),
+  applyMeld: (state, playerId, cardIds) => ({ handEnded: applyMeld(state, playerId, cardIds) }),
+  applyLayoff: (state, playerId, meldId, cardId) => ({ handEnded: applyLayoff(state, playerId, meldId, cardId) }),
   applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
 
   // Re-deal: rotate one seat clockwise from the previous hand's first player.
@@ -195,7 +195,7 @@ export function applyMeld(
   state: GameState,
   playerId: PlayerId,
   cardIds: string[],
-): void {
+): boolean {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
@@ -216,7 +216,14 @@ export function applyMeld(
   player.melds.push(meld);
   for (const id of cardIds) state.meldedBy.set(id, playerId);
 
+  // rules.md A.1.7: player goes out immediately if hand is now empty.
+  if (player.hand.length === 0) {
+    state.phase = 'ended';
+    return true;
+  }
+
   state.phase = 'meld';
+  return false;
 }
 
 // rules.md A.1.6 step 3
@@ -225,7 +232,7 @@ export function applyLayoff(
   playerId: PlayerId,
   meldId: string,
   cardId: string,
-): void {
+): boolean {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
@@ -257,6 +264,14 @@ export function applyLayoff(
       return RANK_INDEX[ca.rank] - RANK_INDEX[cb.rank];
     });
   }
+
+  // rules.md A.1.7: player goes out immediately if hand is now empty.
+  if (player.hand.length === 0) {
+    state.phase = 'ended';
+    return true;
+  }
+
+  return false;
 }
 
 // rules.md A.1.6 step 4

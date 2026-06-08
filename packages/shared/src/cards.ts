@@ -42,6 +42,9 @@ export type PublicState = {
   // Rum uses this for the pile-dive picker; basic clients can ignore it.
   discardPile: Card[];
   stockSize: number;
+  // cardId → id of the player who placed that card on the table (melded or laid off).
+  // Used by clients to attribute laid-off cards to the layer for interim meld scoring.
+  meldedBy: Record<string, PlayerId>;
   // Per-variant fields. See VariantPublic.
   variantPublic: VariantPublic;
 };

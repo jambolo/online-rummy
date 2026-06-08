@@ -15,7 +15,7 @@ Compressed reference. Reload before resuming work.
 | Client | React + Vite + TS, Zustand state, dnd-kit drag |
 | Card render v1 | CSS/HTML |
 | Card render v2 | PixiJS swap after playability confirmed |
-| Persistence | None, in-memory room registry |
+| Persistence | None, in-memory room registry. **T-NS5-0 (NS-5 identity/progression) — defer.** No durable accounts/Dossier/rank/history backend in v1; NS-5 is blocked until this row changes. |
 | Hosting | Cloudflare Tunnel + manual local host (run `node dist/index.js` on a dev machine). No dedicated server |
 | Deploy artifact | None — built server run locally; `cloudflared` exposes it |
 | Bots | None v1 |
@@ -34,31 +34,39 @@ online-rummy/
   packages/
     shared/
       src/
-        cards.ts          # Suit, Rank, Card, Meld, Phase, PublicState, PrivateState, RANKS, RANK_INDEX
+        cards.ts          # Suit, Rank, Card, Meld, Phase, Variant, VariantPublic, PublicState, PrivateState, RANKS, RANK_INDEX
         protocol.ts       # C2S, S2C message unions, PileSlice
+        meld.ts           # validateMeld(cards, opts), cardPoints, MeldOptions (runtime, used by client + server)
         index.ts          # barrel re-export
     server/
       src/
         index.ts          # HTTP server, env validation, startup
-        ws.ts             # WS upgrade, origin check, rate limiting, message routing, disconnect
-        room.ts           # Room/Player types, Crockford room codes, in-memory registry
+        ws.ts             # WS upgrade, origin check, rate limiting, unified action dispatch (engine/dispatch.ts), disconnect
+        room.ts           # Room/Player types, Crockford room codes, in-memory registry, variantLimits
         session.ts        # makeSessionId, signSessionId, verifySessionId (HMAC-SHA256)
         rng.ts            # cryptoRNG (node:crypto) + makeSeededRNG (seeded PRNG, tests only)
         engine/
-          types.ts        # GameState, GamePlayer, VariantEngine interface, ScoreSheet (server-only)
+          types.ts        # GameState (discriminated by variant + variantState pocket), GamePlayer, VariantEngine, ScoreSheet, WonHandData
           deck.ts         # buildDeck, buildShuffledDeck, shuffle, dealN
-          meld.ts         # validateMeld(cards, opts), cardPoints, runAceDirection, score500MeldCard
-          scripted-player.ts  # runScript(state, C2S[]) → ActionResult[] (engine-level, no WS)
+          util.ts         # requireTurn, lookupCard, advanceTurn, detectMeldKind, makeMeldId, buildBaseState
+          layoff-error.ts # formatLayoffError — detailed ERR_INVALID_LAYOFF builder used by all variants
+          dispatch.ts     # applyAction(state, pid, action): DispatchResult — unified C2S → engine dispatcher
+          scoring.ts      # deadwood(player, aceValue), validateKnockMelds(state, player, groups, validate)
+          scripted-player.ts  # runScript(state, C2S[]) — replays via applyAction
           variants/
-            basic.ts      # basicVariant, createBasicGame, applyDraw/Meld/Layoff/Discard
-            gin.ts        # ginVariant, createGinGame, applyDraw/PassUpcard/Discard/Knock/GinLayoff
-            rum500.ts     # rum500Variant, createRum500Game, applyDraw/DrawFromPile/Meld/Layoff/Discard
+            index.ts      # VARIANTS: Record<Variant, VariantEngine>, isVariant, getVariant
+            basic.ts      # basicVariant + createBasicGame + applyDraw/Meld/Layoff/Discard
+            gin.ts        # ginVariant + createGinGame + applyDraw/PassUpcard/Discard/Knock/GinLayoff + gs() narrowing helper
+            rum500.ts     # rum500Variant + createRum500Game + applyDraw/DrawFromPile/Meld/Layoff/Discard + r500() narrowing helper + runAceDirection, score500MeldCard
     client/
       src/
         main.tsx
         routes/{Home,Room}.tsx
-        components/{Card,Hand,Table,MeldZone,Chat,ActionBar,HowToPlayModal}.tsx
+        components/{Card,Hand,Table,MeldZone,Chat,ActionBar,HowToPlayModal,PileDiveModal,Modal}.tsx
         content/howToPlay/{basic,gin,rum500}.tsx  # static rules fragments
+        content/copy.ts   # central thematic-copy module (Home/Chat/banner, NS-5 rank ladder)
+        theme/{tokens,variations}.ts            # NS-1 token map + NS-7 per-variation accent/label
+        theme/{useBreakpoint,useReducedMotion}.ts  # NS-4 / NS-6 hooks
         net/ws.ts         # connect, dispatch, reconnect (lobby only)
         store.ts          # Zustand
   package.json            # root scripts only (pnpm -r test/build)
@@ -82,6 +90,12 @@ type Phase = 'firstUpcardOffer' | 'draw' | 'meld' | 'discard' | 'layoff' | 'ende
 // Phase values are per-variant subsets: basic/500 use draw|meld|discard|ended;
 // gin uses firstUpcardOffer|draw|discard|layoff|ended (no `meld` phase).
 
+// Per-variation public pocket — client narrows on variantPublic.variant before reading .data.
+type VariantPublic =
+  | { variant: 'basic';  data: Record<string, never> }
+  | { variant: 'rum500'; data: { mustMeldCardId: string | null } }
+  | { variant: 'gin';    data: { ginKnockerId: string | null } };
+
 type PublicState = {
   roomId: string;
   variant: 'basic' | 'gin' | 'rum500';
@@ -94,8 +108,7 @@ type PublicState = {
   discardTop: Card | null;
   discardPile: Card[];          // full pile bottom-to-top; basic ignores, 500 Rummy pile-dive reads it
   stockSize: number;
-  mustMeldCardId: string | null;  // 500 Rummy: pile-dive obligation; null otherwise
-  ginKnockerId: string | null;    // Gin: knocker id during layoff phase / scoring; null otherwise
+  variantPublic: VariantPublic;
 };
 
 type PrivateState = { hand: Card[] };  // owner-only
@@ -144,6 +157,9 @@ interface VariantEngine {
   maxPlayers: number;
   aceHigh: boolean;
   roundTheCorner: boolean;
+
+  // Lifecycle
+  createGame(players, rng, firstPlayerIndex?): GameState;
   deal(playerCount, rng): { hands; stock; discard };
   validateMeld(cards): boolean;
   canDrawFromDiscard(state, playerId, cardId?): boolean;
@@ -151,13 +167,27 @@ interface VariantEngine {
   canDiscard(state, playerId, cardId): boolean;
   scoreHand(state): Map<PlayerId, number>;
   isGameOver(scoreSheet): boolean;
+
+  // Action handlers (promoted onto the interface — Phase 3 refactor)
+  applyDraw(state, playerId, from): void;
+  applyMeld(state, playerId, cardIds): void;
+  applyLayoff(state, playerId, meldId, cardId): void;
+  applyDiscard(state, playerId, cardId): { handEnded: boolean; cancelled?: boolean };
+  applyDrawFromPile?(state, playerId, cardId): void;   // 500 Rummy only
+  applyKnock?(state, playerId, melds?, discardId?): void; // Gin only
+  applyGinLayoff?(state, playerId, layoffs, ownMelds?): void; // Gin only
+  applyPassUpcard?(state, playerId): void;             // Gin only
+
+  // Lifecycle hooks consumed by ws.ts (Phase 3 refactor)
+  nextFirstPlayerIndex(oldState, newPlayers): number;
+  winnerForHand(state): PlayerId | null;
+  handEndPayload(state, winnerId): WonHandData;
 }
 ```
 
-Engine action handlers (`applyDraw`/`applyMeld`/`applyLayoff`/`applyDiscard` + game-variation-specific
-`applyDrawFromPile`/`applyKnock`/`applyGinLayoff`/`applyPassUpcard`) are currently free function
-exports from each game-variation module — refactor in `docs/refactor-plan.md` Phase 3 promotes them onto
-the interface.
+`ws.ts` and `scripted-player.ts` reach the engine **only** through `applyAction` (`engine/dispatch.ts`)
+and the `VARIANTS` registry (`engine/variants/index.ts`). There are no per-variation `if` ladders in
+either caller.
 
 ## Rule mapping (rules.md → game-variation impl)
 
@@ -201,7 +231,7 @@ Canonical rules only. No house rules are in scope.
 | Re-discard drawn-discard card | Forbidden same turn | A.2.3 |
 | Stock depletion → cancelled hand | After any discard, if `stock.length ≤ 2` and the hand wasn't ended by a knock, hand is cancelled — no scoring; `GameState.cancelledHand=true`; server emits `handCancelled` event; host re-deals with same dealer | A.2.3 |
 | Knock threshold | Deadwood ≤ 10 | A.2.4 |
-| Layoff | Non-gin knock: opp lays off onto knocker's melds; no layoff against gin | A.2.4 |
+| Layoff | After any knock the opp groups their own melds first; after a regular (non-gin) knock the opp may also lay off onto knocker's melds. No layoff against gin (own melds still reduce deadwood) | A.2.4 |
 | Knock score | knocker scores `opp_dw − knocker_dw` | A.2.4 |
 | Gin bonus | +20 + opp deadwood | A.2.4 |
 | Undercut | tie or worse → opp scores `(knocker_dw − opp_dw) + 10`; tie favors defender | A.2.4 |
@@ -272,6 +302,8 @@ create -> lobby -> playing -> ended -> destroyed
 
 ## Engine FSM (basic + 500 rummy)
 
+> **Note (Phase 5 refactor):** `GameState` is a discriminated union keyed on `variant`, and every per-variation field lives in a typed `variantState` pocket — read `state.variantState.mustMeldCardId` (500 Rummy) via the `r500(state)` narrowing helper, and `state.variantState.ginKnockerId` / `state.variantState.cancelledHand` (Gin) via `gs(state)`. The FSM pseudocode below uses the field names directly for readability.
+
 ```text
 state: { phase, turnPlayerId, drewFromDiscardId?, mustMeldCardId? }
 
@@ -341,9 +373,8 @@ Gin FSM diverges (per rules.md A.2 + engine `variants/gin.ts`):
 - `draw(from)`: require `phase === 'draw'`; if `from === 'discard'` set `drewFromDiscardId`; phase = `'discard'`.
 - `discard(cardId)`: require `phase === 'discard'`, no re-discard of drawn card. After the discard, if `stock.length ≤ 2` (rules.md A.2.3 stock-depletion), set `phase = 'ended'`, `cancelledHand = true`, return `{ handEnded: true, cancelled: true }` so the WS layer emits a `handCancelled` event (no scoring; same dealer re-deals). Otherwise advance turn.
 - `knock(melds?, discardId)`: require `phase === 'discard'`. `discardId` required — card removed from hand and pushed to discard pile before deadwood is computed from remaining 10 cards (rules.md A.2.4). Card must not be in any declared meld (`ERR_CANNOT_DISCARD_MELDED_CARD`). Deadwood = sum of unmelded cards (A=1); reject if deadwood > 10. Apply melds, set `ginKnockerId`.
-  - If deadwood === 0 → gin: phase = `'ended'`, defender cannot lay off.
-  - Else: phase = `'layoff'`, `turnPlayerId` switches to defender for layoff phase.
-- `ginLayoff(layoffs[], ownMelds?)`: defender first declares `ownMelds` (validated, applied to `defender.melds`), then lays off `layoffs` onto knocker's melds. `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. Phase = `'ended'`.
+  - Either way phase = `'layoff'` and `turnPlayerId` switches to the defender (rules.md A.2.4 — the defender always gets a turn to group their own melds before scoring). Falls back to `'ended'` only when there is no active defender (e.g. forfeit).
+- `ginLayoff(layoffs[], ownMelds?)`: defender first declares `ownMelds` (validated, applied to `defender.melds`), then lays off `layoffs` onto knocker's melds. `ERR_CARD_IN_MULTIPLE_MELDS` if a card appears in both. **No layoff against gin**: if the knocker went gin (deadwood 0), a non-empty `layoffs` is rejected with `ERR_NO_LAYOFF_AGAINST_GIN` — only `ownMelds` are allowed. Phase = `'ended'`.
 - `scoreHand`: knock → knocker `opp_dw − knocker_dw`; gin → knocker `+20 + opp_dw`; undercut (`opp_dw ≤ knocker_dw`) → defender `(knocker_dw − opp_dw) + 10`. Per-hand box +20 added to winner. At game crossover (cumulative ≥ 100) winner gains +100; +100 more if loser totals 0.
 - Re-deal first-player selection: gin **winner deals** next hand → loser plays first. Cancelled hand keeps the same dealer (rules.md A.2.2 + A.2.3). Logic lives in `ws.ts` start handler; cancelled flag carried on the previous `GameState`.
 
@@ -425,27 +456,32 @@ v1 = M1-M7. M8 after.
 
 ## M5 implementation notes
 
-- **Ace direction inferred from meld shape, not declared.** Locked simplification of rules.md A.4.3: A-2-3 → ace plays low (1 pt in scoring), Q-K-A → ace plays high (15 pt), set of aces → 15 pt each, ace in hand → 15 pt. `runAceDirection(cards)` in `meld.ts` reads the run's neighbours (presence of `2` ⇒ low, presence of `K` ⇒ high). Removed the planned per-hand ace declaration UX entirely — no extra protocol surface needed.
-- **`MeldOptions.aceEitherEnd`** is the 500 Rummy-specific knob in `meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap.
-- **`GameState.mustMeldCardId`** enforces rules.md A.4.4 pile-dive obligation: set to the selected card's id in `applyDrawFromPile`. `applyMeld`/`applyLayoff` clear it when the card is used. `applyDiscard` throws `ERR_MUST_USE_PILE_CARD` while non-null. **Distinct from simple top-discard draw:** `applyDraw {from:'discard'}` takes only the top card, sets `drewFromDiscardId` (cannot re-discard same turn), and does NOT set `mustMeldCardId` — matches standard rules.md A.4.4 (single top card has no must-use obligation). The unified-obligation house rule is host-configurable and currently off.
-- **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rummy scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (harmless; its scoring doesn't read it).
+> Updated post–Phase 5 refactor: per-variation fields moved to `state.variantState`, shared meld validation moved to `@online-rummy/shared/meld.ts`, and engine dispatch unified through `engine/dispatch.ts` + the `VARIANTS` registry.
+
+- **Ace direction inferred from meld shape, not declared.** Locked simplification of rules.md A.4.3: A-2-3 → ace plays low (1 pt in scoring), Q-K-A → ace plays high (15 pt), set of aces → 15 pt each, ace in hand → 15 pt. `runAceDirection(cards)` lives in `engine/variants/rum500.ts` (500-Rummy-specific) and reads the run's neighbours (presence of `2` ⇒ low, presence of `K` ⇒ high). Removed the planned per-hand ace declaration UX entirely — no extra protocol surface needed.
+- **`MeldOptions.aceEitherEnd`** is the 500 Rummy-specific knob exposed by the shared `validateMeld` in `packages/shared/src/meld.ts`. When set, `isRun` runs the rank check twice (once with ace low, once with ace high) and accepts if either passes. Rejects `K-A-2` naturally because both attempts produce a gap. `rum500Variant.validateMeld` passes it; basic/gin do not.
+- **`state.variantState.mustMeldCardId` (500 Rummy)** enforces rules.md A.4.4 pile-dive obligation, accessed via the `r500(state)` narrowing helper. Set to the selected card's id in `applyDrawFromPile`. `applyMeld`/`applyLayoff` clear it when the card is used. `applyDiscard` throws `ERR_MUST_USE_PILE_CARD` while non-null. **Distinct from simple top-discard draw:** `applyDraw {from:'discard'}` takes only the top card, sets `drewFromDiscardId` (cannot re-discard same turn), and does NOT set `mustMeldCardId` — matches standard rules.md A.4.4 (single top card has no must-use obligation). The unified-obligation house rule is host-configurable and currently off.
+- **`GameState.meldedBy: Map<cardId, PlayerId>`** records who placed each card in any meld. 500 Rummy scoring iterates per meld, derives ace direction from the meld's full card set via `score500MeldCard`, then credits each card's point value to its placer. Basic populates `meldedBy` too (used for going-rummy detection — see "Key constraints").
 - **500 Rummy allows multiple melds and unconditional layoff per turn.** `applyMeld` does not check `meldedThisTurn` (only basic enforces that, A.1.6 step 2 [PG-R]). `applyLayoff` has no own-meld prerequisite (basic-only constraint, A.1.6 step 3 [WP], host-configurable house rule — currently off, no engine state needed). Phase stays at `'meld'` after a 500 Rummy meld so the player can keep melding/laying off until they discard.
-- **PublicState gained `discardPile: Card[]` and `mustMeldCardId: string | null`.** Pile is always populated bottom-to-top; basic clients ignore it, 500 Rummy reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak.
-- **`variantFns(v)` in `ws.ts`** routes per-variant engine fns. Replaces direct `basic.*` imports in handlers. `scripted-player.ts` dispatches the same way via `state.variant`. Adding Gin will only require a third branch in both files.
+- **`PublicState.discardPile: Card[]`** is always populated bottom-to-top; basic clients ignore it, 500 Rummy reads it for the dive picker. Discard pile is face-up in real play, so exposing the full sequence is not an info leak. **500 Rummy's `mustMeldCardId` is exposed via `variantPublic.data.mustMeldCardId`** (post-Phase-5; top-level `PublicState` no longer carries it).
+- **Per-variation routing in `ws.ts`** goes through `applyAction` (`engine/dispatch.ts`) + the `VARIANTS` registry (`engine/variants/index.ts`). `scripted-player.ts` shares the same dispatcher. Adding a new variation = new file under `variants/` + one registry entry; no `if` ladder edits in either caller.
 - **Pile-dive picker (`PileDiveModal.tsx`)** renders the discardPile top-first. Hovering a card highlights every card that will be taken (selected card + everything above it in the pile). Click sends `{ t: 'drawFromPile', cardId }`.
-- **Multi-crossover game-over rule** (rules.md A.4.7: highest at crossover wins). Already handled by `handleHandEnd` — it picks the player with the highest cumulative `score` after the hand is scored, so two players crossing 500 in the same hand resolve correctly.
+- **Multi-crossover game-over rule** (rules.md A.4.7: highest at crossover wins). Handled by `engine.winnerForHand` (Phase 3 lifecycle hook) called from `handleHandEnd` — picks the player with the highest cumulative `score` after the hand is scored, so two players crossing 500 in the same hand resolve correctly.
 
 ## M6 implementation notes
 
-- **Knock requires face-down discard.** `applyKnock(state, pid, melds?, discardId)` receives `discardId` as a required parameter (rules.md A.2.4). The discard is processed before deadwood computation: card removed from hand, pushed to discard pile; deadwood then computed from the remaining 10 cards. Card must not appear in any declared meld group (`ERR_CANNOT_DISCARD_MELDED_CARD`). Protocol: `{ t: 'knock'; melds?: string[][]; discardId: string }`.
+> Updated post–Phase 5 refactor: `ginKnockerId` and `cancelledHand` moved into `state.variantState`, accessed via the `gs(state)` narrowing helper. Engine action dispatch unified through `engine/dispatch.ts`.
+
+- **Knock requires face-down discard.** `applyKnock(state, pid, melds?, discardId)` receives `discardId` as a required parameter (rules.md A.2.4). The discard is processed before deadwood computation: card removed from hand, pushed to discard pile; deadwood then computed from the remaining 10 cards. Card must not appear in any declared meld group (`ERR_CANNOT_DISCARD_MELDED_CARD`). Knock-meld validation runs through the shared `engine/scoring.ts::validateKnockMelds` primitive. Protocol: `{ t: 'knock'; melds?: string[][]; discardId: string }`.
 - **Defender declares own melds before layoff.** `ginLayoff` protocol extended: `{ t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> }`. `applyGinLayoff` validates and applies `ownMelds` first (cards → `defender.melds`, removed from `defender.hand`), then validates and applies `layoffs` onto knocker's melds. Card appearing in both throws `ERR_CARD_IN_MULTIPLE_MELDS`.
-- **Client knock meld builder.** ActionBar tracks `knockMelds: string[][]` in Zustand store. User selects 3+ cards and clicks "Group N cards" to stage a meld group; each group renders as a chip with a × remove button. Deadwood indicator updates live, excluding the selected discard card. `canKnock` requires exactly 1 non-melded card selected and `deadwoodValue ≤ 10`.
+- **Stock depletion + knocker bookkeeping** live in `state.variantState` (Gin only): `gs(state).cancelledHand` is set when `applyDiscard` reduces stock to ≤2 without a knock (rules.md A.2.3); `gs(state).ginKnockerId` records the knocker. Mirrored to the client via `variantPublic.data.ginKnockerId` (`MeldZone` reads it during `layoff` phase + `ScoreOverlay`).
+- **Client knock meld builder.** ActionBar tracks `knockMelds: string[][]` in Zustand store. User selects 3+ cards and clicks "Group N cards" to stage a meld group; each group renders as a chip with a × remove button. Deadwood indicator updates live, excluding the selected discard card. `canKnock` requires exactly 1 non-melded card selected and `deadwoodValue ≤ 10`. Meld validity checked client-side with the shared `validateMeld` from `@online-rummy/shared` (Gin opts: `aceHigh:false, roundTheCorner:false`).
 - **Client defender UI.** During `layoff` phase, `ginDefenderMelds: string[][]` accumulates own meld declarations (chips with × remove). `ginLayoffs: Array<{cardId,meldId}>` accumulates staged layoffs (chips with × remove via `removeGinLayoff`). Submit sends one `ginLayoff` message with both arrays.
 - **MeldZone pending preview.** During `layoff` phase, `ginDefenderMelds` render as dashed-border pending piles (lower opacity, "pending" label). Staged `ginLayoffs` render as semi-transparent cards appended to their target knocker meld pile — client-side preview before submission.
 - **Score strip shows all players.** `OpponentStrip` in Room.tsx was filtering out `myPlayerId` so the local player's score never appeared. Fixed by rendering all players with a blue "(you)" tag on the local player's chip.
 - **Per-entry layoff removal.** Store needed `removeGinLayoff(index)` (not just `clearGinLayoffs`) to match the ×-per-chip UX pattern used for `knockMelds` and `ginDefenderMelds`.
 - **`ERR_KNOCK_REQUIRES_DISCARD` / `ERR_CANNOT_DISCARD_MELDED_CARD`** added to client `ERROR_MESSAGES` map in `store.ts`.
-- **62 engine tests** cover gin/knock/undercut/layoff scoring, defender own-meld declaration, `ERR_CARD_IN_MULTIPLE_MELDS`, stock-depletion cancel, first-upcard offer flow, and scripted-player dispatch.
+- **Tests: 331 server tests pass** (engine + ws + scripted-player), including gin/knock/undercut/layoff scoring, defender own-meld declaration, `ERR_CARD_IN_MULTIPLE_MELDS`, stock-depletion cancel, first-upcard offer flow, scripted-player dispatch, and the Phase-7 deadwood/knock primitives.
 
 ## Status
 
@@ -462,4 +498,9 @@ v1 = M1-M7. M8 after.
 
 ## Next action
 
-M1-M7 complete (v1 done): structural refactor landed (commit d053563); M7 deploy = server serves client bundle, single Cloudflare Tunnel + manual local host. No dedicated server, no structured logs, no metrics. M8 (PixiJS card layer) is the only remaining milestone, post-v1.
+M1–M7 complete (v1, v0.5.0). Structural refactor landed (commit d053563); the variant-state-pocket follow-up + shared `meld.ts` + unified `applyAction` dispatcher all live on `develop`. M7 deploy = server serves client bundle, single Cloudflare Tunnel + manual local host. No dedicated server, no structured logs, no metrics.
+
+Post-v1 streams (parallel, not strict order):
+
+- **UX overhaul** — see `docs/ux-design.md` + `docs/ux-implementation-plan.md`. Phases A–E (NS-1 tokens, NS-6 a11y, NS-4 responsive, NS-7 variation theming, NS-2 speakeasy re-skin) all landed. Open: NS-8 house-rule config (Phase F), NS-5 identity/progression (Phase G, gated on the T-NS5-0 persistence decision — still recorded as "None, in-memory" in this doc's Decisions table), NS-3 PixiJS (Phase H = M8), and a handful of smaller `[Gap]` items.
+- **M8 (PixiJS card layer)** — the only milestone still outstanding from the original plan; sits inside Phase H of the UX plan.

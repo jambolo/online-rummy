@@ -30,12 +30,16 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
       engine.applyDrawFromPile(state, playerId, action.cardId);
       return { kind: 'state' };
     }
-    case 'meld':
-      engine.applyMeld(state, playerId, action.cardIds);
+    case 'meld': {
+      const r = engine.applyMeld(state, playerId, action.cardIds);
+      if (r.handEnded) return { kind: 'handEnded' };
       return { kind: 'state' };
-    case 'layoff':
-      engine.applyLayoff(state, playerId, action.meldId, action.cardId);
+    }
+    case 'layoff': {
+      const r = engine.applyLayoff(state, playerId, action.meldId, action.cardId);
+      if (r.handEnded) return { kind: 'handEnded' };
       return { kind: 'state' };
+    }
     case 'discard': {
       const r = engine.applyDiscard(state, playerId, action.cardId);
       if (r.cancelled === true) return { kind: 'handCancelled' };
@@ -54,8 +58,9 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
         throw new Error('ERR_NOT_IMPLEMENTED:knock');
       }
       engine.applyKnock(state, playerId, action.melds, action.discardId);
-      // Gin (0 deadwood) advances directly to 'ended' — hand ends now.
-      // Non-gin knock advances to 'layoff' — defender turn, broadcast both hands.
+      // Any knock (gin or regular) advances to 'layoff' so the defender can arrange their
+      // melds — broadcast both hands. The hand ends on the defender's ginLayoff. Falls
+      // back to 'ended' only when there is no active defender.
       return state.phase === 'ended' ? { kind: 'handEnded' } : { kind: 'stateAll' };
     }
     case 'ginLayoff': {

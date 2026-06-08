@@ -24,9 +24,10 @@ interface SortableCardProps {
   card: Card;
   selected: boolean;
   mustMeld: boolean;
+  marker?: "meld" | "layoff";
 }
 
-function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
+function SortableCard({ card, selected, mustMeld, marker }: SortableCardProps) {
   const toggle = useAppStore((s) => s.toggleSelect);
   const reducedMotion = useReducedMotion();
   const {
@@ -57,6 +58,7 @@ function SortableCard({ card, selected, mustMeld }: SortableCardProps) {
       <CardComponent
         card={card}
         selected={selected}
+        {...(marker ? { marker } : {})}
         onClick={() => toggle(card.id)}
         {...(mustMeld
           ? {
@@ -78,6 +80,11 @@ export default function Hand() {
   const handOrder = useAppStore((s) => s.handOrder);
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const setHandOrder = useAppStore((s) => s.setHandOrder);
+  // Gin staging: cards grouped into a knock/defender meld, or staged for layoff,
+  // are flagged in-hand so the player can tell grouped cards from loose deadwood.
+  const knockMelds = useAppStore((s) => s.knockMelds);
+  const ginDefenderMelds = useAppStore((s) => s.ginDefenderMelds);
+  const ginLayoffs = useAppStore((s) => s.ginLayoffs);
   const mustMeldCardId =
     publicState?.variantPublic.variant === 'rum500'
       ? publicState.variantPublic.data.mustMeldCardId
@@ -94,6 +101,14 @@ export default function Hand() {
   const ordered = handOrder
     .map((id) => cardMap.get(id))
     .filter((c): c is Card => c !== undefined);
+
+  const meldedIds = new Set<string>([
+    ...knockMelds.flat(),
+    ...ginDefenderMelds.flat(),
+  ]);
+  const layoffIds = new Set<string>(ginLayoffs.map((l) => l.cardId));
+  const markerFor = (id: string): "meld" | "layoff" | undefined =>
+    meldedIds.has(id) ? "meld" : layoffIds.has(id) ? "layoff" : undefined;
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -127,14 +142,18 @@ export default function Hand() {
           strategy={horizontalListSortingStrategy}
         >
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {ordered.map((card) => (
+            {ordered.map((card) => {
+              const marker = markerFor(card.id);
+              return (
               <SortableCard
                 key={card.id}
                 card={card}
                 selected={selectedCardIds.includes(card.id)}
                 mustMeld={card.id === mustMeldCardId}
+                {...(marker ? { marker } : {})}
               />
-            ))}
+              );
+            })}
           </div>
         </SortableContext>
       </DndContext>
