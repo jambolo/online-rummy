@@ -1,14 +1,12 @@
-import { useEffect } from "react";
-import { connect, disconnect, send } from "./net/ws";
-import { useAppStore } from "./store";
-import Home from "./routes/Home";
-import Room from "./routes/Room";
+import { useEffect } from 'react';
+import { connect, disconnect, send } from './net/ws';
+import { useAppStore } from './store';
+import Home from './routes/Home';
+import Room from './routes/Room';
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
-  (window.location.protocol === "https:"
-    ? `wss://${window.location.hostname}`
-    : `ws://${window.location.hostname}:8080`);
+  (window.location.protocol === 'https:' ? `wss://${window.location.hostname}` : `ws://${window.location.hostname}:8080`);
 
 export default function App() {
   const setConnected = useAppStore((s) => s.setConnected);
@@ -24,12 +22,11 @@ export default function App() {
         // Skip reconnect if we're already mid-game (e.g. HMR remount in dev).
         if (useAppStore.getState().publicState !== null) return;
         // Attempt lobby reconnect if we have stored credentials.
-        const sid =
-          sessionStorage.getItem("sessionId") ?? sessionId ?? undefined;
-        const rc = sessionStorage.getItem("roomCode");
-        const playerName = sessionStorage.getItem("playerName");
+        const sid = sessionStorage.getItem('sessionId') ?? sessionId ?? undefined;
+        const rc = sessionStorage.getItem('roomCode');
+        const playerName = sessionStorage.getItem('playerName');
         if (sid && rc && playerName) {
-          send({ t: "join", roomCode: rc, name: playerName, sessionId: sid });
+          send({ t: 'join', roomCode: rc, name: playerName, sessionId: sid });
         }
       },
       onDisconnect: () => setConnected(false),

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Card, Rank, Suit } from '@online-rummy/shared';
+import type { Card, Suit } from '@online-rummy/shared';
 import { RANKS } from '@online-rummy/shared';
 import type { RNG } from '../rng.js';
 

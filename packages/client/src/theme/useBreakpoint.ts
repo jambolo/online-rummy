@@ -13,15 +13,12 @@ function compute(width: number): Breakpoint {
 }
 
 export function useBreakpoint(): Breakpoint {
-  const [bp, setBp] = useState<Breakpoint>(() =>
-    typeof window === 'undefined' ? 'desktop' : compute(window.innerWidth),
-  );
+  const [bp, setBp] = useState<Breakpoint>(() => (typeof window === 'undefined' ? 'desktop' : compute(window.innerWidth)));
 
   useEffect(() => {
     const mobile = window.matchMedia(`(max-width: ${MOBILE_MAX}px)`);
     const tablet = window.matchMedia(`(max-width: ${TABLET_MAX}px)`);
-    const update = () =>
-      setBp(mobile.matches ? 'mobile' : tablet.matches ? 'tablet' : 'desktop');
+    const update = () => setBp(mobile.matches ? 'mobile' : tablet.matches ? 'tablet' : 'desktop');
     update();
     mobile.addEventListener('change', update);
     tablet.addEventListener('change', update);

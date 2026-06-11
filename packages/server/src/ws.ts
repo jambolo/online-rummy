@@ -3,10 +3,17 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
 import type { C2S, Card, S2C, PublicState } from '@online-rummy/shared';
 import {
-  createRoom, getRoom, getRoomBySession, deleteRoom,
-  addPlayer, removePlayer, getPlayerBySession,
-  activePlayers, variantLimits,
-  type Player, type Room,
+  createRoom,
+  getRoom,
+  getRoomBySession,
+  deleteRoom,
+  addPlayer,
+  removePlayer,
+  getPlayerBySession,
+  activePlayers,
+  variantLimits,
+  type Player,
+  type Room,
 } from './room.js';
 import { makeSessionId, signSessionId, verifySessionId } from './session.js';
 import { cryptoRNG } from './rng.js';
@@ -17,8 +24,8 @@ import type { GameState, GamePlayer } from './engine/types.js';
 // --- Module-level state (single-process singleton) ---
 let _secret = '';
 
-const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();       // roomCode → timer
-const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();  // playerId → timer
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>(); // roomCode → timer
+const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>(); // playerId → timer
 
 type SocketContext = { socketId: string; player: Player | null; room: Room | null };
 const socketContexts = new Map<WebSocket, SocketContext>();
@@ -49,7 +56,7 @@ function broadcast(room: Room, msg: S2C, exceptId?: string): void {
 
 // Each player gets their own signed sessionId so they can use it for reconnect.
 function broadcastLobby(room: Room): void {
-  const players = room.players.map(p => ({ id: p.id, name: p.name }));
+  const players = room.players.map((p) => ({ id: p.id, name: p.name }));
   for (const p of room.players) {
     if (p.socket !== null) {
       send(p.socket, {
@@ -93,13 +100,13 @@ function buildPublicState(room: Room, state: GameState): PublicState {
   return {
     roomId: room.code,
     variant: state.variant,
-    players: state.players.map(p => ({
+    players: state.players.map((p) => ({
       id: p.id,
       name: p.name,
       handCount: p.hand.length,
-      melds: p.melds.map(m => ({
+      melds: p.melds.map((m) => ({
         ...m,
-        cards: m.cardIds.map(id => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined),
+        cards: m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined),
       })),
       score: p.score,
       status: p.status,
@@ -119,9 +126,12 @@ function buildPublicState(room: Room, state: GameState): PublicState {
 // by variant so the client can narrow on it without seeing fields from other variants.
 function buildVariantPublic(state: GameState): PublicState['variantPublic'] {
   switch (state.variant) {
-    case 'basic':  return { variant: 'basic',  data: {} };
-    case 'rum500': return { variant: 'rum500', data: { mustMeldCardId: state.variantState.mustMeldCardId } };
-    case 'gin':    return { variant: 'gin',    data: { ginKnockerId: state.variantState.ginKnockerId } };
+    case 'basic':
+      return { variant: 'basic', data: {} };
+    case 'rum500':
+      return { variant: 'rum500', data: { mustMeldCardId: state.variantState.mustMeldCardId } };
+    case 'gin':
+      return { variant: 'gin', data: { ginKnockerId: state.variantState.ginKnockerId } };
   }
 }
 
@@ -131,7 +141,7 @@ function broadcastState(room: Room, state: GameState, actingPlayerId: string): v
   for (const p of room.players) {
     if (p.socket === null) continue;
     if (p.id === actingPlayerId) {
-      const gp = state.players.find(sp => sp.id === p.id);
+      const gp = state.players.find((sp) => sp.id === p.id);
       send(p.socket, { t: 'state', public: pub, private: { hand: gp?.hand ?? [] } });
     } else {
       send(p.socket, { t: 'state', public: pub });
@@ -144,14 +154,14 @@ function broadcastStateAll(room: Room, state: GameState): void {
   const pub = buildPublicState(room, state);
   for (const p of room.players) {
     if (p.socket === null) continue;
-    const gp = state.players.find(sp => sp.id === p.id);
+    const gp = state.players.find((sp) => sp.id === p.id);
     send(p.socket, { t: 'state', public: pub, private: { hand: gp?.hand ?? [] } });
   }
 }
 
 // Next active player in turn order after afterId (wraps around).
 function nextActivePlayer(state: GameState, afterId: string): GamePlayer | undefined {
-  const idx = state.players.findIndex(p => p.id === afterId);
+  const idx = state.players.findIndex((p) => p.id === afterId);
   if (idx === -1) return undefined;
   const total = state.players.length;
   for (let i = 1; i < total; i++) {
@@ -191,9 +201,7 @@ function handleHandEnd(room: Room, state: GameState): void {
   if (engine.isGameOver(state.scoreSheet)) {
     room.status = 'ended';
     // rules.md A.4.7: highest cumulative wins at crossover (handles multi-crossover for 500 Rummy).
-    const gameWinner = state.players.length > 0
-      ? state.players.reduce((a, b) => (b.score > a.score ? b : a))
-      : undefined;
+    const gameWinner = state.players.length > 0 ? state.players.reduce((a, b) => (b.score > a.score ? b : a)) : undefined;
     if (gameWinner !== undefined) {
       broadcast(room, { t: 'event', kind: 'gameOver', playerId: gameWinner.id });
     }
@@ -215,34 +223,51 @@ function getIp(req: IncomingMessage): string {
 
 function startIdleTimer(roomCode: string): void {
   clearIdleTimer(roomCode);
-  idleTimers.set(roomCode, setTimeout(() => {
-    deleteRoom(roomCode);
-    idleTimers.delete(roomCode);
-  }, IDLE_TIMEOUT_MS));
+  idleTimers.set(
+    roomCode,
+    setTimeout(() => {
+      deleteRoom(roomCode);
+      idleTimers.delete(roomCode);
+    }, IDLE_TIMEOUT_MS),
+  );
 }
 
 function clearIdleTimer(roomCode: string): void {
   const t = idleTimers.get(roomCode);
-  if (t !== undefined) { clearTimeout(t); idleTimers.delete(roomCode); }
+  if (t !== undefined) {
+    clearTimeout(t);
+    idleTimers.delete(roomCode);
+  }
 }
 
 function maybeStartIdleTimer(room: Room): void {
-  if (!room.players.some(p => p.socket !== null)) startIdleTimer(room.code);
+  if (!room.players.some((p) => p.socket !== null)) startIdleTimer(room.code);
 }
-
 
 // --- Message handlers ---
 
 function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
   switch (msg.t) {
-
     case 'create': {
-      if (ctx.room !== null) { sendError(ws, 'ERR_ALREADY_IN_ROOM', 'Already in a room'); return; }
-      if (!isVariant(msg.variant)) { sendError(ws, 'ERR_INVALID_VARIANT', 'Invalid variant'); return; }
+      if (ctx.room !== null) {
+        sendError(ws, 'ERR_ALREADY_IN_ROOM', 'Already in a room');
+        return;
+      }
+      if (!isVariant(msg.variant)) {
+        sendError(ws, 'ERR_INVALID_VARIANT', 'Invalid variant');
+        return;
+      }
       const name = msg.name.trim().slice(0, 20);
-      if (name.length === 0) { sendError(ws, 'ERR_INVALID_NAME', 'Name cannot be empty'); return; }
+      if (name.length === 0) {
+        sendError(ws, 'ERR_INVALID_NAME', 'Name cannot be empty');
+        return;
+      }
       const player: Player = {
-        id: randomUUID(), name, sessionId: makeSessionId(), socket: ws, status: 'active',
+        id: randomUUID(),
+        name,
+        sessionId: makeSessionId(),
+        socket: ws,
+        status: 'active',
       };
       const room = createRoom(msg.variant, player);
       ctx.player = player;
@@ -252,14 +277,20 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
     }
 
     case 'join': {
-      if (ctx.room !== null) { sendError(ws, 'ERR_ALREADY_IN_ROOM', 'Already in a room'); return; }
+      if (ctx.room !== null) {
+        sendError(ws, 'ERR_ALREADY_IN_ROOM', 'Already in a room');
+        return;
+      }
       const { roomCode, name, sessionId: signedSid } = msg;
       const normalizedCode = roomCode.toUpperCase();
 
       // Reconnect path
       if (signedSid !== undefined) {
         const rawId = verifySessionId(signedSid, _secret);
-        if (rawId === null) { sendError(ws, 'ERR_INVALID_SESSION', 'Invalid session ID'); return; }
+        if (rawId === null) {
+          sendError(ws, 'ERR_INVALID_SESSION', 'Invalid session ID');
+          return;
+        }
         const reconRoom = getRoomBySession(rawId);
         if (reconRoom === undefined || reconRoom.code !== normalizedCode) {
           sendError(ws, 'ERR_SESSION_NOT_FOUND', 'Session not found in room');
@@ -270,9 +301,15 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           return;
         }
         const reconPlayer = getPlayerBySession(reconRoom, rawId);
-        if (reconPlayer === undefined) { sendError(ws, 'ERR_SESSION_NOT_FOUND', 'Player not found'); return; }
+        if (reconPlayer === undefined) {
+          sendError(ws, 'ERR_SESSION_NOT_FOUND', 'Player not found');
+          return;
+        }
         const timer = reconnectTimers.get(reconPlayer.id);
-        if (timer !== undefined) { clearTimeout(timer); reconnectTimers.delete(reconPlayer.id); }
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          reconnectTimers.delete(reconPlayer.id);
+        }
         reconPlayer.socket = ws;
         ctx.player = reconPlayer;
         ctx.room = reconRoom;
@@ -283,14 +320,30 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
 
       // Normal join
       const room = getRoom(normalizedCode);
-      if (room === undefined) { sendError(ws, 'ERR_ROOM_NOT_FOUND', 'Room not found'); return; }
-      if (room.status !== 'lobby') { sendError(ws, 'ERR_GAME_IN_PROGRESS', 'Game already in progress'); return; }
+      if (room === undefined) {
+        sendError(ws, 'ERR_ROOM_NOT_FOUND', 'Room not found');
+        return;
+      }
+      if (room.status !== 'lobby') {
+        sendError(ws, 'ERR_GAME_IN_PROGRESS', 'Game already in progress');
+        return;
+      }
       const limits = variantLimits(room.variant);
-      if (room.players.length >= limits.max) { sendError(ws, 'ERR_ROOM_FULL', 'Room is full'); return; }
+      if (room.players.length >= limits.max) {
+        sendError(ws, 'ERR_ROOM_FULL', 'Room is full');
+        return;
+      }
       const trimmed = name.trim().slice(0, 20);
-      if (trimmed.length === 0) { sendError(ws, 'ERR_INVALID_NAME', 'Name cannot be empty'); return; }
+      if (trimmed.length === 0) {
+        sendError(ws, 'ERR_INVALID_NAME', 'Name cannot be empty');
+        return;
+      }
       const player: Player = {
-        id: randomUUID(), name: trimmed, sessionId: makeSessionId(), socket: ws, status: 'active',
+        id: randomUUID(),
+        name: trimmed,
+        sessionId: makeSessionId(),
+        socket: ws,
+        status: 'active',
       };
       addPlayer(room, player);
       ctx.player = player;
@@ -302,8 +355,14 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
 
     case 'start': {
       const { player, room } = ctx;
-      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
-      if (room.hostId !== player.id) { sendError(ws, 'ERR_NOT_HOST', 'Only the host can start'); return; }
+      if (player === null || room === null) {
+        sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room');
+        return;
+      }
+      if (room.hostId !== player.id) {
+        sendError(ws, 'ERR_NOT_HOST', 'Only the host can start');
+        return;
+      }
       const engine = getVariant(room.variant);
 
       if (room.status === 'lobby') {
@@ -315,12 +374,11 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         room.status = 'playing';
         room.gameState = engine.createGame(
           room.code,
-          room.players.map(p => ({ id: p.id, name: p.name })),
+          room.players.map((p) => ({ id: p.id, name: p.name })),
           cryptoRNG,
         );
         broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
         broadcastStateAll(room, room.gameState);
-
       } else if (room.status === 'ended') {
         const oldState = room.gameState;
         // Drop players who disconnected during the previous hand.
@@ -336,13 +394,13 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         }
         // First-player rotation owned by the variant — gin cancelled = same dealer,
         // gin normal = loser plays first, basic/500 = clockwise.
-        const newPlayers = room.players.map(p => ({ id: p.id, name: p.name }));
+        const newPlayers = room.players.map((p) => ({ id: p.id, name: p.name }));
         const nextFirstIndex = engine.nextFirstPlayerIndex(oldState, newPlayers);
         room.status = 'playing';
         const newState = engine.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
         // Carry forward cumulative scores and score history.
         for (const gp of newState.players) {
-          const prev = oldState?.players.find(op => op.id === gp.id);
+          const prev = oldState?.players.find((op) => op.id === gp.id);
           if (prev !== undefined) {
             gp.score = prev.score;
             newState.scoreSheet.set(gp.id, oldState?.scoreSheet.get(gp.id) ?? []);
@@ -351,7 +409,6 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         room.gameState = newState;
         broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
         broadcastStateAll(room, newState);
-
       } else {
         sendError(ws, 'ERR_WRONG_STATE', 'Room not in lobby or ended state');
       }
@@ -360,7 +417,10 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
 
     case 'chat': {
       const { player, room } = ctx;
-      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (player === null || room === null) {
+        sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room');
+        return;
+      }
       const text = msg.text.trim().slice(0, 200);
       if (text.length === 0) return;
       broadcast(room, { t: 'chat', from: player.name, text });
@@ -378,7 +438,10 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
 
     case 'leave': {
       const { player, room } = ctx;
-      if (player === null || room === null) { sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room'); return; }
+      if (player === null || room === null) {
+        sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room');
+        return;
+      }
       // Tell the other players this player left and the game is cancelled.
       broadcast(room, { t: 'event', kind: 'playerLeft', playerId: player.id }, player.id);
       // Cancel the game and free everyone: cancel timers, detach each player's socket
@@ -386,10 +449,16 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       clearIdleTimer(room.code);
       for (const p of room.players) {
         const t = reconnectTimers.get(p.id);
-        if (t !== undefined) { clearTimeout(t); reconnectTimers.delete(p.id); }
+        if (t !== undefined) {
+          clearTimeout(t);
+          reconnectTimers.delete(p.id);
+        }
         if (p.socket !== null) {
           const pctx = socketContexts.get(p.socket);
-          if (pctx !== undefined) { pctx.player = null; pctx.room = null; }
+          if (pctx !== undefined) {
+            pctx.player = null;
+            pctx.room = null;
+          }
         }
       }
       deleteRoom(room.code);
@@ -409,11 +478,20 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       try {
         const result = applyAction(p.state, p.player.id, msg);
         switch (result.kind) {
-          case 'state':         broadcastState(p.room, p.state, p.player.id); break;
-          case 'stateAll':      broadcastStateAll(p.room, p.state); break;
-          case 'handEnded':     handleHandEnd(p.room, p.state); break;
-          case 'handCancelled': handleHandCancelled(p.room, p.state); break;
-          case 'noop':          break;
+          case 'state':
+            broadcastState(p.room, p.state, p.player.id);
+            break;
+          case 'stateAll':
+            broadcastStateAll(p.room, p.state);
+            break;
+          case 'handEnded':
+            handleHandEnd(p.room, p.state);
+            break;
+          case 'handCancelled':
+            handleHandCancelled(p.room, p.state);
+            break;
+          case 'noop':
+            break;
         }
       } catch (err) {
         const { code, msg: m } = engineError(err);
@@ -449,7 +527,7 @@ function handleDisconnect(ws: WebSocket): void {
     // Sync engine game state for the forfeit.
     const gs = room.gameState;
     if (gs !== null) {
-      const gp = gs.players.find(p => p.id === player.id);
+      const gp = gs.players.find((p) => p.id === player.id);
       if (gp !== undefined) {
         gp.status = 'forfeited';
         // rules.md disconnect: hand + melds removed from play, NOT returned to stock.
@@ -510,7 +588,10 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
 
     // Per-IP connection cap
     let ipSet = ipConnections.get(ip);
-    if (ipSet === undefined) { ipSet = new Set(); ipConnections.set(ip, ipSet); }
+    if (ipSet === undefined) {
+      ipSet = new Set();
+      ipConnections.set(ip, ipSet);
+    }
     if (ipSet.size >= MAX_CONNECTIONS_PER_IP) {
       sendError(ws, 'ERR_TOO_MANY_CONNECTIONS', 'Connection limit exceeded');
       ws.close(1008, 'Too many connections');
@@ -523,7 +604,9 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
 
     // Per-socket rate limiter
     let msgCount = 0;
-    const rateLimiter = setInterval(() => { msgCount = 0; }, 1000);
+    const rateLimiter = setInterval(() => {
+      msgCount = 0;
+    }, 1000);
 
     ws.on('message', (data) => {
       if (++msgCount > MAX_MSG_RATE) {
@@ -537,7 +620,6 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
           : Buffer.from(data as ArrayBuffer).toString('utf8');
       let msg: C2S;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const parsed: unknown = JSON.parse(raw);
         if (typeof parsed !== 'object' || parsed === null || !('t' in parsed)) {
           sendError(ws, 'ERR_INVALID_MSG', 'Message must be an object with field t');

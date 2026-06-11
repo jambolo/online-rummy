@@ -26,9 +26,9 @@ export type PublicPlayer = {
 // access its variant's fields. Keeps the top-level PublicState clean of per-variant
 // fields that other variants would always see as null.
 export type VariantPublic =
-  | { variant: 'basic';  data: Record<string, never> }
+  | { variant: 'basic'; data: Record<string, never> }
   | { variant: 'rum500'; data: { mustMeldCardId: string | null } }
-  | { variant: 'gin';    data: { ginKnockerId: string | null } };
+  | { variant: 'gin'; data: { ginKnockerId: string | null } };
 
 export type PublicState = {
   roomId: string;
@@ -55,6 +55,17 @@ export type PrivateState = { hand: Card[] };
 export const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
 export const RANK_INDEX: Record<Rank, number> = {
-  A: 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6,
-  '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
+  A: 0,
+  '2': 1,
+  '3': 2,
+  '4': 3,
+  '5': 4,
+  '6': 5,
+  '7': 6,
+  '8': 7,
+  '9': 8,
+  '10': 9,
+  J: 10,
+  Q: 11,
+  K: 12,
 };

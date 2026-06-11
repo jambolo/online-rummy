@@ -1,24 +1,24 @@
-import { useState } from "react";
-import type { Card } from "@online-rummy/shared";
-import { RANK_INDEX, cardPoints } from "@online-rummy/shared";
-import { useAppStore } from "../store";
-import CardComponent from "../components/Card";
-import Hand from "../components/Hand";
-import Table from "../components/Table";
-import MeldZone from "../components/MeldZone";
-import ActionBar from "../components/ActionBar";
-import Chat from "../components/Chat";
-import HowToPlayModal from "../components/HowToPlayModal";
-import Modal from "../components/Modal";
-import { t } from "../theme/tokens";
-import { variationAccent, variationLabel } from "../theme/variations";
-import { useBreakpoint } from "../theme/useBreakpoint";
+import { useState } from 'react';
+import type { Card } from '@online-rummy/shared';
+import { RANK_INDEX, cardPoints } from '@online-rummy/shared';
+import { useAppStore } from '../store';
+import CardComponent from '../components/Card';
+import Hand from '../components/Hand';
+import Table from '../components/Table';
+import MeldZone from '../components/MeldZone';
+import ActionBar from '../components/ActionBar';
+import Chat from '../components/Chat';
+import HowToPlayModal from '../components/HowToPlayModal';
+import Modal from '../components/Modal';
+import { t } from '../theme/tokens';
+import { variationAccent, variationLabel } from '../theme/variations';
+import { useBreakpoint } from '../theme/useBreakpoint';
 
 // Styled yes/no confirmation modal (avoids the jarring native confirm dialog).
 function ConfirmModal({
   message,
   confirmLabel,
-  cancelLabel = "Cancel",
+  cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
 }: {
@@ -36,21 +36,21 @@ function ConfirmModal({
         background: t.surfaceModalGreen,
         padding: 28,
         width: 320,
-        textAlign: "center",
+        textAlign: 'center',
       }}
     >
       <div style={{ fontSize: 14, marginBottom: 20 }}>{message}</div>
-      <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
         <button
           onClick={onCancel}
           style={{
             flex: 1,
-            background: "rgba(255,255,255,0.1)", // NS-1 one-off: cancel button bg
+            background: 'rgba(255,255,255,0.1)', // NS-1 one-off: cancel button bg
             border: `1px solid ${t.borderModal}`,
             color: t.text100,
-            padding: "8px 0",
+            padding: '8px 0',
             borderRadius: t.radiusControl,
-            cursor: "pointer",
+            cursor: 'pointer',
           }}
         >
           {cancelLabel}
@@ -59,12 +59,12 @@ function ConfirmModal({
           onClick={onConfirm}
           style={{
             flex: 1,
-            background: "rgba(174,42,26,0.85)", // NS-1 one-off: btn-danger at 85%
-            border: "1px solid rgba(174,42,26,1)", // NS-1 one-off: btn-danger solid
+            background: 'rgba(174,42,26,0.85)', // NS-1 one-off: btn-danger at 85%
+            border: '1px solid rgba(174,42,26,1)', // NS-1 one-off: btn-danger solid
             color: t.text100,
-            padding: "8px 0",
+            padding: '8px 0',
             borderRadius: t.radiusControl,
-            cursor: "pointer",
+            cursor: 'pointer',
           }}
         >
           {confirmLabel}
@@ -84,13 +84,13 @@ function LeaveButton({ style }: { style?: React.CSSProperties }) {
       <button
         onClick={() => setConfirming(true)}
         style={{
-          background: "transparent",
-          border: "1px solid rgba(255,127,127,0.4)", // NS-1 one-off: accent-negative at 40%
-          color: "rgba(255,127,127,0.85)",            // NS-1 one-off: accent-negative at 85%
+          background: 'transparent',
+          border: '1px solid rgba(255,127,127,0.4)', // NS-1 one-off: accent-negative at 40%
+          color: 'rgba(255,127,127,0.85)', // NS-1 one-off: accent-negative at 85%
           fontSize: 12,
-          padding: "4px 10px",
+          padding: '4px 10px',
           borderRadius: 5, // NS-1 one-off: between chip(4) and control(6)
-          cursor: "pointer",
+          cursor: 'pointer',
           flexShrink: 0,
           ...style,
         }}
@@ -136,41 +136,28 @@ function OpponentStrip() {
   if (!publicState) return null;
 
   return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
       {publicState.players.map((p) => (
         <div
           key={p.id}
           style={{
             background: t.surfacePanelMuted,
             borderRadius: t.radiusControl,
-            padding: "6px 12px",
-            display: "flex",
+            padding: '6px 12px',
+            display: 'flex',
             gap: 10,
-            alignItems: "center",
-            opacity: p.status === "forfeited" ? 0.45 : 1,
-            outline:
-              publicState.turnPlayerId === p.id
-                ? `2px solid ${t.accentPositive}`
-                : "none",
+            alignItems: 'center',
+            opacity: p.status === 'forfeited' ? 0.45 : 1,
+            outline: publicState.turnPlayerId === p.id ? `2px solid ${t.accentPositive}` : 'none',
           }}
         >
-          <span style={{ fontWeight: "bold", fontSize: 14 }}>{p.name}</span>
-          {p.id === myPlayerId && (
-            <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>
-          )}
+          <span style={{ fontWeight: 'bold', fontSize: 14 }}>{p.name}</span>
+          {p.id === myPlayerId && <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>}
           {/* Non-color turn cue [V7]: ▶ marker beside the green outline. */}
-          {publicState.turnPlayerId === p.id && (
-            <span style={{ fontSize: 11, color: t.accentPositive }}>▶ turn</span>
-          )}
-          <span style={{ fontSize: 12, color: t.text60 }}>
-            {p.handCount} cards
-          </span>
-          <span style={{ fontSize: 12, color: t.text60 }}>
-            {p.score}pts
-          </span>
-          {p.status === "forfeited" && (
-            <span style={{ fontSize: 11, color: t.accentNegative }}>forfeited</span>
-          )}
+          {publicState.turnPlayerId === p.id && <span style={{ fontSize: 11, color: t.accentPositive }}>▶ turn</span>}
+          <span style={{ fontSize: 12, color: t.text60 }}>{p.handCount} cards</span>
+          <span style={{ fontSize: 12, color: t.text60 }}>{p.score}pts</span>
+          {p.status === 'forfeited' && <span style={{ fontSize: 11, color: t.accentNegative }}>forfeited</span>}
         </div>
       ))}
     </div>
@@ -191,10 +178,10 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
       }}
     >
       <div
@@ -202,26 +189,22 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           background: t.surfacePanel,
           borderRadius: t.radiusCard,
           padding: 32,
-          width: "min(360px, 92vw)",
+          width: 'min(360px, 92vw)',
         }}
       >
         <img
           src="/rum-runner-logo.png"
           alt="Rum Runner"
-          style={{ width: 72, height: 72, display: "block", margin: "0 auto 16px", borderRadius: "50%" }}
+          style={{ width: 72, height: 72, display: 'block', margin: '0 auto 16px', borderRadius: '50%' }}
         />
-        <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: "center" }}>Room {roomCode}</h2>
+        <h2 style={{ fontSize: 20, marginBottom: 4, textAlign: 'center' }}>Room {roomCode}</h2>
         <div
           style={{
             fontSize: 13,
             marginBottom: 20,
           }}
         >
-          {variant && (
-            <span style={{ color: variationAccent(variant), fontWeight: "bold" }}>
-              {variationLabel(variant)}
-            </span>
-          )}
+          {variant && <span style={{ color: variationAccent(variant), fontWeight: 'bold' }}>{variationLabel(variant)}</span>}
           <span style={{ color: t.text60 }}> · share code with friends</span>
         </div>
 
@@ -230,20 +213,16 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
             <div
               key={p.id}
               style={{
-                display: "flex",
+                display: 'flex',
                 gap: 8,
-                alignItems: "center",
-                padding: "6px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.08)", // NS-1 one-off: subtle row divider
+                alignItems: 'center',
+                padding: '6px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.08)', // NS-1 one-off: subtle row divider
               }}
             >
               <span style={{ flex: 1 }}>{p.name}</span>
-              {p.id === hostId && (
-                <span style={{ fontSize: 11, color: t.accentHost }}>host</span>
-              )}
-              {p.id === myPlayerId && (
-                <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>
-              )}
+              {p.id === hostId && <span style={{ fontSize: 11, color: t.accentHost }}>host</span>}
+              {p.id === myPlayerId && <span style={{ fontSize: 11, color: t.accentSelf }}>you</span>}
             </div>
           ))}
         </div>
@@ -251,16 +230,16 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         {isHost ? (
           <button
             className="primary"
-            onClick={() => send({ t: "start" })}
+            onClick={() => send({ t: 'start' })}
             disabled={lobbyPlayers.length < 2}
-            style={{ width: "100%" }}
+            style={{ width: '100%' }}
           >
             Start Game ({lobbyPlayers.length} players)
           </button>
         ) : (
           <div
             style={{
-              textAlign: "center",
+              textAlign: 'center',
               color: t.text50,
               fontSize: 13,
             }}
@@ -272,22 +251,22 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
         <button
           onClick={onShowHelp}
           style={{
-            width: "100%",
+            width: '100%',
             marginTop: 12,
-            background: "transparent",
+            background: 'transparent',
             border: `1px solid ${t.borderModal}`,
             color: t.text60,
             fontSize: 13,
-            padding: "8px 0",
+            padding: '8px 0',
             borderRadius: t.radiusControl,
-            cursor: "pointer",
+            cursor: 'pointer',
           }}
         >
           How to Play
         </button>
 
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-          <LeaveButton style={{ width: "100%" }} />
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+          <LeaveButton style={{ width: '100%' }} />
         </div>
       </div>
     </div>
@@ -296,8 +275,12 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
 
 // Card point values per variant. Basic / Gin: rules.md A.1.8 (ace = 1).
 // 500 Rummy: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
-function cardPtsBasic(c: Card): number { return cardPoints(c, 1); }
-function cardPts500(c: Card): number { return cardPoints(c, 15); }
+function cardPtsBasic(c: Card): number {
+  return cardPoints(c, 1);
+}
+function cardPts500(c: Card): number {
+  return cardPoints(c, 15);
+}
 function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
   return cards.reduce((s, c) => s + ptsFn(c), 0);
 }
@@ -325,12 +308,12 @@ function ScoreOverlay() {
   const handCancelled = useAppStore((s) => s.handCancelled);
   const send = useAppStore((s) => s.send);
 
-  if (!publicState || publicState.phase !== "ended") return null;
+  if (!publicState || publicState.phase !== 'ended') return null;
 
   const isHost = myPlayerId === hostId;
   const sorted = [...publicState.players].sort((a, b) => b.score - a.score);
-  const is500 = publicState.variant === "rum500";
-  const isGin = publicState.variant === "gin";
+  const is500 = publicState.variant === 'rum500';
+  const isGin = publicState.variant === 'gin';
   const cardPts = is500 ? cardPts500 : cardPtsBasic;
   const gameTarget = is500 ? 500 : 100;
 
@@ -344,10 +327,12 @@ function ScoreOverlay() {
           background: t.surfaceModalGreen,
           padding: 32,
           width: 340,
-          textAlign: "center",
+          textAlign: 'center',
         }}
       >
-        <h2 id="score-overlay-title" style={{ marginBottom: 8 }}>Hand Cancelled</h2>
+        <h2 id="score-overlay-title" style={{ marginBottom: 8 }}>
+          Hand Cancelled
+        </h2>
         <div style={{ fontSize: 13, color: t.text70, marginBottom: 20 }}>
           Stock ran low before anyone knocked. No score this hand — same dealer re-deals.
         </div>
@@ -355,29 +340,28 @@ function ScoreOverlay() {
           <div
             key={p.id}
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "6px 0",
-              borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '6px 0',
+              borderBottom: '1px solid rgba(255,255,255,0.1)', // NS-1 one-off: row divider
               fontSize: 13,
             }}
           >
-            <span>{p.name}{p.id === myPlayerId ? " (you)" : ""}</span>
+            <span>
+              {p.name}
+              {p.id === myPlayerId ? ' (you)' : ''}
+            </span>
             <span>{p.score} pts</span>
           </div>
         ))}
         {isHost ? (
-          <button
-            className="primary"
-            onClick={() => send({ t: "start" })}
-            style={{ width: "100%", marginTop: 20 }}
-          >
+          <button className="primary" onClick={() => send({ t: 'start' })} style={{ width: '100%', marginTop: 20 }}>
             Re-deal
           </button>
         ) : (
           <div
             style={{
-              textAlign: "center",
+              textAlign: 'center',
               marginTop: 20,
               color: t.text50,
               fontSize: 13,
@@ -386,7 +370,7 @@ function ScoreOverlay() {
             Waiting for host…
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
           <LeaveButton />
         </div>
       </Modal>
@@ -403,15 +387,15 @@ function ScoreOverlay() {
         width: 340,
       }}
     >
-      <h2 id="score-overlay-title" style={{ textAlign: "center", marginBottom: 4 }}>
-        {isGameOver ? "Game Over!" : "Hand Over"}
+      <h2 id="score-overlay-title" style={{ textAlign: 'center', marginBottom: 4 }}>
+        {isGameOver ? 'Game Over!' : 'Hand Over'}
       </h2>
       <div
         style={{
-          textAlign: "center",
+          textAlign: 'center',
           fontSize: 12,
           color: variationAccent(publicState.variant),
-          fontWeight: "bold",
+          fontWeight: 'bold',
           marginBottom: 2,
         }}
       >
@@ -419,15 +403,13 @@ function ScoreOverlay() {
       </div>
       <div
         style={{
-          textAlign: "center",
+          textAlign: 'center',
           fontSize: 12,
           color: t.text50,
           marginBottom: 20,
         }}
       >
-        {isGameOver
-          ? `A player reached ${gameTarget} pts`
-          : `Game target: ${gameTarget} pts`}
+        {isGameOver ? `A player reached ${gameTarget} pts` : `Game target: ${gameTarget} pts`}
       </div>
 
       {sorted.map((p, i) => {
@@ -441,47 +423,36 @@ function ScoreOverlay() {
           <div
             key={p.id}
             style={{
-              padding: "10px 0",
-              borderBottom: "1px solid rgba(255,255,255,0.1)", // NS-1 one-off: row divider
+              padding: '10px 0',
+              borderBottom: '1px solid rgba(255,255,255,0.1)', // NS-1 one-off: row divider
             }}
           >
             {/* Name + scores row */}
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
                 fontSize: isWinner ? 15 : 13,
-                fontWeight: isWinner ? "bold" : "normal",
+                fontWeight: isWinner ? 'bold' : 'normal',
               }}
             >
               <span>
-                {isWinner ? "🏆 " : ""}
+                {isWinner ? '🏆 ' : ''}
                 {p.name}
-                {p.id === myPlayerId ? " (you)" : ""}
+                {p.id === myPlayerId ? ' (you)' : ''}
               </span>
-              <span style={{ display: "flex", gap: 16 }}>
+              <span style={{ display: 'flex', gap: 16 }}>
                 {/* Non-color delta cue [V7]: ▲/▼ arrow beside the green/salmon color. */}
                 <span
                   style={{
-                    color:
-                      delta > 0
-                        ? t.accentPositive
-                        : delta < 0
-                          ? t.accentNegative
-                          : t.text40,
+                    color: delta > 0 ? t.accentPositive : delta < 0 ? t.accentNegative : t.text40,
                     fontSize: 13,
                   }}
                 >
-                  {delta > 0
-                    ? `▲ +${delta}`
-                    : delta < 0
-                      ? `▼ ${delta}`
-                      : "—"}
+                  {delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : '—'}
                 </span>
-                <span style={{ minWidth: 52, textAlign: "right" }}>
-                  {p.score} pts
-                </span>
+                <span style={{ minWidth: 52, textAlign: 'right' }}>{p.score} pts</span>
               </span>
             </div>
 
@@ -489,12 +460,12 @@ function ScoreOverlay() {
             {isGin && ginInfo && (
               <div style={{ fontSize: 11, color: t.text50, marginTop: 3 }}>
                 {p.id === ginInfo.knockerId
-                  ? ginInfo.result === "gin"
+                  ? ginInfo.result === 'gin'
                     ? `Gin! — 0 deadwood (+20 gin bonus, +20 box)`
-                    : ginInfo.result === "knock"
+                    : ginInfo.result === 'knock'
                       ? `Knocked — ${ginInfo.knockerDeadwood} deadwood (+20 box)`
                       : `Knocked — ${ginInfo.knockerDeadwood} deadwood (undercut!)`
-                  : ginInfo.result === "undercut"
+                  : ginInfo.result === 'undercut'
                     ? `Undercut! — ${ginInfo.defenderDeadwood} deadwood (+10 undercut, +20 box)`
                     : `${ginInfo.defenderDeadwood} deadwood`}
               </div>
@@ -508,32 +479,26 @@ function ScoreOverlay() {
 
             {/* Melded cards credited to this player */}
             {(() => {
-              const credited = [...(meldCredits[p.id] ?? [])].sort(
-                (a, b) => b.pts - a.pts,
-              );
+              const credited = [...(meldCredits[p.id] ?? [])].sort((a, b) => b.pts - a.pts);
               if (credited.length === 0) return null;
               const meldedPts = credited.reduce((s, x) => s + x.pts, 0);
               return (
                 <div style={{ marginTop: 6 }}>
                   <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
-                    {p.id === myPlayerId ? "Your" : `${p.name}'s`} melded cards (+{meldedPts} pts):
+                    {p.id === myPlayerId ? 'Your' : `${p.name}'s`} melded cards (+{meldedPts} pts):
                   </div>
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                     {credited.map(({ card, pts }) => (
-                      <div key={card.id} style={{ position: "relative" }}>
-                        <CardComponent
-                          card={card}
-                          compact
-                          style={{ width: 36, height: 50, fontSize: 10 }}
-                        />
+                      <div key={card.id} style={{ position: 'relative' }}>
+                        <CardComponent card={card} compact style={{ width: 36, height: 50, fontSize: 10 }} />
                         <div
                           style={{
-                            position: "absolute",
+                            position: 'absolute',
                             bottom: 2,
                             right: 3,
                             fontSize: 9,
                             color: t.accentMeldCredit,
-                            fontWeight: "bold",
+                            fontWeight: 'bold',
                           }}
                         >
                           +{pts}
@@ -549,24 +514,20 @@ function ScoreOverlay() {
             {playerCards.length > 0 && (
               <div style={{ marginTop: 6 }}>
                 <div style={{ fontSize: 11, color: t.text50, marginBottom: 4 }}>
-                  {p.id === myPlayerId ? "Your" : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
+                  {p.id === myPlayerId ? 'Your' : `${p.name}'s`} unmelded cards ({is500 ? `−${playerCardPts}` : playerCardPts} pts):
                 </div>
-                <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                   {playerCards.map((c) => (
-                    <div key={c.id} style={{ position: "relative" }}>
-                      <CardComponent
-                        card={c}
-                        compact
-                        style={{ width: 36, height: 50, fontSize: 10 }}
-                      />
+                    <div key={c.id} style={{ position: 'relative' }}>
+                      <CardComponent card={c} compact style={{ width: 36, height: 50, fontSize: 10 }} />
                       <div
                         style={{
-                          position: "absolute",
+                          position: 'absolute',
                           bottom: 2,
                           right: 3,
                           fontSize: 9,
                           color: t.accentDeadwoodBadge,
-                          fontWeight: "bold",
+                          fontWeight: 'bold',
                         }}
                       >
                         {cardPts(c)}
@@ -581,17 +542,13 @@ function ScoreOverlay() {
       })}
 
       {isHost ? (
-        <button
-          className="primary"
-          onClick={() => send({ t: "start" })}
-          style={{ width: "100%", marginTop: 20 }}
-        >
-          {isGameOver ? "Play Again" : "New Hand"}
+        <button className="primary" onClick={() => send({ t: 'start' })} style={{ width: '100%', marginTop: 20 }}>
+          {isGameOver ? 'Play Again' : 'New Hand'}
         </button>
       ) : (
         <div
           style={{
-            textAlign: "center",
+            textAlign: 'center',
             marginTop: 20,
             color: t.text50,
             fontSize: 13,
@@ -600,7 +557,7 @@ function ScoreOverlay() {
           Waiting for host…
         </div>
       )}
-      <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
         <LeaveButton />
       </div>
     </Modal>
@@ -613,35 +570,32 @@ export default function Room() {
   const lastError = useAppStore((s) => s.lastError);
   const dismissError = useAppStore((s) => s.dismissError);
   const [showHelp, setShowHelp] = useState(false);
-  const isMobile = useBreakpoint() === "mobile";
+  const isMobile = useBreakpoint() === 'mobile';
 
   const helpVariant = publicState?.variant ?? variant;
 
   // No publicState yet → still in lobby
-  if (!publicState) return (
-    <>
-      <Lobby onShowHelp={() => setShowHelp(true)} />
-      {showHelp && helpVariant && (
-        <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
-      )}
-      <DisconnectWarningModal />
-    </>
-  );
+  if (!publicState)
+    return (
+      <>
+        <Lobby onShowHelp={() => setShowHelp(true)} />
+        {showHelp && helpVariant && <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />}
+        <DisconnectWarningModal />
+      </>
+    );
 
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
         padding: 12,
         gap: 10,
-        overflow: "hidden",
+        overflow: 'hidden',
       }}
     >
-      {showHelp && helpVariant && (
-        <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />
-      )}
+      {showHelp && helpVariant && <HowToPlayModal variant={helpVariant} onClose={() => setShowHelp(false)} />}
       <DisconnectWarningModal />
       <ScoreOverlay />
 
@@ -649,44 +603,37 @@ export default function Room() {
       {lastError && (
         <div
           style={{
-            background: "rgba(174,42,26,0.8)", // NS-1 one-off: btn-danger at 80%
+            background: 'rgba(174,42,26,0.8)', // NS-1 one-off: btn-danger at 80%
             borderRadius: t.radiusControl,
-            padding: "8px 12px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            padding: '8px 12px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             fontSize: 13,
             flexShrink: 0,
           }}
         >
           <span>{lastError}</span>
-          <button
-            onClick={dismissError}
-            style={{ background: "transparent", padding: "2px 8px", fontSize: 16 }}
-          >
+          <button onClick={dismissError} style={{ background: 'transparent', padding: '2px 8px', fontSize: 16 }}>
             ×
           </button>
         </div>
       )}
 
       {/* Header row: logo + opponents + How to Play */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <img
-          src="/rum-runner-logo.png"
-          alt="Rum Runner"
-          style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0 }}
-        />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <img src="/rum-runner-logo.png" alt="Rum Runner" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
         {/* NS-7: game-variation identity chip (friendly label + accent). */}
         <span
           style={{
-            alignSelf: "center",
+            alignSelf: 'center',
             flexShrink: 0,
             fontSize: 12,
-            fontWeight: "bold",
+            fontWeight: 'bold',
             color: variationAccent(publicState.variant),
             border: `1px solid ${variationAccent(publicState.variant)}`,
             borderRadius: t.radiusChip,
-            padding: "3px 8px",
+            padding: '3px 8px',
           }}
         >
           {variationLabel(publicState.variant)}
@@ -697,13 +644,13 @@ export default function Room() {
         <button
           onClick={() => setShowHelp(true)}
           style={{
-            background: "transparent",
+            background: 'transparent',
             border: `1px solid ${t.borderModal}`,
             color: t.text60,
             fontSize: 12,
-            padding: "4px 10px",
+            padding: '4px 10px',
             borderRadius: 5, // NS-1 one-off: between chip(4) and control(6)
-            cursor: "pointer",
+            cursor: 'pointer',
             flexShrink: 0,
           }}
         >
@@ -717,8 +664,8 @@ export default function Room() {
       <div
         style={{
           flex: 1,
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           gap: 10,
           minHeight: 0,
         }}
@@ -726,10 +673,10 @@ export default function Room() {
         <div
           style={{
             flex: 1,
-            display: "flex",
-            flexDirection: "column",
+            display: 'flex',
+            flexDirection: 'column',
             gap: 10,
-            overflow: "auto",
+            overflow: 'auto',
             minWidth: 0,
           }}
         >

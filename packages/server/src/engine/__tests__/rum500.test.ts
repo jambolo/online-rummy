@@ -98,41 +98,29 @@ describe('createRum500Game', () => {
 
 describe('rum500Variant.validateMeld', () => {
   it('accepts A-2-3 (ace low)', () => {
-    expect(
-      rum500Variant.validateMeld([c('A', 'H', 'a'), c('2', 'H', 'b'), c('3', 'H', 'd')]),
-    ).toBe(true);
+    expect(rum500Variant.validateMeld([c('A', 'H', 'a'), c('2', 'H', 'b'), c('3', 'H', 'd')])).toBe(true);
   });
 
   it('accepts Q-K-A (ace high)', () => {
     // rules.md A.4.3
-    expect(
-      rum500Variant.validateMeld([c('Q', 'S', 'a'), c('K', 'S', 'b'), c('A', 'S', 'd')]),
-    ).toBe(true);
+    expect(rum500Variant.validateMeld([c('Q', 'S', 'a'), c('K', 'S', 'b'), c('A', 'S', 'd')])).toBe(true);
   });
 
   it('rejects K-A-2 (no round-the-corner)', () => {
-    expect(
-      rum500Variant.validateMeld([c('K', 'D', 'a'), c('A', 'D', 'b'), c('2', 'D', 'd')]),
-    ).toBe(false);
+    expect(rum500Variant.validateMeld([c('K', 'D', 'a'), c('A', 'D', 'b'), c('2', 'D', 'd')])).toBe(false);
   });
 
   it('accepts set of 3 same rank', () => {
-    expect(
-      rum500Variant.validateMeld([c('7', 'C', 'a'), c('7', 'D', 'b'), c('7', 'H', 'd')]),
-    ).toBe(true);
+    expect(rum500Variant.validateMeld([c('7', 'C', 'a'), c('7', 'D', 'b'), c('7', 'H', 'd')])).toBe(true);
   });
 
   it('accepts same-suit set in 2-deck play (locked house rule)', () => {
     // House rule: same-suit sets ALLOWED (not [PG-5] different-suits-required)
-    expect(
-      rum500Variant.validateMeld([c('5', 'H', 'a'), c('5', 'H', 'b'), c('5', 'D', 'd')]),
-    ).toBe(true);
+    expect(rum500Variant.validateMeld([c('5', 'H', 'a'), c('5', 'H', 'b'), c('5', 'D', 'd')])).toBe(true);
   });
 
   it('rejects mixed-suit run', () => {
-    expect(
-      rum500Variant.validateMeld([c('4', 'C', 'a'), c('5', 'D', 'b'), c('6', 'C', 'd')]),
-    ).toBe(false);
+    expect(rum500Variant.validateMeld([c('4', 'C', 'a'), c('5', 'D', 'b'), c('6', 'C', 'd')])).toBe(false);
   });
 
   it('canDrawFromDiscard returns false when not in draw phase', () => {
@@ -440,9 +428,7 @@ describe('rum500 turn flow', () => {
       cardIds: ['m1', 'm2', 'm3'],
       ownerId: 'p2',
     });
-    [c('9', 'D', 'm1'), c('9', 'H', 'm2'), c('9', 'S', 'm3')].forEach((card) =>
-      state.cardRegistry.set(card.id, card),
-    );
+    [c('9', 'D', 'm1'), c('9', 'H', 'm2'), c('9', 'S', 'm3')].forEach((card) => state.cardRegistry.set(card.id, card));
     expect(() => applyLayoff(state, 'p1', 'mx', 'ghostHand')).toThrow(/ERR_CARD_NOT_IN_HAND/);
   });
 
@@ -474,9 +460,7 @@ describe('rum500 turn flow', () => {
   it('drawFromPile: ERR_WRONG_PHASE outside draw phase', () => {
     const state = twoPlayerGame();
     applyDraw(state, 'p1', 'stock');
-    expect(() => applyDrawFromPile(state, 'p1', state.discardPile[0]?.id ?? 'x')).toThrow(
-      'ERR_WRONG_PHASE',
-    );
+    expect(() => applyDrawFromPile(state, 'p1', state.discardPile[0]?.id ?? 'x')).toThrow('ERR_WRONG_PHASE');
   });
 
   it('meld: ERR_CARD_NOT_IN_HAND when card not held by player', () => {

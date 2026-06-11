@@ -1,47 +1,30 @@
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import {
   SortableContext,
   useSortable,
   horizontalListSortingStrategy,
   arrayMove,
   sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
-import type { Card } from "@online-rummy/shared";
-import { useAppStore } from "../store";
-import CardComponent from "./Card";
-import { useReducedMotion } from "../theme/useReducedMotion";
-import { t, sectionLabel } from "../theme/tokens";
+} from '@dnd-kit/sortable';
+import type { Card } from '@online-rummy/shared';
+import { useAppStore } from '../store';
+import CardComponent from './Card';
+import { useReducedMotion } from '../theme/useReducedMotion';
+import { t, sectionLabel } from '../theme/tokens';
 
 interface SortableCardProps {
   card: Card;
   selected: boolean;
   mustMeld: boolean;
-  marker?: "meld" | "layoff";
+  marker?: 'meld' | 'layoff';
 }
 
 function SortableCard({ card, selected, mustMeld, marker }: SortableCardProps) {
   const toggle = useAppStore((s) => s.toggleSelect);
   const reducedMotion = useReducedMotion();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: card.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id });
 
-  const transformCss = transform
-    ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)`
-    : undefined;
+  const transformCss = transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined;
 
   return (
     <div
@@ -85,10 +68,7 @@ export default function Hand() {
   const knockMelds = useAppStore((s) => s.knockMelds);
   const ginDefenderMelds = useAppStore((s) => s.ginDefenderMelds);
   const ginLayoffs = useAppStore((s) => s.ginLayoffs);
-  const mustMeldCardId =
-    publicState?.variantPublic.variant === 'rum500'
-      ? publicState.variantPublic.data.mustMeldCardId
-      : null;
+  const mustMeldCardId = publicState?.variantPublic.variant === 'rum500' ? publicState.variantPublic.data.mustMeldCardId : null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -98,17 +78,12 @@ export default function Hand() {
   if (!privateState) return null;
 
   const cardMap = new Map(privateState.hand.map((c) => [c.id, c]));
-  const ordered = handOrder
-    .map((id) => cardMap.get(id))
-    .filter((c): c is Card => c !== undefined);
+  const ordered = handOrder.map((id) => cardMap.get(id)).filter((c): c is Card => c !== undefined);
 
-  const meldedIds = new Set<string>([
-    ...knockMelds.flat(),
-    ...ginDefenderMelds.flat(),
-  ]);
+  const meldedIds = new Set<string>([...knockMelds.flat(), ...ginDefenderMelds.flat()]);
   const layoffIds = new Set<string>(ginLayoffs.map((l) => l.cardId));
-  const markerFor = (id: string): "meld" | "layoff" | undefined =>
-    meldedIds.has(id) ? "meld" : layoffIds.has(id) ? "layoff" : undefined;
+  const markerFor = (id: string): 'meld' | 'layoff' | undefined =>
+    meldedIds.has(id) ? 'meld' : layoffIds.has(id) ? 'layoff' : undefined;
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -126,32 +101,23 @@ export default function Hand() {
       style={{
         background: t.surfacePanelMuted,
         borderRadius: t.radiusPanel,
-        padding: "12px 16px",
+        padding: '12px 16px',
       }}
     >
-      <div style={{ ...sectionLabel, marginBottom: 8 }}>
-        Your Hand ({ordered.length})
-      </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={handOrder}
-          strategy={horizontalListSortingStrategy}
-        >
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ ...sectionLabel, marginBottom: 8 }}>Your Hand ({ordered.length})</div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={handOrder} strategy={horizontalListSortingStrategy}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {ordered.map((card) => {
               const marker = markerFor(card.id);
               return (
-              <SortableCard
-                key={card.id}
-                card={card}
-                selected={selectedCardIds.includes(card.id)}
-                mustMeld={card.id === mustMeldCardId}
-                {...(marker ? { marker } : {})}
-              />
+                <SortableCard
+                  key={card.id}
+                  card={card}
+                  selected={selectedCardIds.includes(card.id)}
+                  mustMeld={card.id === mustMeldCardId}
+                  {...(marker ? { marker } : {})}
+                />
               );
             })}
           </div>

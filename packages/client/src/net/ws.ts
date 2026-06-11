@@ -1,4 +1,4 @@
-import type { C2S, S2C } from "@online-rummy/shared";
+import type { C2S, S2C } from '@online-rummy/shared';
 
 export interface WsCallbacks {
   onConnect(): void;
@@ -7,7 +7,7 @@ export interface WsCallbacks {
 }
 
 let socket: WebSocket | null = null;
-let _url = "";
+let _url = '';
 let _cb: WsCallbacks | null = null;
 // Incremented on each new connection attempt or disconnect so stale async
 // events from a previous socket (e.g. React StrictMode double-mount) are ignored.
@@ -33,7 +33,7 @@ function startKeepAlive(): void {
   markSent();
   keepAliveTimer = setInterval(() => {
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (Date.now() - lastSent >= KEEPALIVE_IDLE_MS) send({ t: "keepalive" });
+    if (Date.now() - lastSent >= KEEPALIVE_IDLE_MS) send({ t: 'keepalive' });
   }, KEEPALIVE_CHECK_MS);
 }
 
@@ -45,10 +45,7 @@ function stopKeepAlive(): void {
 }
 
 export function connect(url: string, cb: WsCallbacks): void {
-  if (
-    socket?.readyState === WebSocket.OPEN ||
-    socket?.readyState === WebSocket.CONNECTING
-  ) {
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) {
     return;
   }
   _url = url;

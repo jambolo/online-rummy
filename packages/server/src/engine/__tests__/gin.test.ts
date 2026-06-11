@@ -85,7 +85,7 @@ describe('createGinGame', () => {
           { id: 'p3', name: 'C' },
         ],
         makeSeededRNG(1),
-      )
+      ),
     ).not.toThrow(); // 52 cards, 30 dealt + 1 discard = 31; stock=21 — valid but wrong game
   });
 });
@@ -297,17 +297,29 @@ describe('applyKnock', () => {
     // still gets a 'layoff' turn to group their own melds (but cannot lay off — see below).
     // 11 cards: 3 runs totalling 10 (4+3+3) + 1 face-down discard.
     const hand = [
-      c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
-      c('A', 'D', 'g5'), c('2', 'D', 'g6'), c('3', 'D', 'g7'),
-      c('A', 'H', 'g8'), c('2', 'H', 'g9'), c('3', 'H', 'g10'),
+      c('A', 'C', 'g1'),
+      c('2', 'C', 'g2'),
+      c('3', 'C', 'g3'),
+      c('4', 'C', 'g4'),
+      c('A', 'D', 'g5'),
+      c('2', 'D', 'g6'),
+      c('3', 'D', 'g7'),
+      c('A', 'H', 'g8'),
+      c('2', 'H', 'g9'),
+      c('3', 'H', 'g10'),
       c('K', 'S', 'g_disc'),
     ];
     const state = setupKnockState(hand);
-    applyKnock(state, 'p1', [
-      ['g1', 'g2', 'g3', 'g4'],
-      ['g5', 'g6', 'g7'],
-      ['g8', 'g9', 'g10'],
-    ], 'g_disc');
+    applyKnock(
+      state,
+      'p1',
+      [
+        ['g1', 'g2', 'g3', 'g4'],
+        ['g5', 'g6', 'g7'],
+        ['g8', 'g9', 'g10'],
+      ],
+      'g_disc',
+    );
 
     expect(state.phase).toBe('layoff');
     expect(state.variantState.ginKnockerId).toBe('p1');
@@ -321,45 +333,60 @@ describe('applyKnock', () => {
   it('knock with declared melds, 9 deadwood ≤10 — advances to layoff phase', () => {
     // 12 cards: 9 melded (3 runs) + k10+k11 (4+5=9 deadwood) + k_disc (face-down discard)
     const hand = [
-      c('A', 'C', 'k1'), c('2', 'C', 'k2'), c('3', 'C', 'k3'),
-      c('A', 'D', 'k4'), c('2', 'D', 'k5'), c('3', 'D', 'k6'),
-      c('A', 'H', 'k7'), c('2', 'H', 'k8'), c('3', 'H', 'k9'),
-      c('4', 'C', 'k10'), c('5', 'C', 'k11'),
+      c('A', 'C', 'k1'),
+      c('2', 'C', 'k2'),
+      c('3', 'C', 'k3'),
+      c('A', 'D', 'k4'),
+      c('2', 'D', 'k5'),
+      c('3', 'D', 'k6'),
+      c('A', 'H', 'k7'),
+      c('2', 'H', 'k8'),
+      c('3', 'H', 'k9'),
+      c('4', 'C', 'k10'),
+      c('5', 'C', 'k11'),
       c('2', 'S', 'k_disc'),
     ];
     const state = setupKnockState(hand);
-    applyKnock(state, 'p1', [
-      ['k1', 'k2', 'k3'],
-      ['k4', 'k5', 'k6'],
-      ['k7', 'k8', 'k9'],
-    ], 'k_disc');
+    applyKnock(
+      state,
+      'p1',
+      [
+        ['k1', 'k2', 'k3'],
+        ['k4', 'k5', 'k6'],
+        ['k7', 'k8', 'k9'],
+      ],
+      'k_disc',
+    );
 
     expect(state.phase).toBe('layoff');
     expect(state.variantState.ginKnockerId).toBe('p1');
     expect(state.turnPlayerId).toBe('p2'); // turn switches to defender
-    expect(state.players[0]?.hand.map(c => c.id)).toEqual(['k10', 'k11']); // only deadwood remains
+    expect(state.players[0]?.hand.map((c) => c.id)).toEqual(['k10', 'k11']); // only deadwood remains
     expect(state.players[0]?.melds).toHaveLength(3);
     expect(state.discardPile[state.discardPile.length - 1]?.id).toBe('k_disc');
   });
 
   it('throws ERR_CARD_IN_MULTIPLE_MELDS when same card in two groups', () => {
     const hand = [
-      c('7', 'C', 'm1'), c('7', 'D', 'm2'), c('7', 'H', 'm3'), c('7', 'S', 'm4'),
-      c('8', 'C', 'm5'), c('8', 'D', 'm6'), c('8', 'H', 'm7'),
+      c('7', 'C', 'm1'),
+      c('7', 'D', 'm2'),
+      c('7', 'H', 'm3'),
+      c('7', 'S', 'm4'),
+      c('8', 'C', 'm5'),
+      c('8', 'D', 'm6'),
+      c('8', 'H', 'm7'),
     ];
     const state = setupKnockState(hand);
     expect(() =>
       applyKnock(state, 'p1', [
         ['m1', 'm2', 'm3'],
         ['m3', 'm4', 'm5'], // m3 duplicated
-      ])
+      ]),
     ).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
   });
 
   it('throws ERR_INVALID_MELD when declared group is not a valid meld', () => {
-    const hand = [
-      c('7', 'C', 'v1'), c('9', 'D', 'v2'), c('J', 'H', 'v3'),
-    ];
+    const hand = [c('7', 'C', 'v1'), c('9', 'D', 'v2'), c('J', 'H', 'v3')];
     const state = setupKnockState(hand);
     expect(() => applyKnock(state, 'p1', [['v1', 'v2', 'v3']])).toThrow('ERR_INVALID_MELD');
   });
@@ -367,14 +394,15 @@ describe('applyKnock', () => {
   it('throws ERR_CANNOT_KNOCK when deadwood > 10 after declared melds and discard', () => {
     // K set melded; Q♣+Q♦ remain (20 pts) after discarding h_disc → > 10
     const hand = [
-      c('K', 'C', 'h1'), c('K', 'D', 'h2'), c('K', 'H', 'h3'),
-      c('Q', 'C', 'h4'), c('Q', 'D', 'h5'),
+      c('K', 'C', 'h1'),
+      c('K', 'D', 'h2'),
+      c('K', 'H', 'h3'),
+      c('Q', 'C', 'h4'),
+      c('Q', 'D', 'h5'),
       c('2', 'C', 'h_disc'),
     ];
     const state = setupKnockState(hand);
-    expect(() =>
-      applyKnock(state, 'p1', [['h1', 'h2', 'h3']], 'h_disc')
-    ).toThrow('ERR_CANNOT_KNOCK');
+    expect(() => applyKnock(state, 'p1', [['h1', 'h2', 'h3']], 'h_disc')).toThrow('ERR_CANNOT_KNOCK');
   });
 
   it('no melds declared → deadwood > 10 after discard, throws ERR_CANNOT_KNOCK', () => {
@@ -414,7 +442,11 @@ describe('ginDeadwood', () => {
   it('A=1, pip=pip, face=10', () => {
     // rules.md A.2: ace low
     const player = {
-      id: 'p', name: 'P', melds: [], score: 0, status: 'active' as const,
+      id: 'p',
+      name: 'P',
+      melds: [],
+      score: 0,
+      status: 'active' as const,
       hand: [c('A', 'C'), c('5', 'D'), c('K', 'H')],
     };
     expect(ginDeadwood(player)).toBe(1 + 5 + 10);
@@ -424,11 +456,7 @@ describe('ginDeadwood', () => {
 // ---- ginVariant.scoreHand ----
 
 describe('ginVariant.scoreHand', () => {
-  function makeState(
-    p1Hand: Card[],
-    p2Hand: Card[],
-    knockerId = 'p1',
-  ) {
+  function makeState(p1Hand: Card[], p2Hand: Card[], knockerId = 'p1') {
     const state = twoPlayerGame();
     state.players[0]!.hand = p1Hand;
     state.players[1]!.hand = p2Hand;
@@ -515,13 +543,14 @@ describe('applyGinLayoff', () => {
     // p1 knocks with a run; k4+k5 are deadwood (9 pts ≤10). p2 has cards to lay off.
     // k_disc is the required face-down discard (rules.md A.2.4).
     const p1Hand = [
-      c('A', 'C', 'k1'), c('2', 'C', 'k2'), c('3', 'C', 'k3'),
-      c('4', 'C', 'k4'), c('5', 'C', 'k5'),
+      c('A', 'C', 'k1'),
+      c('2', 'C', 'k2'),
+      c('3', 'C', 'k3'),
+      c('4', 'C', 'k4'),
+      c('5', 'C', 'k5'),
       c('K', 'D', 'k_disc'),
     ];
-    const p2Hand = [
-      c('4', 'C', 'p1'), c('5', 'C', 'p2'), c('6', 'C', 'p3'),
-    ];
+    const p2Hand = [c('4', 'C', 'p1'), c('5', 'C', 'p2'), c('6', 'C', 'p3')];
     const state = twoPlayerGame();
     state.players[0]!.hand = [...p1Hand];
     state.players[1]!.hand = [...p2Hand];
@@ -539,7 +568,7 @@ describe('applyGinLayoff', () => {
     // p2 lays off 4♣ onto the A-2-3♣ run
     applyGinLayoff(state, 'p2', [{ cardId: 'p1', meldId }]);
     expect(state.phase).toBe('ended');
-    expect(state.players[1]!.hand.map(c => c.id)).toEqual(['p2', 'p3']);
+    expect(state.players[1]!.hand.map((c) => c.id)).toEqual(['p2', 'p3']);
     expect(state.players[0]!.melds[0]!.cardIds).toContain('p1');
   });
 
@@ -557,7 +586,6 @@ describe('applyGinLayoff', () => {
     // p2 declares 5♣-6♣ would be invalid (only 2 cards); let's use a different setup
     // p2 has p1(4♣), p2(5♣), p3(6♣). Declare run p1-p2-p3 as own meld, no layoff.
     const state = setupLayoffState();
-    const meldId = state.players[0]!.melds[0]!.id;
     // Declare p2(5♣)+p3(6♣) alone is < 3 — test both own meld and layoff separately
     // Use own meld declaration of all 3, no layoff
     applyGinLayoff(state, 'p2', [], [['p1', 'p2', 'p3']]);
@@ -575,9 +603,9 @@ describe('applyGinLayoff', () => {
     const state = setupLayoffState();
     const meldId = state.players[0]!.melds[0]!.id;
     // Declare p1 in own meld group AND try to lay it off — should throw
-    expect(() =>
-      applyGinLayoff(state, 'p2', [{ cardId: 'p1', meldId }], [['p1', 'p2', 'p3']])
-    ).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
+    expect(() => applyGinLayoff(state, 'p2', [{ cardId: 'p1', meldId }], [['p1', 'p2', 'p3']])).toThrow(
+      'ERR_CARD_IN_MULTIPLE_MELDS',
+    );
   });
 
   it('empty layoffs (pass) ends phase', () => {
@@ -619,49 +647,60 @@ describe('applyGinLayoff', () => {
   it('throws ERR_CARD_IN_MULTIPLE_MELDS when same card used twice', () => {
     const state = setupLayoffState();
     const meldId = state.players[0]!.melds[0]!.id;
-    expect(() => applyGinLayoff(state, 'p2', [
-      { cardId: 'p1', meldId },
-      { cardId: 'p1', meldId },
-    ])).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
+    expect(() =>
+      applyGinLayoff(state, 'p2', [
+        { cardId: 'p1', meldId },
+        { cardId: 'p1', meldId },
+      ]),
+    ).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
   });
 
   it('gin (0 deadwood) → defender may group own melds but cannot lay off (rules.md A.2.4)', () => {
     // p1 goes gin (3 runs). p2 holds a 7-set plus a lone 5♣ that *would* legally extend
     // p1's A-2-3-4♣ run — but no layoff is allowed against gin.
     const p1Hand = [
-      c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
-      c('A', 'D', 'g5'), c('2', 'D', 'g6'), c('3', 'D', 'g7'),
-      c('A', 'H', 'g8'), c('2', 'H', 'g9'), c('3', 'H', 'g10'),
+      c('A', 'C', 'g1'),
+      c('2', 'C', 'g2'),
+      c('3', 'C', 'g3'),
+      c('4', 'C', 'g4'),
+      c('A', 'D', 'g5'),
+      c('2', 'D', 'g6'),
+      c('3', 'D', 'g7'),
+      c('A', 'H', 'g8'),
+      c('2', 'H', 'g9'),
+      c('3', 'H', 'g10'),
       c('K', 'S', 'g_disc'),
     ];
-    const p2Hand = [
-      c('7', 'C', 'd7c'), c('7', 'D', 'd7d'), c('7', 'H', 'd7h'),
-      c('5', 'C', 'd5c'),
-    ];
+    const p2Hand = [c('7', 'C', 'd7c'), c('7', 'D', 'd7d'), c('7', 'H', 'd7h'), c('5', 'C', 'd5c')];
     const state = twoPlayerGame();
     state.players[0]!.hand = [...p1Hand];
     state.players[1]!.hand = [...p2Hand];
     for (const card of [...p1Hand, ...p2Hand]) state.cardRegistry.set(card.id, card);
     state.phase = 'discard';
-    applyKnock(state, 'p1', [
-      ['g1', 'g2', 'g3', 'g4'], ['g5', 'g6', 'g7'], ['g8', 'g9', 'g10'],
-    ], 'g_disc');
+    applyKnock(
+      state,
+      'p1',
+      [
+        ['g1', 'g2', 'g3', 'g4'],
+        ['g5', 'g6', 'g7'],
+        ['g8', 'g9', 'g10'],
+      ],
+      'g_disc',
+    );
 
     // Gin still hands the defender a layoff turn to arrange their own melds.
     expect(state.phase).toBe('layoff');
     expect(state.turnPlayerId).toBe('p2');
 
     // Laying off onto the knocker is rejected even though 5♣ legally extends the run.
-    const runMeldId = state.players[0]!.melds.find(m => m.cardIds.includes('g1'))!.id;
-    expect(() =>
-      applyGinLayoff(state, 'p2', [{ cardId: 'd5c', meldId: runMeldId }]),
-    ).toThrow('ERR_NO_LAYOFF_AGAINST_GIN');
+    const runMeldId = state.players[0]!.melds.find((m) => m.cardIds.includes('g1'))!.id;
+    expect(() => applyGinLayoff(state, 'p2', [{ cardId: 'd5c', meldId: runMeldId }])).toThrow('ERR_NO_LAYOFF_AGAINST_GIN');
 
     // But the defender may group their own meld: 7♣7♦7♥ melds → only 5♣ (5 pts) left.
     applyGinLayoff(state, 'p2', [], [['d7c', 'd7d', 'd7h']]);
     expect(state.phase).toBe('ended');
     expect(state.players[1]!.melds).toHaveLength(1);
-    expect(state.players[1]!.hand.map(c => c.id)).toEqual(['d5c']);
+    expect(state.players[1]!.hand.map((c) => c.id)).toEqual(['d5c']);
     expect(ginDeadwood(state.players[1]!)).toBe(5);
 
     // Knocker's gin score reflects the *reduced* defender deadwood (5, not 19).
@@ -676,12 +715,18 @@ describe('applyGinLayoff', () => {
 
 describe('ginVariant.isGameOver', () => {
   it('not over below 100', () => {
-    const sheet = new Map([['p1', [30, 20]], ['p2', [0, 0]]]);
+    const sheet = new Map([
+      ['p1', [30, 20]],
+      ['p2', [0, 0]],
+    ]);
     expect(ginVariant.isGameOver(sheet)).toBe(false);
   });
 
   it('game over when cumulative ≥100', () => {
-    const sheet = new Map([['p1', [60, 45]], ['p2', [0, 0]]]);
+    const sheet = new Map([
+      ['p1', [60, 45]],
+      ['p2', [0, 0]],
+    ]);
     expect(ginVariant.isGameOver(sheet)).toBe(true);
   });
 });
