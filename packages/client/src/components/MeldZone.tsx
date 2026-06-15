@@ -60,12 +60,17 @@ function MeldPile({ meld, ownerName, pending = false }: MeldPileProps) {
   // Basic (rules.md A.1.6 [WP]): own-meld required.
   const isGin = publicState.variant === 'gin';
   const ownMeldRequired = publicState.variant !== 'rum500';
+  // rules.md A.4.8: 500 Rummy forbids playing the last card — it must be discarded. Don't
+  // offer a layoff that would empty the hand (the layoff `+` is a "this card is playable" hint).
+  const lastCardMustDiscard = publicState.variant === 'rum500';
+  const myHandCount = privateState?.hand.length ?? publicState.players.find((p) => p.id === myPlayerId)?.handCount ?? 0;
 
   const canLayoff =
     !isGin &&
     isTurnPlayer &&
     (publicState.phase === 'meld' || publicState.phase === 'discard') &&
     (!ownMeldRequired || myMeldsCount > 0) &&
+    (!lastCardMustDiscard || myHandCount > 1) &&
     selectedCardIds.length === 1;
 
   // Gin layoff phase: defender lays off onto knocker's melds (rules.md A.2.4).

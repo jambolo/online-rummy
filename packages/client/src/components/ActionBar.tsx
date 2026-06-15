@@ -101,6 +101,11 @@ export default function ActionBar() {
   const mustMeldBlock = isMyTurn && mustMeldCardId !== null;
 
   const myMeldsCount = publicState.players.find((p) => p.id === myPlayerId)?.melds.length ?? 0;
+  const myHandCount = privateState?.hand.length ?? publicState.players.find((p) => p.id === myPlayerId)?.handCount ?? 0;
+  // rules.md A.4.8: 500 Rummy forbids playing the last card — it must be discarded, so the
+  // discard step can't be skipped when going out. The UI must not offer (or hint at) playing
+  // it. (The Basic "Last card must be discarded" house rule sets this too, once scaffolded.)
+  const lastCardMustDiscard = is500;
 
   const turnPlayerName = publicState.players.find((p) => p.id === publicState.turnPlayerId)?.name ?? '…';
 
@@ -117,6 +122,8 @@ export default function ActionBar() {
   // Basic requires the player to already have a meld (rules.md A.1.6); 500 Rummy does not (A.4.6).
   function canLayoffCard(card: Card): boolean {
     if (isGin) return false;
+    // rules.md A.4.8: the last card can't be laid off, so don't warn the player it could be.
+    if (lastCardMustDiscard && myHandCount <= 1) return false;
     if (!is500 && myMeldsCount === 0) return false;
     return publicState!.players.some((p) =>
       p.melds.some((m) => {
@@ -398,11 +405,15 @@ export default function ActionBar() {
             </span>
           )}
 
-          {(phase === 'meld' || (is500 && phase === 'discard')) && sel.length >= 2 && (
-            <button className="primary" onClick={doMeld}>
-              Meld {sel.length} cards
-            </button>
-          )}
+          {(phase === 'meld' || (is500 && phase === 'discard')) &&
+            sel.length >= 2 &&
+            // rules.md A.4.8: never offer a meld that would empty the hand — the last card
+            // must be discarded, so a meld must leave ≥1 card behind.
+            !(lastCardMustDiscard && sel.length >= myHandCount) && (
+              <button className="primary" onClick={doMeld}>
+                Meld {sel.length} cards
+              </button>
+            )}
 
           {sel.length === 1 && (
             <button
