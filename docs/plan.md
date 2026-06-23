@@ -19,7 +19,7 @@ Compressed reference. Reload before resuming work.
 | Hosting | Cloudflare Tunnel + manual local host (run `node dist/index.js` on a dev machine). No dedicated server |
 | Deploy artifact | None — built server run locally; `cloudflared` exposes it |
 | Bots | None v1 |
-| Disconnect | Instant forfeit (no reconnect mid-game; lobby reconnect 60s via sessionId cookie) |
+| Disconnect | 60s grace window both in lobby and mid-game (reconnect via signed sessionId). Mid-game reconnect resumes the same hand; forfeit only on grace expiry. Client auto-reconnects with capped backoff |
 | Forfeit disposition | Hand + melds out of play (NOT returned to stock). Stock + discard pile untouched |
 | Spectators | None v1 |
 | Devices | Desktop + mobile web responsive |
@@ -67,7 +67,7 @@ online-rummy/
         content/copy.ts   # central thematic-copy module (Home/Chat/banner, NS-5 rank ladder)
         theme/{tokens,variations}.ts            # NS-1 token map + NS-7 per-variation accent/label
         theme/{useBreakpoint,useReducedMotion}.ts  # NS-4 / NS-6 hooks
-        net/ws.ts         # connect, dispatch, reconnect (lobby only)
+        net/ws.ts         # connect, dispatch, auto-reconnect (lobby + mid-game) w/ status callback
         store.ts          # Zustand
   package.json            # root scripts only (pnpm -r test/build)
   pnpm-workspace.yaml     # workspace package globs
@@ -136,7 +136,8 @@ type LobbyPlayer = { id: string; name: string };
 type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
   | { t: 'lobby'; roomCode: string; variant: Variant; hostId: string; players: LobbyPlayer[]; sessionId: string }
-  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'handCancelled'|'forfeit'|'gameOver'|'gameStarted';
+  | { t: 'event'; kind: 'drew'|'melded'|'laidOff'|'discarded'|'wonHand'|'handCancelled'|'playerLeft'
+        |'playerDisconnected'|'playerReconnected'|'forfeit'|'gameOver'|'gameStarted';
       playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'chat'; from: string; text: string };
@@ -293,12 +294,17 @@ create -> lobby -> playing -> ended -> destroyed
 
 ## Disconnect
 
-- WS close → mark `forfeited` immediately.
-- 2P: opponent wins hand at current score state.
-- 3+P: remove from turn order. Forfeited player's hand cards + melds removed from play entirely (NOT returned to stock; NOT scored against them at hand end since they exited mid-hand). Stock + discard pile untouched. Continue with remaining players.
-- If turn was on forfeiting player when they disconnected: advance to next player, phase resets to `draw`.
-- If only 1 active player remains in 3+P after forfeits: they win current hand.
-- Lobby disconnect: held 60s for reconnect via sessionId cookie. After 60s remove from lobby.
+- WS close mid-game → broadcast `playerDisconnected`, arm a 60s grace timer (`GAME_RECONNECT_MS`). NOT an instant forfeit.
+- Reconnect within the window (`join`+signed `sessionId`) → cancel timer, rebind socket, send `lobby`+`state` to the returning player, `playerReconnected`+`state` to the others. Same hand resumes; if it was the dropped player's turn, the game waited for them.
+- On grace expiry → `forfeitPlayer`:
+  - mark `forfeited` (both `Room.Player` and `GameState.GamePlayer`).
+  - 2P: opponent wins hand at current score state.
+  - 3+P: remove from turn order. Forfeited player's hand cards + melds removed from play entirely (NOT returned to stock; NOT scored against them at hand end since they exited mid-hand). Stock + discard pile untouched. Continue with remaining players.
+  - If turn was on forfeiting player: advance to next player, phase resets to `draw`.
+  - If only 1 active player remains: they win current hand (`gameOver`).
+- Stale-socket guard: a close fired for a socket already superseded by a reconnect is a no-op.
+- Lobby disconnect: held 60s for reconnect via sessionId. After 60s remove from lobby.
+- Client: auto-reconnects with capped backoff (~60s, matching the grace), shows a connection banner, and re-sends `join` on each successful reconnect.
 
 ## Engine FSM (basic + 500 rummy)
 
@@ -424,7 +430,7 @@ v1 = M1-M7. M8 after.
 
 - `Room` now carries `gameState: GameState | null` — bridges the registry/session layer to the engine.
 - Two player representations must stay in sync on disconnect: `Room.Player.status` (for lobby/reconnect logic) and `GameState.GamePlayer.status` (for engine turn order). Disconnect handler updates both.
-- `broadcastStateAll` (game start, post-forfeit) sends private hand to every player. `broadcastState` (per-action) sends private only to the acting player — other players' hands are unchanged.
+- `broadcastStateAll` (game start, post-forfeit, mid-game reconnect) sends private hand to every player. `broadcastState` (per-action) sends private only to the acting player — other players' hands are unchanged.
 - `start` handler originally guarded `room.variant !== 'basic'` and returned `ERR_NOT_IMPLEMENTED` for rum500/gin. M5 lifted the rum500 guard; gin guard remains until M6.
 - Engine errors use `ERR_X:detail` format; WS layer splits on `:` to extract the code prefix.
 - Browser verification of M3 deferred to M4 (no client yet).
@@ -433,7 +439,7 @@ v1 = M1-M7. M8 after.
 
 - **Zustand selectors must be scalar.** Object selectors — `useStore(s => ({ a: s.a, b: s.b }))` — return a new object every render, breaking React 18's `useSyncExternalStore` and causing an infinite re-render loop. Use one `useStore` call per value.
 - **React StrictMode double-mounts.** Effects fire twice in dev; the first socket's `onclose` fires after the second socket connects, nulling the module-level socket reference and calling `setConnected(false)`. Fixed with an epoch counter in `net/ws.ts` — each socket knows its epoch and ignores events from previous epochs.
-- **Stale sessionStorage triggers spurious reconnects.** On every connect the client tries to rejoin using stored sessionId/roomCode. This floods server logs and can land in error state. Fixed by: (1) clearing sessionStorage on `ERR_SESSION_NOT_FOUND` / `ERR_INVALID_SESSION`, (2) skipping the reconnect attempt entirely if `publicState !== null` (mid-game Vite HMR remount).
+- **Stale sessionStorage triggers spurious reconnects.** On every connect the client tries to rejoin using stored sessionId/roomCode. This floods server logs and can land in error state. Fixed by clearing sessionStorage on `ERR_SESSION_NOT_FOUND` / `ERR_INVALID_SESSION` / `ERR_GAME_IN_PROGRESS`. (The earlier "skip rejoin if `publicState !== null`" guard was removed when mid-game reconnect landed — the rejoin must now fire mid-game so the server can rebind the socket; a Vite HMR remount no-ops anyway because `connect()` returns early when the socket is still OPEN.)
 - **Vite proxy at `/` breaks page load.** Proxying all requests to the game server causes the initial HTML load to return 404. Client connects directly to `ws://localhost:8080`; Vite proxy is not needed because `ALLOWED_ORIGINS` covers `http://localhost:5173`.
 - **Meld cards require protocol extension.** `PublicState` melds only carry `cardIds`. Opponents have never seen those cards so their client cache is empty — all meld cards render as face-down placeholders. Fix: server populates `cards: Card[]` in each meld via `cardRegistry` lookups in `buildPublicState`. Field added to shared `Meld` type as optional.
 - **`wonHand` event carries final hands.** All players' remaining unmelded cards at hand end are sent in `data.finalHands` so every client can show the full score breakdown, not just the acting player.

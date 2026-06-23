@@ -94,7 +94,7 @@ Resolve an issue only on the step in its **Resolves** column; report it as **Par
 
 **Out of this plan's scope — do NOT report against any step:**
 
-- **#18** — spectator mode + mid-hand reconnect. Explicit plan.md v1 non-goal (see T-NS5-1 notes). Resolve only as a deliberate scope change, never incidentally.
+- **#18** — spectator mode. Explicit plan.md v1 non-goal (see T-NS5-1 notes). Resolve only as a deliberate scope change, never incidentally. (Mid-hand reconnect, formerly grouped here, has since shipped: 60s server grace window + client auto-reconnect.)
 
 **Notes:**
 
@@ -634,8 +634,8 @@ depends: T-NS5-0
 notes:   New routes (Dossier, room browser) follow [E1]; persisted identity extends store and,
          when a backend exists, the protocol — without weakening [S2] server authority.
          Thematic rank ladder (Associate→The Don) + terminology ("The Dossier", "The Backroom")
-         from branding.md. Avatars/rank on OpponentStrip chips. Spectator mode + mid-hand
-         reconnect are explicit plan.md non-goals for v1 — treat as separate scope changes.
+         from branding.md. Avatars/rank on OpponentStrip chips. Spectator mode is an explicit
+         plan.md non-goal for v1 — treat as a separate scope change (mid-hand reconnect has shipped).
          ScoreOverlay rank-change announcement ("you advanced to Bootlegger") lands here.
 ```
 

@@ -36,6 +36,9 @@ const MAX_CONNECTIONS_PER_IP = 10;
 const MAX_MSG_RATE = 20; // per second
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const LOBBY_RECONNECT_MS = 60 * 1000;
+// Grace window after a mid-game socket drop before the player is forfeited. Lets a
+// flaky network / reloaded tab rebind via join+sessionId and resume the same hand.
+const GAME_RECONNECT_MS = 60 * 1000;
 
 // --- Wire helpers ---
 
@@ -55,19 +58,20 @@ function broadcast(room: Room, msg: S2C, exceptId?: string): void {
 }
 
 // Each player gets their own signed sessionId so they can use it for reconnect.
+function sendLobby(ws: WebSocket, room: Room, player: Player): void {
+  send(ws, {
+    t: 'lobby',
+    roomCode: room.code,
+    variant: room.variant,
+    hostId: room.hostId,
+    players: room.players.map((p) => ({ id: p.id, name: p.name })),
+    sessionId: signSessionId(player.sessionId, _secret),
+  });
+}
+
 function broadcastLobby(room: Room): void {
-  const players = room.players.map((p) => ({ id: p.id, name: p.name }));
   for (const p of room.players) {
-    if (p.socket !== null) {
-      send(p.socket, {
-        t: 'lobby',
-        roomCode: room.code,
-        variant: room.variant,
-        hostId: room.hostId,
-        players,
-        sessionId: signSessionId(p.sessionId, _secret),
-      });
-    }
+    if (p.socket !== null) sendLobby(p.socket, room, p);
   }
 }
 
@@ -296,13 +300,16 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           sendError(ws, 'ERR_SESSION_NOT_FOUND', 'Session not found in room');
           return;
         }
-        if (reconRoom.status !== 'lobby') {
-          sendError(ws, 'ERR_GAME_IN_PROGRESS', 'Cannot reconnect mid-game');
-          return;
-        }
         const reconPlayer = getPlayerBySession(reconRoom, rawId);
         if (reconPlayer === undefined) {
           sendError(ws, 'ERR_SESSION_NOT_FOUND', 'Player not found');
+          return;
+        }
+        // Reconnect is only possible while the room is live and the player is still in.
+        // A re-deal drops socketless players and a grace-expiry forfeit eliminates them;
+        // either way there's nothing to resume.
+        if (reconRoom.status === 'ended' || reconPlayer.status === 'forfeited') {
+          sendError(ws, 'ERR_GAME_IN_PROGRESS', 'Cannot reconnect — the game has ended');
           return;
         }
         const timer = reconnectTimers.get(reconPlayer.id);
@@ -314,7 +321,17 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         ctx.player = reconPlayer;
         ctx.room = reconRoom;
         clearIdleTimer(reconRoom.code);
-        broadcastLobby(reconRoom);
+
+        if (reconRoom.status === 'playing' && reconRoom.gameState !== null) {
+          // Mid-game reconnect: restore identity first (the lobby payload carries sessionId +
+          // roster + host so a reloaded tab can resolve "me"), tell the opponent the player is
+          // back so their waiting cue clears, then resend full state to everyone.
+          sendLobby(ws, reconRoom, reconPlayer);
+          broadcast(reconRoom, { t: 'event', kind: 'playerReconnected', playerId: reconPlayer.id }, reconPlayer.id);
+          broadcastStateAll(reconRoom, reconRoom.gameState);
+        } else {
+          broadcastLobby(reconRoom);
+        }
         return;
       }
 
@@ -381,9 +398,17 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         broadcastStateAll(room, room.gameState);
       } else if (room.status === 'ended') {
         const oldState = room.gameState;
-        // Drop players who disconnected during the previous hand.
+        // Drop players who disconnected during the previous hand. Clear any pending grace
+        // timer first so it can't fire on an already-removed player.
         for (const p of [...room.players]) {
-          if (p.socket === null) removePlayer(room, p.id);
+          if (p.socket === null) {
+            const gt = reconnectTimers.get(p.id);
+            if (gt !== undefined) {
+              clearTimeout(gt);
+              reconnectTimers.delete(p.id);
+            }
+            removePlayer(room, p.id);
+          }
         }
         // Reset survivors to active for the new hand.
         for (const p of room.players) p.status = 'active';
@@ -504,11 +529,61 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
 
 // --- Disconnect ---
 
+// Forfeit a player (rules.md disconnect): drop their hand + melds, advance the turn if
+// it was theirs, broadcast forfeit, and end the game if ≤1 active player remains. Used by
+// the grace-timer expiry path and guarded so a re-deal / hand-end racing the timer is a no-op.
+function forfeitPlayer(room: Room, player: Player): void {
+  if (player.status === 'forfeited' || room.status !== 'playing') return;
+  player.status = 'forfeited';
+
+  // Sync engine game state for the forfeit.
+  const gs = room.gameState;
+  if (gs !== null) {
+    const gp = gs.players.find((p) => p.id === player.id);
+    if (gp !== undefined) {
+      gp.status = 'forfeited';
+      // rules.md disconnect: hand + melds removed from play, NOT returned to stock.
+      gp.hand = [];
+      gp.melds = [];
+    }
+
+    // If it was the forfeiting player's turn, advance to next active player.
+    if (gs.turnPlayerId === player.id && gs.phase !== 'ended') {
+      const next = nextActivePlayer(gs, player.id);
+      if (next !== undefined) {
+        gs.turnPlayerId = next.id;
+        gs.phase = 'draw';
+        gs.drewFromDiscardId = null;
+      } else {
+        gs.phase = 'ended';
+      }
+    }
+  }
+
+  broadcast(room, { t: 'event', kind: 'forfeit', playerId: player.id });
+
+  const still = activePlayers(room);
+  if (still.length <= 1) {
+    room.status = 'ended';
+    if (gs !== null) gs.phase = 'ended';
+    const winner = still[0];
+    if (winner !== undefined) broadcast(room, { t: 'event', kind: 'gameOver', playerId: winner.id });
+  } else if (gs !== null) {
+    broadcastStateAll(room, gs);
+  }
+
+  maybeStartIdleTimer(room);
+}
+
 function handleDisconnect(ws: WebSocket): void {
   const ctx = socketContexts.get(ws);
   socketContexts.delete(ws);
   if (ctx === undefined || ctx.player === null || ctx.room === null) return;
   const { player, room } = ctx;
+
+  // A reconnect may have already rebound this player to a newer socket; ignore the
+  // stale close so it doesn't clobber the live socket or double-arm a grace timer.
+  if (player.socket !== null && player.socket !== ws) return;
 
   player.socket = null;
 
@@ -521,45 +596,16 @@ function handleDisconnect(ws: WebSocket): void {
     }, LOBBY_RECONNECT_MS);
     reconnectTimers.set(player.id, timer);
     maybeStartIdleTimer(room);
-  } else if (room.status === 'playing') {
-    player.status = 'forfeited';
-
-    // Sync engine game state for the forfeit.
-    const gs = room.gameState;
-    if (gs !== null) {
-      const gp = gs.players.find((p) => p.id === player.id);
-      if (gp !== undefined) {
-        gp.status = 'forfeited';
-        // rules.md disconnect: hand + melds removed from play, NOT returned to stock.
-        gp.hand = [];
-        gp.melds = [];
-      }
-
-      // If it was the forfeiting player's turn, advance to next active player.
-      if (gs.turnPlayerId === player.id && gs.phase !== 'ended') {
-        const next = nextActivePlayer(gs, player.id);
-        if (next !== undefined) {
-          gs.turnPlayerId = next.id;
-          gs.phase = 'draw';
-          gs.drewFromDiscardId = null;
-        } else {
-          gs.phase = 'ended';
-        }
-      }
-    }
-
-    broadcast(room, { t: 'event', kind: 'forfeit', playerId: player.id });
-
-    const still = activePlayers(room);
-    if (still.length <= 1) {
-      room.status = 'ended';
-      if (gs !== null) gs.phase = 'ended';
-      const winner = still[0];
-      if (winner !== undefined) broadcast(room, { t: 'event', kind: 'gameOver', playerId: winner.id });
-    } else if (gs !== null) {
-      broadcastStateAll(room, gs);
-    }
-
+  } else if (room.status === 'playing' && player.status === 'active') {
+    // Don't forfeit immediately — open a grace window so a flaky connection / reloaded
+    // tab can rebind via join+sessionId and resume the same hand. Tell the opponent so
+    // they see a "waiting for reconnect" cue instead of a frozen table.
+    broadcast(room, { t: 'event', kind: 'playerDisconnected', playerId: player.id });
+    const timer = setTimeout(() => {
+      reconnectTimers.delete(player.id);
+      forfeitPlayer(room, player);
+    }, GAME_RECONNECT_MS);
+    reconnectTimers.set(player.id, timer);
     maybeStartIdleTimer(room);
   }
 }

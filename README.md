@@ -81,7 +81,7 @@ The client derives its WebSocket URL from the page origin: `wss://<host>` when s
 4. The room host starts the game once enough players have joined.
 5. Play proceeds in turn order. On your turn: draw a card, optionally meld or lay off, then discard.
 
-Games are ephemeral — no accounts, no saved history. If you close the browser mid-game your hand is forfeited.
+Games are ephemeral — no accounts, no saved history. If your connection drops mid-game you have a 60-second window to reconnect and resume the same hand; the client reconnects automatically. Stay away longer than that and your hand is forfeited.
 
 ---
 

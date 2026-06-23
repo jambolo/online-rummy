@@ -26,6 +26,8 @@ export type EventKind =
   | 'wonHand'
   | 'handCancelled' // gin only — stock-depletion cancelled hand (rules.md A.2.3)
   | 'playerLeft' // a player left the room via the leave button; game cancelled, all return to start page
+  | 'playerDisconnected' // a player's socket dropped mid-game; grace window open, awaiting reconnect
+  | 'playerReconnected' // a previously-disconnected player rebound their socket within the grace window
   | 'forfeit'
   | 'gameOver'
   | 'gameStarted';

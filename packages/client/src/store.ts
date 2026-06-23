@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
 import type { PublicState, PrivateState } from '@online-rummy/shared';
-import { send as wsSend } from './net/ws';
+import { send as wsSend, type ConnStatus } from './net/ws';
 
 const ERROR_MESSAGES: Record<string, string> = {
   ERR_NOT_YOUR_TURN: "It's not your turn.",
@@ -54,6 +54,12 @@ interface ChatMessage {
 
 interface AppState {
   connected: boolean;
+  // Socket connection lifecycle, driven by the ws layer. `connected` mirrors
+  // (connStatus === 'connected') for the Home form's existing gating.
+  connStatus: ConnStatus;
+  // An opponent whose socket dropped mid-game and is within the server's reconnect grace
+  // window. Set on `playerDisconnected`, cleared on `playerReconnected`/forfeit/game end.
+  opponentConn: { id: string; name: string } | null;
 
   // Identity — myPlayerId inferred from pendingName on first lobby msg
   myPlayerId: string | null;
@@ -114,7 +120,7 @@ interface AppState {
   // Player whose cards are currently highlighted (for same-turn accumulation vs replace).
   meldHighlightOwnerId: string | null;
 
-  setConnected(v: boolean): void;
+  setConnStatus(s: ConnStatus): void;
   send(msg: C2S): void;
   handleMessage(msg: S2C): void;
   leaveGame(): void;
@@ -172,6 +178,7 @@ const HOME_RESET = {
   meldHighlightOwnerId: null,
   playerLastSeen: {},
   disconnectWarning: null,
+  opponentConn: null,
 } satisfies Partial<AppState>;
 
 function clearSessionStorage(): void {
@@ -182,6 +189,8 @@ function clearSessionStorage(): void {
 
 export const useAppStore = create<AppState>()((set, _get) => ({
   connected: false,
+  connStatus: 'connecting',
+  opponentConn: null,
   myPlayerId: null,
   pendingName: null,
   sessionId: null,
@@ -212,7 +221,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   meldHighlights: [],
   meldHighlightOwnerId: null,
 
-  setConnected: (v) => set({ connected: v }),
+  setConnStatus: (s) => set({ connStatus: s, connected: s === 'connected' }),
 
   send: (msg) => {
     if (msg.t === 'create' || msg.t === 'join') {
@@ -420,11 +429,25 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             ginInfo: d.ginInfo ?? null,
           });
         } else if (msg.kind === 'gameOver') {
-          set({ isGameOver: true, disconnectWarning: null });
+          set({ isGameOver: true, disconnectWarning: null, opponentConn: null });
         } else if (msg.kind === 'forfeit') {
-          // Server detected the player's socket close → any pending silent-drop warning
-          // for them is now redundant.
-          set((s) => (s.disconnectWarning?.id === msg.playerId ? { disconnectWarning: null } : {}));
+          // Grace window expired (or non-graceful drop) → the player is out. Any pending
+          // silent-drop warning or "waiting for reconnect" cue for them is now moot.
+          set((s) => ({
+            ...(s.disconnectWarning?.id === msg.playerId ? { disconnectWarning: null } : {}),
+            ...(s.opponentConn?.id === msg.playerId ? { opponentConn: null } : {}),
+          }));
+        } else if (msg.kind === 'playerDisconnected') {
+          // Opponent dropped mid-game; server is holding a grace window for their return.
+          set((s) => {
+            const name =
+              s.publicState?.players.find((p) => p.id === msg.playerId)?.name ??
+              s.lobbyPlayers.find((p) => p.id === msg.playerId)?.name ??
+              'A player';
+            return { opponentConn: { id: msg.playerId, name } };
+          });
+        } else if (msg.kind === 'playerReconnected') {
+          set((s) => (s.opponentConn?.id === msg.playerId ? { opponentConn: null } : {}));
         } else if (msg.kind === 'handCancelled') {
           set({ handCancelled: true });
         } else if (msg.kind === 'gameStarted') {
