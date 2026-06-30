@@ -258,15 +258,36 @@ export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: 
 // onto any existing meld in play. Used by applyDrawFromPile and exposed for the client
 // modal to gray out unusable cards.
 export function canUseSelectedInMeldOrLayoff(state: GameState, available: Card[], selected: Card): boolean {
+  const others = available.filter((c) => c.id !== selected.id);
   for (const p of state.players) {
     for (const m of p.melds) {
       const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
+      // Direct layoff onto this meld (set 4th card, or run end-extension).
       if (rum500Variant.validateMeld([...meldCards, selected])) return true;
+      // Chained run layoff (rules.md A.4.6): bridge from this run to the selected card
+      // using other available same-suit cards as intermediate layoffs. Sets never bridge.
+      if (m.kind === 'run' && canBridgeRunToSelected(meldCards, others, selected)) return true;
     }
   }
-  const others = available.filter((c) => c.id !== selected.id);
   if (others.filter((c) => c.rank === selected.rank).length >= 2) return true;
   return canFormRunWith(others, selected);
+}
+
+// Chained run layoff reachability (rules.md A.4.6). Layoffs are monotonic — each valid
+// extension grows the run's rank interval by one at an end and never blocks another — so a
+// greedy fixpoint reaches the maximal interval coverable by the bridge pool, order-independent.
+// O(pool²) per run; no combinatorial search. Each run is tested with its own full copy of the
+// pool (cross-meld chaining is impossible: bridge cards are independently available).
+function canBridgeRunToSelected(meldCards: Card[], bridgePool: Card[], selected: Card): boolean {
+  const run = [...meldCards];
+  const pool = bridgePool.filter((c) => c.suit === selected.suit && c.id !== selected.id);
+  for (;;) {
+    if (rum500Variant.validateMeld([...run, selected])) return true;
+    const i = pool.findIndex((c) => rum500Variant.validateMeld([...run, c]));
+    if (i === -1) return false;
+    run.push(pool[i]!);
+    pool.splice(i, 1);
+  }
 }
 
 function canFormRunWith(others: Card[], selected: Card): boolean {
