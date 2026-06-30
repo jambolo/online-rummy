@@ -24,9 +24,7 @@ describe('validateMeld — sets', () => {
   });
 
   it('rejects 5+ card set', () => {
-    expect(
-      validateMeld([c('A', 'C'), c('A', 'D'), c('A', 'H'), c('A', 'S'), c('A', 'C')], ACE_LOW),
-    ).toBe(false);
+    expect(validateMeld([c('A', 'C'), c('A', 'D'), c('A', 'H'), c('A', 'S'), c('A', 'C')], ACE_LOW)).toBe(false);
   });
 
   it('rejects mixed-rank', () => {
@@ -41,9 +39,7 @@ describe('validateMeld — runs', () => {
   });
 
   it('accepts 5-card run', () => {
-    expect(
-      validateMeld([c('3', 'H'), c('4', 'H'), c('5', 'H'), c('6', 'H'), c('7', 'H')], ACE_LOW),
-    ).toBe(true);
+    expect(validateMeld([c('3', 'H'), c('4', 'H'), c('5', 'H'), c('6', 'H'), c('7', 'H')], ACE_LOW)).toBe(true);
   });
 
   it('accepts out-of-order cards (sorted internally)', () => {

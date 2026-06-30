@@ -15,11 +15,7 @@ function glyph(s: string): string {
 
 // Caller already attempted validateMeld([...existingCards, incoming]) and it failed.
 // This function returns the descriptive ERR_INVALID_LAYOFF message; caller throws it.
-export function formatLayoffError(
-  targetMeld: Pick<Meld, 'kind'>,
-  existingCards: Card[],
-  incoming: Card,
-): string {
+export function formatLayoffError(targetMeld: Pick<Meld, 'kind'>, existingCards: Card[], incoming: Card): string {
   if (targetMeld.kind === 'set') {
     const setRank: Rank | '?' = existingCards[0]?.rank ?? '?';
     if (incoming.rank !== setRank) {

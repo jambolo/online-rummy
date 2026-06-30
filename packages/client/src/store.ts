@@ -1,39 +1,39 @@
-import { create } from "zustand";
-import type { C2S, Card, LobbyPlayer, S2C, Variant } from "@online-rummy/shared";
-import type { PublicState, PrivateState } from "@online-rummy/shared";
-import { send as wsSend } from "./net/ws";
+import { create } from 'zustand';
+import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
+import type { PublicState, PrivateState } from '@online-rummy/shared';
+import { send as wsSend, type ConnStatus } from './net/ws';
 
 const ERROR_MESSAGES: Record<string, string> = {
   ERR_NOT_YOUR_TURN: "It's not your turn.",
   ERR_WRONG_PHASE: "That action isn't allowed in the current phase.",
   ERR_INVALID_MELD: "Those cards don't form a valid meld (need a set of 3–4 matching ranks, or a run of 3+ in the same suit).",
-  ERR_CARD_NOT_IN_HAND: "That card is no longer in your hand.",
+  ERR_CARD_NOT_IN_HAND: 'That card is no longer in your hand.',
   ERR_DREW_DISCARD_REDISCARD: "You can't discard the same card you just drew from the discard pile.",
-  ERR_MELD_NOT_FOUND: "That meld no longer exists.",
+  ERR_MELD_NOT_FOUND: 'That meld no longer exists.',
   // ERR_INVALID_LAYOFF intentionally absent — server provides a specific reason in msg.
   ERR_NOT_IN_ROOM: "You're not in a room.",
-  ERR_ROOM_NOT_FOUND: "Room not found — check the code and try again.",
-  ERR_ROOM_FULL: "That room is already full.",
-  ERR_GAME_IN_PROGRESS: "A game is already in progress in that room.",
+  ERR_ROOM_NOT_FOUND: 'Room not found — check the code and try again.',
+  ERR_ROOM_FULL: 'That room is already full.',
+  ERR_GAME_IN_PROGRESS: 'A game is already in progress in that room.',
   ERR_WRONG_STATE: "The room isn't in the right state for that action.",
-  ERR_NOT_HOST: "Only the host can do that.",
-  ERR_NOT_ENOUGH_PLAYERS: "Not enough players to start.",
+  ERR_NOT_HOST: 'Only the host can do that.',
+  ERR_NOT_ENOUGH_PLAYERS: 'Not enough players to start.',
   ERR_ALREADY_IN_ROOM: "You're already in a room.",
   ERR_INVALID_NAME: "Name can't be empty.",
-  ERR_INVALID_VARIANT: "Unknown game variation.",
+  ERR_INVALID_VARIANT: 'Unknown game variation.',
   ERR_NOT_IMPLEMENTED: "That game variation isn't implemented yet.",
-  ERR_MUST_USE_PILE_CARD: "You drew a card from the discard pile — you must meld or lay it off before discarding.",
+  ERR_MUST_USE_PILE_CARD: 'You drew a card from the discard pile — you must meld or lay it off before discarding.',
   ERR_NO_LEGAL_DIVE: "You can't pile-dive that card — there's no legal meld or lay-off for it with your current hand.",
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
-  ERR_DISCARD_EMPTY: "The discard pile is empty.",
-  ERR_STOCK_EMPTY: "The stock pile is empty.",
+  ERR_DISCARD_EMPTY: 'The discard pile is empty.',
+  ERR_STOCK_EMPTY: 'The stock pile is empty.',
   ERR_INVALID_LAYOFF: "That card doesn't fit on the selected meld.",
-  ERR_KNOCK_REQUIRES_DISCARD: "Select a card to discard face-down when knocking.",
+  ERR_KNOCK_REQUIRES_DISCARD: 'Select a card to discard face-down when knocking.',
   ERR_CANNOT_DISCARD_MELDED_CARD: "You can't discard a card that's in one of your declared melds.",
-  ERR_RATE_LIMIT: "Sending messages too fast — slow down.",
-  ERR_TOO_MANY_CONNECTIONS: "Too many connections from your network.",
-  ERR_INVALID_JSON: "Malformed message sent to server.",
-  ERR_INVALID_MSG: "Unrecognised message type.",
+  ERR_RATE_LIMIT: 'Sending messages too fast — slow down.',
+  ERR_TOO_MANY_CONNECTIONS: 'Too many connections from your network.',
+  ERR_INVALID_JSON: 'Malformed message sent to server.',
+  ERR_INVALID_MSG: 'Unrecognised message type.',
 };
 
 function friendlyError(code: string, raw: string): string {
@@ -54,6 +54,12 @@ interface ChatMessage {
 
 interface AppState {
   connected: boolean;
+  // Socket connection lifecycle, driven by the ws layer. `connected` mirrors
+  // (connStatus === 'connected') for the Home form's existing gating.
+  connStatus: ConnStatus;
+  // An opponent whose socket dropped mid-game and is within the server's reconnect grace
+  // window. Set on `playerDisconnected`, cleared on `playerReconnected`/forfeit/game end.
+  opponentConn: { id: string; name: string } | null;
 
   // Identity — myPlayerId inferred from pendingName on first lobby msg
   myPlayerId: string | null;
@@ -72,7 +78,7 @@ interface AppState {
 
   // UI
   selectedCardIds: string[];
-  handOrder: string[];      // card IDs in display order (drag-to-reorder)
+  handOrder: string[]; // card IDs in display order (drag-to-reorder)
   chatMessages: ChatMessage[];
   lastError: string | null;
   // Informational banner shown on the Home page (e.g. after leaving a game). Not an error.
@@ -114,7 +120,7 @@ interface AppState {
   // Player whose cards are currently highlighted (for same-turn accumulation vs replace).
   meldHighlightOwnerId: string | null;
 
-  setConnected(v: boolean): void;
+  setConnStatus(s: ConnStatus): void;
   send(msg: C2S): void;
   handleMessage(msg: S2C): void;
   leaveGame(): void;
@@ -172,16 +178,19 @@ const HOME_RESET = {
   meldHighlightOwnerId: null,
   playerLastSeen: {},
   disconnectWarning: null,
+  opponentConn: null,
 } satisfies Partial<AppState>;
 
 function clearSessionStorage(): void {
-  sessionStorage.removeItem("sessionId");
-  sessionStorage.removeItem("roomCode");
-  sessionStorage.removeItem("playerName");
+  sessionStorage.removeItem('sessionId');
+  sessionStorage.removeItem('roomCode');
+  sessionStorage.removeItem('playerName');
 }
 
 export const useAppStore = create<AppState>()((set, _get) => ({
   connected: false,
+  connStatus: 'connecting',
+  opponentConn: null,
   myPlayerId: null,
   pendingName: null,
   sessionId: null,
@@ -212,12 +221,12 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   meldHighlights: [],
   meldHighlightOwnerId: null,
 
-  setConnected: (v) => set({ connected: v }),
+  setConnStatus: (s) => set({ connStatus: s, connected: s === 'connected' }),
 
   send: (msg) => {
-    if (msg.t === "create" || msg.t === "join") {
+    if (msg.t === 'create' || msg.t === 'join') {
       set({ pendingName: msg.name });
-      sessionStorage.setItem("playerName", msg.name);
+      sessionStorage.setItem('playerName', msg.name);
     }
     wsSend(msg);
   },
@@ -225,19 +234,16 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   // Player chose to leave: tell the server (which cancels the game and notifies the
   // others), then drop all room/game state and return to the start page.
   leaveGame: () => {
-    wsSend({ t: "leave" });
+    wsSend({ t: 'leave' });
     clearSessionStorage();
-    set({ ...HOME_RESET, notice: "You left the game." });
+    set({ ...HOME_RESET, notice: 'You left the game.' });
   },
 
   handleMessage: (msg) => {
     switch (msg.t) {
-      case "lobby":
+      case 'lobby':
         set((s) => {
-          const myPlayerId =
-            s.myPlayerId ??
-            msg.players.find((p) => p.name === s.pendingName)?.id ??
-            null;
+          const myPlayerId = s.myPlayerId ?? msg.players.find((p) => p.name === s.pendingName)?.id ?? null;
           // Seed last-seen for newly-known players so they don't trip the disconnect
           // check before we've had a chance to hear from them.
           const now = Date.now();
@@ -254,28 +260,24 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             myPlayerId,
             playerLastSeen,
             lastError: null, // clear pre-join errors (e.g. invalid room code)
-            notice: null,    // clear any "you left the game" banner once back in a room
+            notice: null, // clear any "you left the game" banner once back in a room
           };
         });
-        sessionStorage.setItem("sessionId", msg.sessionId);
-        sessionStorage.setItem("roomCode", msg.roomCode);
+        sessionStorage.setItem('sessionId', msg.sessionId);
+        sessionStorage.setItem('roomCode', msg.roomCode);
         break;
 
-      case "state":
+      case 'state':
         set((s) => {
           // Snapshot scores the moment a hand transitions to ended,
           // so the overlay can show per-hand delta.
-          const handJustEnded =
-            s.publicState?.phase !== "ended" && msg.public.phase === "ended";
+          const handJustEnded = s.publicState?.phase !== 'ended' && msg.public.phase === 'ended';
           const prevScores = handJustEnded
-            ? Object.fromEntries(
-                s.publicState?.players.map((p) => [p.id, p.score]) ?? []
-              )
+            ? Object.fromEntries(s.publicState?.players.map((p) => [p.id, p.score]) ?? [])
             : s.prevScores;
 
           // Clear finalHands when a new hand starts (overlay disappears).
-          const handJustStarted =
-            s.publicState?.phase === "ended" && msg.public.phase !== "ended";
+          const handJustStarted = s.publicState?.phase === 'ended' && msg.public.phase !== 'ended';
           const finalHands = handJustStarted ? {} : s.finalHands;
           const meldCredits = handJustStarted ? {} : s.meldCredits;
           const handDeadwood = handJustStarted ? {} : s.handDeadwood;
@@ -289,20 +291,15 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           // the next player draws). Only variations that meld mid-game.
           let meldHighlights = s.meldHighlights;
           let meldHighlightOwnerId = s.meldHighlightOwnerId;
-          const midMeldVariation =
-            msg.public.variant === "basic" || msg.public.variant === "rum500";
-          if (handJustStarted || !midMeldVariation || msg.public.phase === "ended") {
+          const midMeldVariation = msg.public.variant === 'basic' || msg.public.variant === 'rum500';
+          if (handJustStarted || !midMeldVariation || msg.public.phase === 'ended') {
             meldHighlights = [];
             meldHighlightOwnerId = null;
           } else if (s.publicState) {
             // Clear once a different player has drawn — i.e. their turn is past the draw
             // phase. The end-of-turn discard hands off with phase 'draw', so highlights
             // survive into the next player's pre-draw, then clear the moment they draw.
-            if (
-              meldHighlightOwnerId !== null &&
-              msg.public.turnPlayerId !== meldHighlightOwnerId &&
-              msg.public.phase !== "draw"
-            ) {
+            if (meldHighlightOwnerId !== null && msg.public.turnPlayerId !== meldHighlightOwnerId && msg.public.phase !== 'draw') {
               meldHighlights = [];
               meldHighlightOwnerId = null;
             }
@@ -312,8 +309,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             const added = [...meldedCardIds(msg.public)].filter((id) => !prevMelded.has(id));
             if (added.length > 0) {
               const actor = msg.public.turnPlayerId;
-              meldHighlights =
-                meldHighlightOwnerId === actor ? [...meldHighlights, ...added] : added;
+              meldHighlights = meldHighlightOwnerId === actor ? [...meldHighlights, ...added] : added;
               meldHighlightOwnerId = actor;
             }
           }
@@ -333,13 +329,24 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           }
 
           if (msg.private === undefined) {
-            return { publicState: msg.public, playerLastSeen, prevScores, finalHands, meldCredits, handDeadwood, ginInfo, knockMelds, ginDefenderMelds, ginLayoffs, meldHighlights, meldHighlightOwnerId };
+            return {
+              publicState: msg.public,
+              playerLastSeen,
+              prevScores,
+              finalHands,
+              meldCredits,
+              handDeadwood,
+              ginInfo,
+              knockMelds,
+              ginDefenderMelds,
+              ginLayoffs,
+              meldHighlights,
+              meldHighlightOwnerId,
+            };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
           const kept = s.handOrder.filter((id) => newIds.has(id));
-          const added = msg.private.hand
-            .map((c) => c.id)
-            .filter((id) => !s.handOrder.includes(id));
+          const added = msg.private.hand.map((c) => c.id).filter((id) => !s.handOrder.includes(id));
           // Update card cache with all hand cards so we can render
           // melded cards after they leave the hand.
           const cardCache = { ...s.cardCache };
@@ -367,23 +374,19 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         });
         break;
 
-      case "keepalive":
+      case 'keepalive':
         // Relayed liveness ping from another room player — refresh their last-seen.
         set((s) => ({
           playerLastSeen: { ...s.playerLastSeen, [msg.from]: Date.now() },
         }));
         break;
 
-      case "chat":
+      case 'chat':
         set((s) => {
           // chat carries the sender's name; map it back to an id for last-seen.
           const fromId =
-            s.publicState?.players.find((p) => p.name === msg.from)?.id ??
-            s.lobbyPlayers.find((p) => p.name === msg.from)?.id;
-          const playerLastSeen =
-            fromId !== undefined
-              ? { ...s.playerLastSeen, [fromId]: Date.now() }
-              : s.playerLastSeen;
+            s.publicState?.players.find((p) => p.name === msg.from)?.id ?? s.lobbyPlayers.find((p) => p.name === msg.from)?.id;
+          const playerLastSeen = fromId !== undefined ? { ...s.playerLastSeen, [fromId]: Date.now() } : s.playerLastSeen;
           return {
             chatMessages: [...s.chatMessages, { from: msg.from, text: msg.text }],
             playerLastSeen,
@@ -391,32 +394,33 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         });
         break;
 
-      case "error":
-        if (
-          msg.code === "ERR_SESSION_NOT_FOUND" ||
-          msg.code === "ERR_INVALID_SESSION" ||
-          msg.code === "ERR_GAME_IN_PROGRESS"
-        ) {
+      case 'error':
+        if (msg.code === 'ERR_SESSION_NOT_FOUND' || msg.code === 'ERR_INVALID_SESSION' || msg.code === 'ERR_GAME_IN_PROGRESS') {
           // Stale sessionStorage from a previous game — clear silently.
-          sessionStorage.removeItem("sessionId");
-          sessionStorage.removeItem("roomCode");
-          sessionStorage.removeItem("playerName");
+          sessionStorage.removeItem('sessionId');
+          sessionStorage.removeItem('roomCode');
+          sessionStorage.removeItem('playerName');
           break;
         }
         set({ lastError: friendlyError(msg.code, msg.msg) });
         break;
 
-      case "event":
+      case 'event':
         // Any event is attributable to the player who triggered it → refresh last-seen.
         set((s) => ({
           playerLastSeen: { ...s.playerLastSeen, [msg.playerId]: Date.now() },
         }));
-        if (msg.kind === "wonHand" && msg.data !== undefined) {
+        if (msg.kind === 'wonHand' && msg.data !== undefined) {
           const d = msg.data as {
             finalHands?: Record<string, Card[]>;
             meldCredits?: Record<string, { card: Card; pts: number }[]>;
             handDeadwood?: Record<string, number>;
-            ginInfo?: { knockerId: string; knockerDeadwood: number; defenderDeadwood: number; result: 'gin' | 'knock' | 'undercut' };
+            ginInfo?: {
+              knockerId: string;
+              knockerDeadwood: number;
+              defenderDeadwood: number;
+              result: 'gin' | 'knock' | 'undercut';
+            };
           };
           set({
             finalHands: d.finalHands ?? {},
@@ -424,26 +428,38 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             handDeadwood: d.handDeadwood ?? {},
             ginInfo: d.ginInfo ?? null,
           });
-        } else if (msg.kind === "gameOver") {
-          set({ isGameOver: true, disconnectWarning: null });
-        } else if (msg.kind === "forfeit") {
-          // Server detected the player's socket close → any pending silent-drop warning
-          // for them is now redundant.
-          set((s) =>
-            s.disconnectWarning?.id === msg.playerId ? { disconnectWarning: null } : {},
-          );
-        } else if (msg.kind === "handCancelled") {
+        } else if (msg.kind === 'gameOver') {
+          set({ isGameOver: true, disconnectWarning: null, opponentConn: null });
+        } else if (msg.kind === 'forfeit') {
+          // Grace window expired (or non-graceful drop) → the player is out. Any pending
+          // silent-drop warning or "waiting for reconnect" cue for them is now moot.
+          set((s) => ({
+            ...(s.disconnectWarning?.id === msg.playerId ? { disconnectWarning: null } : {}),
+            ...(s.opponentConn?.id === msg.playerId ? { opponentConn: null } : {}),
+          }));
+        } else if (msg.kind === 'playerDisconnected') {
+          // Opponent dropped mid-game; server is holding a grace window for their return.
+          set((s) => {
+            const name =
+              s.publicState?.players.find((p) => p.id === msg.playerId)?.name ??
+              s.lobbyPlayers.find((p) => p.id === msg.playerId)?.name ??
+              'A player';
+            return { opponentConn: { id: msg.playerId, name } };
+          });
+        } else if (msg.kind === 'playerReconnected') {
+          set((s) => (s.opponentConn?.id === msg.playerId ? { opponentConn: null } : {}));
+        } else if (msg.kind === 'handCancelled') {
           set({ handCancelled: true });
-        } else if (msg.kind === "gameStarted") {
+        } else if (msg.kind === 'gameStarted') {
           set({ isGameOver: false, handCancelled: false, knockMelds: [], ginDefenderMelds: [], ginLayoffs: [] });
-        } else if (msg.kind === "playerLeft") {
+        } else if (msg.kind === 'playerLeft') {
           // Another player left → game cancelled for everyone. Resolve their name from
           // current state before we reset, then return to the start page.
           set((s) => {
             const name =
               s.publicState?.players.find((p) => p.id === msg.playerId)?.name ??
               s.lobbyPlayers.find((p) => p.id === msg.playerId)?.name ??
-              "A player";
+              'A player';
             return {
               ...HOME_RESET,
               notice: `${name} left the game. The game has been cancelled.`,
@@ -457,9 +473,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
 
   toggleSelect: (id) =>
     set((s) => ({
-      selectedCardIds: s.selectedCardIds.includes(id)
-        ? s.selectedCardIds.filter((x) => x !== id)
-        : [...s.selectedCardIds, id],
+      selectedCardIds: s.selectedCardIds.includes(id) ? s.selectedCardIds.filter((x) => x !== id) : [...s.selectedCardIds, id],
     })),
 
   clearSelect: () => set({ selectedCardIds: [] }),
@@ -474,7 +488,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
     if (s.disconnectWarning !== null) return;
     const me = s.myPlayerId;
     const others = s.publicState
-      ? s.publicState.players.filter((p) => p.id !== me && p.status !== "forfeited")
+      ? s.publicState.players.filter((p) => p.id !== me && p.status !== 'forfeited')
       : s.lobbyPlayers.filter((p) => p.id !== me);
     const now = Date.now();
     for (const p of others) {
@@ -497,19 +511,13 @@ export const useAppStore = create<AppState>()((set, _get) => ({
     }));
   },
   lookupCard: (id) => _get().cardCache[id],
-  addKnockMeld: (cardIds) =>
-    set((s) => ({ knockMelds: [...s.knockMelds, cardIds], selectedCardIds: [] })),
-  removeKnockMeld: (index) =>
-    set((s) => ({ knockMelds: s.knockMelds.filter((_, i) => i !== index) })),
+  addKnockMeld: (cardIds) => set((s) => ({ knockMelds: [...s.knockMelds, cardIds], selectedCardIds: [] })),
+  removeKnockMeld: (index) => set((s) => ({ knockMelds: s.knockMelds.filter((_, i) => i !== index) })),
   clearKnockMelds: () => set({ knockMelds: [] }),
-  addGinDefenderMeld: (cardIds) =>
-    set((s) => ({ ginDefenderMelds: [...s.ginDefenderMelds, cardIds], selectedCardIds: [] })),
-  removeGinDefenderMeld: (index) =>
-    set((s) => ({ ginDefenderMelds: s.ginDefenderMelds.filter((_, i) => i !== index) })),
+  addGinDefenderMeld: (cardIds) => set((s) => ({ ginDefenderMelds: [...s.ginDefenderMelds, cardIds], selectedCardIds: [] })),
+  removeGinDefenderMeld: (index) => set((s) => ({ ginDefenderMelds: s.ginDefenderMelds.filter((_, i) => i !== index) })),
   clearGinDefenderMelds: () => set({ ginDefenderMelds: [] }),
-  addGinLayoff: (cardId, meldId) =>
-    set((s) => ({ ginLayoffs: [...s.ginLayoffs, { cardId, meldId }], selectedCardIds: [] })),
-  removeGinLayoff: (index) =>
-    set((s) => ({ ginLayoffs: s.ginLayoffs.filter((_, i) => i !== index) })),
+  addGinLayoff: (cardId, meldId) => set((s) => ({ ginLayoffs: [...s.ginLayoffs, { cardId, meldId }], selectedCardIds: [] })),
+  removeGinLayoff: (index) => set((s) => ({ ginLayoffs: s.ginLayoffs.filter((_, i) => i !== index) })),
   clearGinLayoffs: () => set({ ginLayoffs: [] }),
 }));

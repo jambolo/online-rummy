@@ -1,17 +1,29 @@
-import type { C2S, S2C } from "@online-rummy/shared";
+import type { C2S, S2C } from '@online-rummy/shared';
+
+export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
 export interface WsCallbacks {
-  onConnect(): void;
-  onDisconnect(): void;
+  onStatus(status: ConnStatus): void;
   onMessage(msg: S2C): void;
 }
 
 let socket: WebSocket | null = null;
-let _url = "";
+let _url = '';
 let _cb: WsCallbacks | null = null;
 // Incremented on each new connection attempt or disconnect so stale async
-// events from a previous socket (e.g. React StrictMode double-mount) are ignored.
+// events from a previous socket (e.g. React StrictMode double-mount, or the
+// onerror+onclose pair fired for a single drop) are ignored.
 let epoch = 0;
+
+// Auto-reconnect with capped exponential backoff. A mid-game socket drop is handled
+// server-side by a grace window (join+sessionId rebinds the same hand); these delays
+// keep retrying through that window before giving up. `manualClose` suppresses reconnect
+// when the app intentionally tears the socket down.
+const BACKOFFS_MS = [500, 1000, 2000, 4000, 8000, 15000];
+const MAX_RECONNECT_ATTEMPTS = 8; // ~60s total, matching the server grace window
+let manualClose = false;
+let reconnectAttempt = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Keep-alive: Cloudflare drops idle WS connections, and the other players use our
 // frames as a liveness signal (silent-drop detection). Emit a keepalive whenever we
@@ -33,7 +45,7 @@ function startKeepAlive(): void {
   markSent();
   keepAliveTimer = setInterval(() => {
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (Date.now() - lastSent >= KEEPALIVE_IDLE_MS) send({ t: "keepalive" });
+    if (Date.now() - lastSent >= KEEPALIVE_IDLE_MS) send({ t: 'keepalive' });
   }, KEEPALIVE_CHECK_MS);
 }
 
@@ -45,14 +57,14 @@ function stopKeepAlive(): void {
 }
 
 export function connect(url: string, cb: WsCallbacks): void {
-  if (
-    socket?.readyState === WebSocket.OPEN ||
-    socket?.readyState === WebSocket.CONNECTING
-  ) {
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) {
     return;
   }
   _url = url;
   _cb = cb;
+  manualClose = false;
+  reconnectAttempt = 0;
+  cb.onStatus('connecting');
   _open();
 }
 
@@ -66,22 +78,19 @@ function _open(): void {
 
   ws.onopen = () => {
     if (epoch !== myEpoch) return;
+    reconnectAttempt = 0;
     startKeepAlive();
-    cb.onConnect();
+    cb.onStatus('connected');
   };
 
   ws.onclose = () => {
     if (epoch !== myEpoch) return;
-    stopKeepAlive();
-    socket = null;
-    cb.onDisconnect();
+    handleDrop(cb);
   };
 
   ws.onerror = () => {
     if (epoch !== myEpoch) return;
-    stopKeepAlive();
-    socket = null;
-    cb.onDisconnect();
+    handleDrop(cb);
   };
 
   ws.onmessage = (ev: MessageEvent<string>) => {
@@ -98,6 +107,31 @@ function _open(): void {
   };
 }
 
+// A socket dropped. Bumping the epoch invalidates the sibling event (onerror+onclose
+// both fire for one drop) so reconnect is scheduled exactly once.
+function handleDrop(cb: WsCallbacks): void {
+  epoch++;
+  stopKeepAlive();
+  socket = null;
+  if (manualClose || !_cb) return;
+  scheduleReconnect(cb);
+}
+
+function scheduleReconnect(cb: WsCallbacks): void {
+  if (reconnectTimer !== null) return;
+  if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+    cb.onStatus('disconnected'); // gave up — the UI offers a manual reload
+    return;
+  }
+  const delay = BACKOFFS_MS[Math.min(reconnectAttempt, BACKOFFS_MS.length - 1)] ?? 15000;
+  reconnectAttempt++;
+  cb.onStatus('reconnecting');
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    _open();
+  }, delay);
+}
+
 export function send(msg: C2S): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(msg));
@@ -106,7 +140,12 @@ export function send(msg: C2S): void {
 }
 
 export function disconnect(): void {
+  manualClose = true;
   epoch++; // invalidate all in-flight socket events
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   stopKeepAlive();
   _cb = null;
   socket?.close();

@@ -13,8 +13,8 @@ interface Props {
 function getFocusable(el: HTMLElement): HTMLElement[] {
   return Array.from(
     el.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
   );
 }
 
@@ -23,7 +23,9 @@ export default function Modal({ titleId, ariaLabel, onClose, z = t.zModal, panel
   const priorFocus = useRef<Element | null>(null);
   // Keep onClose stable inside the effect via ref.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     priorFocus.current = document.activeElement;
@@ -36,12 +38,18 @@ export default function Modal({ titleId, ariaLabel, onClose, z = t.zModal, panel
     function handleKey(e: KeyboardEvent) {
       if (!panel) return;
       if (e.key === 'Escape') {
-        if (onCloseRef.current) { e.preventDefault(); onCloseRef.current(); }
+        if (onCloseRef.current) {
+          e.preventDefault();
+          onCloseRef.current();
+        }
         return;
       }
       if (e.key === 'Tab') {
         const items = getFocusable(panel);
-        if (items.length === 0) { e.preventDefault(); return; }
+        if (items.length === 0) {
+          e.preventDefault();
+          return;
+        }
         const first = items[0]!;
         const last = items[items.length - 1]!;
         const active = document.activeElement;
@@ -64,7 +72,7 @@ export default function Modal({ titleId, ariaLabel, onClose, z = t.zModal, panel
       document.removeEventListener('keydown', handleKey);
       (priorFocus.current as HTMLElement | null)?.focus();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div

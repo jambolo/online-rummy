@@ -42,7 +42,11 @@ async function connect(): Promise<Client> {
       if (queued !== undefined) return Promise.resolve(queued);
       return new Promise((res) => waiters.push(res));
     },
-    close: () => new Promise<void>((res) => { ws.close(); ws.on('close', () => res()); }),
+    close: () =>
+      new Promise<void>((res) => {
+        ws.close();
+        ws.on('close', () => res());
+      }),
   };
 }
 
@@ -74,7 +78,7 @@ describe('leave — lobby', () => {
 
     // Alice creates a room
     alice.send({ t: 'create', variant: 'basic', name: 'Alice' });
-    const aliceLobby = await alice.recv() as Extract<S2C, { t: 'lobby' }>;
+    const aliceLobby = (await alice.recv()) as Extract<S2C, { t: 'lobby' }>;
     expect(aliceLobby.t).toBe('lobby');
     const { roomCode, players: lobbyPlayers } = aliceLobby;
     const aliceId = lobbyPlayers.find((p) => p.name === 'Alice')!.id;
@@ -83,14 +87,14 @@ describe('leave — lobby', () => {
     bob.send({ t: 'join', roomCode, name: 'Bob' });
     // Both get lobby broadcast
     await alice.recv(); // Alice gets updated lobby
-    const bobLobby = await bob.recv() as Extract<S2C, { t: 'lobby' }>;
+    const bobLobby = (await bob.recv()) as Extract<S2C, { t: 'lobby' }>;
     expect(bobLobby.t).toBe('lobby');
 
     // Alice leaves
     alice.send({ t: 'leave' });
 
     // Bob should receive playerLeft event
-    const event = await bob.recv() as Extract<S2C, { t: 'event' }>;
+    const event = (await bob.recv()) as Extract<S2C, { t: 'event' }>;
     expect(event.t).toBe('event');
     expect(event.kind).toBe('playerLeft');
     expect(event.playerId).toBe(aliceId);
@@ -112,13 +116,13 @@ describe('leave — during active game', () => {
 
     // Create and start a game
     alice.send({ t: 'create', variant: 'basic', name: 'Alice' });
-    const aliceLobby1 = await alice.recv() as Extract<S2C, { t: 'lobby' }>;
+    const aliceLobby1 = (await alice.recv()) as Extract<S2C, { t: 'lobby' }>;
     const { roomCode } = aliceLobby1;
     const aliceId = aliceLobby1.players.find((p) => p.name === 'Alice')!.id;
 
     bob.send({ t: 'join', roomCode, name: 'Bob' });
     await alice.recv(); // updated lobby for Alice
-    await bob.recv();   // lobby for Bob
+    await bob.recv(); // lobby for Bob
 
     alice.send({ t: 'start' });
     // Server sends gameStarted event then state to each player
@@ -133,7 +137,7 @@ describe('leave — during active game', () => {
 
     // Alice leaves mid-game
     alice.send({ t: 'leave' });
-    const event = await bob.recv() as Extract<S2C, { t: 'event' }>;
+    const event = (await bob.recv()) as Extract<S2C, { t: 'event' }>;
     expect(event.kind).toBe('playerLeft');
     expect(event.playerId).toBe(aliceId);
 

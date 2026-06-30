@@ -1,11 +1,11 @@
 // rules.md A.1 + plan.md "House rule picks > Basic Rummy"
-import { t } from "../../theme/tokens";
-import { variationAccent } from "../../theme/variations";
+import { t } from '../../theme/tokens';
+import { variationAccent } from '../../theme/variations';
 
 export default function BasicRules() {
   const h3Style: React.CSSProperties = {
     fontSize: 14,
-    color: variationAccent("basic"),
+    color: variationAccent('basic'),
     marginBottom: 6,
     marginTop: 0,
   };
@@ -28,10 +28,8 @@ export default function BasicRules() {
       <section>
         <h3 style={h3Style}>Objective</h3>
         <p style={pStyle}>
-          Be the first to empty your hand by melding and discarding all your
-          cards. The winner scores points equal to the total pip value of
-          opponents&apos; unmelded cards. First player to reach{" "}
-          <strong>100 cumulative points</strong> wins the game.
+          Be the first to empty your hand by melding and discarding all your cards. The winner scores points equal to the total pip
+          value of opponents&apos; unmelded cards. First player to reach <strong>100 cumulative points</strong> wins the game.
         </p>
       </section>
 
@@ -39,16 +37,14 @@ export default function BasicRules() {
         <h3 style={h3Style}>Turn flow</h3>
         <ol style={olStyle}>
           <li>
-            <strong>Draw</strong> — take the top card from the stock pile, or
-            take the top card from the discard pile.
+            <strong>Draw</strong> — take the top card from the stock pile, or take the top card from the discard pile.
           </li>
           <li>
-            <strong>Meld / lay off</strong> (optional) — place as many melds as
-            you like, and/or lay off cards onto any existing meld on the table.
+            <strong>Meld / lay off</strong> (optional) — place as many melds as you like, and/or lay off cards onto any existing
+            meld on the table.
           </li>
           <li>
-            <strong>Discard</strong> — place one card face-up on the discard
-            pile to end your turn.
+            <strong>Discard</strong> — place one card face-up on the discard pile to end your turn.
           </li>
         </ol>
       </section>
@@ -57,13 +53,11 @@ export default function BasicRules() {
         <h3 style={h3Style}>Melds</h3>
         <ul style={ulStyle}>
           <li>
-            <strong>Set</strong> — 3 or 4 cards of the same rank (e.g. 7♥ 7♦
-            7♣).
+            <strong>Set</strong> — 3 or 4 cards of the same rank (e.g. 7♥ 7♦ 7♣).
           </li>
           <li>
-            <strong>Run</strong> — 3 or more consecutive cards of the same suit
-            (e.g. 4♠ 5♠ 6♠). Ace is <em>low only</em>: A–2–3 is valid;
-            Q–K–A is not.
+            <strong>Run</strong> — 3 or more consecutive cards of the same suit (e.g. 4♠ 5♠ 6♠). Ace is <em>low only</em>: A–2–3 is
+            valid; Q–K–A is not.
           </li>
         </ul>
       </section>
@@ -73,35 +67,34 @@ export default function BasicRules() {
         <table
           style={{
             fontSize: 13,
-            borderCollapse: "collapse",
+            borderCollapse: 'collapse',
             marginBottom: 10,
-            width: "100%",
+            width: '100%',
           }}
         >
           <tbody>
             {[
-              ["Ace", "1 pt"],
-              ["2 – 10", "pip value"],
-              ["J / Q / K", "10 pts each"],
+              ['Ace', '1 pt'],
+              ['2 – 10', 'pip value'],
+              ['J / Q / K', '10 pts each'],
             ].map(([label, val]) => (
               <tr key={label}>
                 <td
                   style={{
-                    padding: "3px 12px 3px 0",
+                    padding: '3px 12px 3px 0',
                     color: t.text70,
                   }}
                 >
                   {label}
                 </td>
-                <td style={{ padding: "3px 0", textAlign: "right" }}>{val}</td>
+                <td style={{ padding: '3px 0', textAlign: 'right' }}>{val}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <p style={pStyle}>
-          Going rummy — going out without having melded or laid off at any
-          point during the hand — <strong>doubles</strong> your score for that
-          hand.
+          Going rummy — going out without having melded or laid off at any point during the hand — <strong>doubles</strong> your
+          score for that hand.
         </p>
       </section>
 
@@ -112,8 +105,7 @@ export default function BasicRules() {
             Ace is <strong>low only</strong> — A–2–3 valid; Q–K–A not valid.
           </li>
           <li>
-            You <strong>cannot discard</strong> the card you drew from the
-            discard pile on the same turn.
+            You <strong>cannot discard</strong> the card you drew from the discard pile on the same turn.
           </li>
           <li>
             Going rummy bonus is <strong>score × 2</strong> (not flat +10).

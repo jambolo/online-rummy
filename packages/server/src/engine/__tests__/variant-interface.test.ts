@@ -82,7 +82,10 @@ describe('basicVariant interface', () => {
     const state = basicVariant.createGame('r', two, makeSeededRNG(1), 0); // firstPlayerId = p1 (idx 0)
     expect(basicVariant.nextFirstPlayerIndex(state, two)).toBe(1); // rotate to p2
 
-    const lonely = [{ id: 'pX', name: 'X' }, { id: 'pY', name: 'Y' }];
+    const lonely = [
+      { id: 'pX', name: 'X' },
+      { id: 'pY', name: 'Y' },
+    ];
     expect(basicVariant.nextFirstPlayerIndex(state, lonely)).toBe(0); // p1 not in new list
   });
 
@@ -236,8 +239,11 @@ describe('ginVariant interface', () => {
   it('applyKnock + applyGinLayoff delegates run end-to-end', () => {
     const state = ginGame();
     const p1Hand = [
-      c('A', 'C', 'k1'), c('2', 'C', 'k2'), c('3', 'C', 'k3'),
-      c('4', 'C', 'k4'), c('5', 'C', 'k5'),
+      c('A', 'C', 'k1'),
+      c('2', 'C', 'k2'),
+      c('3', 'C', 'k3'),
+      c('4', 'C', 'k4'),
+      c('5', 'C', 'k5'),
       c('K', 'D', 'k_disc'),
     ];
     const p2Hand = [c('4', 'C', 'd1'), c('5', 'C', 'd2'), c('6', 'C', 'd3')];
@@ -282,8 +288,24 @@ describe('ginVariant interface', () => {
 
   it('winnerForHand: positive score wins, all-zero → null', () => {
     const state = ginGame();
-    expect(ginVariant.winnerForHand(state, new Map([['p1', 0], ['p2', 0]]))).toBeNull();
-    expect(ginVariant.winnerForHand(state, new Map([['p1', 0], ['p2', 25]]))).toBe('p2');
+    expect(
+      ginVariant.winnerForHand(
+        state,
+        new Map([
+          ['p1', 0],
+          ['p2', 0],
+        ]),
+      ),
+    ).toBeNull();
+    expect(
+      ginVariant.winnerForHand(
+        state,
+        new Map([
+          ['p1', 0],
+          ['p2', 25],
+        ]),
+      ),
+    ).toBe('p2');
   });
 
   it('handEndPayload: ginInfo labels knock / gin / undercut', () => {

@@ -19,7 +19,10 @@ describe('runScript', () => {
   it('records ok result for valid draw', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      [
+        { id: 'p1', name: 'Alice' },
+        { id: 'p2', name: 'Bob' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -31,7 +34,10 @@ describe('runScript', () => {
   it('records error result for invalid action', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      [
+        { id: 'p1', name: 'Alice' },
+        { id: 'p2', name: 'Bob' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -44,13 +50,16 @@ describe('runScript', () => {
   it('continues running after an error', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      [
+        { id: 'p1', name: 'Alice' },
+        { id: 'p2', name: 'Bob' },
+      ],
       makeSeededRNG(1),
       0,
     );
     const { results } = runScript(state, [
       { t: 'discard', cardId: 'nonexistent' }, // error
-      { t: 'draw', from: 'stock' },            // should succeed
+      { t: 'draw', from: 'stock' }, // should succeed
     ]);
     expect(results[0]?.ok).toBe(false);
     expect(results[1]?.ok).toBe(true);
@@ -59,7 +68,10 @@ describe('runScript', () => {
   it('dispatches layoff action via runScript', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      [
+        { id: 'p1', name: 'Alice' },
+        { id: 'p2', name: 'Bob' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -71,9 +83,7 @@ describe('runScript', () => {
       cardIds: ['t1', 't2', 't3'],
       ownerId: 'p2',
     });
-    [c('5', 'C', 't1'), c('5', 'D', 't2'), c('5', 'H', 't3')].forEach((card) =>
-      state.cardRegistry.set(card.id, card),
-    );
+    [c('5', 'C', 't1'), c('5', 'D', 't2'), c('5', 'H', 't3')].forEach((card) => state.cardRegistry.set(card.id, card));
     const lo = c('5', 'S', 'lo');
     injectHand(state, 'p1', [lo]);
     const { results } = runScript(state, [
@@ -87,7 +97,10 @@ describe('runScript', () => {
   it('dispatches drawFromPile for rum500 variant', () => {
     const state = createRum500Game(
       'room1',
-      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      [
+        { id: 'p1', name: 'A' },
+        { id: 'p2', name: 'B' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -99,7 +112,10 @@ describe('runScript', () => {
   it('drawFromPile against basic variant returns ERR_NOT_IMPLEMENTED', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      [
+        { id: 'p1', name: 'A' },
+        { id: 'p2', name: 'B' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -116,7 +132,10 @@ describe('runScript', () => {
   ])('non-engine action $t is a no-op', (action) => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      [
+        { id: 'p1', name: 'A' },
+        { id: 'p2', name: 'B' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -130,7 +149,10 @@ describe('runScript', () => {
     // basic has no applyKnock — dispatcher rejects, scripted result records error.
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      [
+        { id: 'p1', name: 'A' },
+        { id: 'p2', name: 'B' },
+      ],
       makeSeededRNG(1),
       0,
     );
@@ -142,7 +164,10 @@ describe('runScript', () => {
   it('golden path: p1 draws, melds a set, discards, p2 draws, discards', () => {
     const state = createBasicGame(
       'room1',
-      [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+      [
+        { id: 'p1', name: 'Alice' },
+        { id: 'p2', name: 'Bob' },
+      ],
       makeSeededRNG(42),
       0,
     );

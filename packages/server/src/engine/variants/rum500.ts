@@ -4,14 +4,7 @@ import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
 import { cardPoints, validateMeld as coreMeldCheck, runAceDirection, score500MeldCard } from '@online-rummy/shared';
 import type { GameState, Rum500State, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
-import {
-  advanceTurn as baseAdvanceTurn,
-  buildBaseState,
-  detectMeldKind,
-  lookupCard,
-  makeMeldId,
-  requireTurn,
-} from '../util.js';
+import { advanceTurn as baseAdvanceTurn, buildBaseState, detectMeldKind, lookupCard, makeMeldId, requireTurn } from '../util.js';
 import { formatLayoffError } from '../layoff-error.js';
 
 // Narrowing helper: every function here is only ever called on a 500 Rummy state.
@@ -101,9 +94,7 @@ export const rum500Variant: VariantEngine = {
     for (const p of state.players) {
       if (p.status === 'forfeited') continue;
       for (const meld of p.melds) {
-        const meldCards = meld.cardIds
-          .map((id) => state.cardRegistry.get(id))
-          .filter((c): c is Card => c !== undefined);
+        const meldCards = meld.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
         for (const c of meldCards) {
           const placer = state.meldedBy.get(c.id) ?? p.id;
           result.set(placer, (result.get(placer) ?? 0) + score500MeldCard(c, meldCards));
@@ -131,8 +122,7 @@ export const rum500Variant: VariantEngine = {
 
   // ---- Lifecycle / actions (Phase 3 promotion) ----
 
-  createGame: (roomId, players, rng, firstPlayerIndex) =>
-    createRum500Game(roomId, players, rng, firstPlayerIndex),
+  createGame: (roomId, players, rng, firstPlayerIndex) => createRum500Game(roomId, players, rng, firstPlayerIndex),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
   applyMeld: (state, playerId, cardIds) => {
@@ -172,9 +162,7 @@ export const rum500Variant: VariantEngine = {
     }
     for (const p of state.players) {
       for (const m of p.melds) {
-        const meldCards = m.cardIds
-          .map((id) => state.cardRegistry.get(id))
-          .filter((c): c is Card => c !== undefined);
+        const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
         for (const card of meldCards) {
           const placer = state.meldedBy.get(card.id) ?? p.id;
           (meldCredits[placer] ??= []).push({ card, pts: score500MeldCard(card, meldCards) });
@@ -194,11 +182,9 @@ export function createRum500Game(
   firstPlayerIndex?: number,
 ): GameState & { variant: 'rum500' } {
   const deal = rum500Variant.deal(players.length, rng);
-  return buildBaseState(
-    roomId, 'rum500', players, deal, rng, 'draw',
-    { mustMeldCardId: null },
-    firstPlayerIndex,
-  ) as GameState & { variant: 'rum500' };
+  return buildBaseState(roomId, 'rum500', players, deal, rng, 'draw', { mustMeldCardId: null }, firstPlayerIndex) as GameState & {
+    variant: 'rum500';
+  };
 }
 
 // ---- Turn actions ----
@@ -209,18 +195,13 @@ export function createRum500Game(
 function sortRunCardIds(state: GameState, cardIds: string[]): void {
   const cards = cardIds.map((id) => lookupCard(state, id));
   const aceHigh = runAceDirection(cards) === 'high';
-  const idxOf = (c: Card) =>
-    c.rank === 'A' && aceHigh ? 13 : RANK_INDEX[c.rank];
+  const idxOf = (c: Card) => (c.rank === 'A' && aceHigh ? 13 : RANK_INDEX[c.rank]);
   cardIds.sort((a, b) => idxOf(lookupCard(state, a)) - idxOf(lookupCard(state, b)));
 }
 
 // rules.md A.4.4: drawing from stock or single top-discard card.
 // For pile dive (draw from below the top), use applyDrawFromPile.
-export function applyDraw(
-  state: GameState,
-  playerId: PlayerId,
-  from: 'stock' | 'discard',
-): void {
+export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 'discard'): void {
   requireTurn(state, playerId);
   if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
   if (from === 'discard') {
@@ -241,11 +222,7 @@ export function applyDraw(
 // rules.md A.4.4: pile dive — take selected card + everything above it, must use selected card.
 // If the selected card IS the top card, this degrades to a plain top-card draw (no must-use)
 // per rules.md A.4.4: "pile dive" is defined as picking a card below the top.
-export function applyDrawFromPile(
-  state: GameState,
-  playerId: PlayerId,
-  cardId: string,
-): { taken: Card[] } {
+export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: string): { taken: Card[] } {
   requireTurn(state, playerId);
   if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
   const idx = state.discardPile.findIndex((c) => c.id === cardId);
@@ -280,16 +257,10 @@ export function applyDrawFromPile(
 // placement — either as part of a fresh meld with the resulting hand, or as a layoff
 // onto any existing meld in play. Used by applyDrawFromPile and exposed for the client
 // modal to gray out unusable cards.
-export function canUseSelectedInMeldOrLayoff(
-  state: GameState,
-  available: Card[],
-  selected: Card,
-): boolean {
+export function canUseSelectedInMeldOrLayoff(state: GameState, available: Card[], selected: Card): boolean {
   for (const p of state.players) {
     for (const m of p.melds) {
-      const meldCards = m.cardIds
-        .map((id) => state.cardRegistry.get(id))
-        .filter((c): c is Card => c !== undefined);
+      const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
       if (rum500Variant.validateMeld([...meldCards, selected])) return true;
     }
   }
@@ -302,8 +273,7 @@ function canFormRunWith(others: Card[], selected: Card): boolean {
   const sameSuit = others.filter((c) => c.suit === selected.suit);
   // 500 Rummy ace-either-end: try ace=low and ace=high independently.
   for (const aceHigh of [false, true]) {
-    const idxOf = (c: Card) =>
-      c.rank === 'A' ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank];
+    const idxOf = (c: Card) => (c.rank === 'A' ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank]);
     const target = idxOf(selected);
     const have = new Set(sameSuit.map(idxOf));
     have.add(target);
@@ -316,11 +286,7 @@ function canFormRunWith(others: Card[], selected: Card): boolean {
 }
 
 // rules.md A.4.3: set or run; multiple melds per turn allowed (rules silent → permit).
-export function applyMeld(
-  state: GameState,
-  playerId: PlayerId,
-  cardIds: string[],
-): void {
+export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[]): void {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') {
     throw new Error('ERR_WRONG_PHASE');
@@ -362,12 +328,7 @@ export function applyMeld(
 }
 
 // rules.md A.4.6: laying off onto any player's meld; cards credit the layoff player.
-export function applyLayoff(
-  state: GameState,
-  playerId: PlayerId,
-  meldId: string,
-  cardId: string,
-): void {
+export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string, cardId: string): void {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') {
     throw new Error('ERR_WRONG_PHASE');
@@ -382,9 +343,7 @@ export function applyLayoff(
   // discard. (House rule "Last card may be played" would lift this; not scaffolded.)
   if (player.hand.length <= 1) throw new Error('ERR_CANNOT_PLAY_LAST_CARD');
 
-  let targetMeld:
-    | { id: string; kind: MeldKind; cardIds: string[]; ownerId: string }
-    | undefined;
+  let targetMeld: { id: string; kind: MeldKind; cardIds: string[]; ownerId: string } | undefined;
   for (const p of state.players) {
     targetMeld = p.melds.find((m) => m.id === meldId);
     if (targetMeld) break;
@@ -407,11 +366,7 @@ export function applyLayoff(
   }
 }
 
-export function applyDiscard(
-  state: GameState,
-  playerId: PlayerId,
-  cardId: string,
-): { handEnded: boolean } {
+export function applyDiscard(state: GameState, playerId: PlayerId, cardId: string): { handEnded: boolean } {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'discard' && state.phase !== 'meld') {
     throw new Error('ERR_WRONG_PHASE');

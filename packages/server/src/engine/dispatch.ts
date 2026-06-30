@@ -9,11 +9,11 @@ import type { GameState } from './types.js';
 import { getVariant } from './variants/index.js';
 
 export type DispatchResult =
-  | { kind: 'state' }          // broadcast public state to all; private to acting player
-  | { kind: 'stateAll' }       // broadcast state (public + private) to every connected player
-  | { kind: 'handEnded' }      // hand finished — caller invokes handleHandEnd
-  | { kind: 'handCancelled' }  // gin stock-depletion — caller invokes handleHandCancelled
-  | { kind: 'noop' };          // non-engine action (create/join/start/chat) — caller handles
+  | { kind: 'state' } // broadcast public state to all; private to acting player
+  | { kind: 'stateAll' } // broadcast state (public + private) to every connected player
+  | { kind: 'handEnded' } // hand finished — caller invokes handleHandEnd
+  | { kind: 'handCancelled' } // gin stock-depletion — caller invokes handleHandCancelled
+  | { kind: 'noop' }; // non-engine action (create/join/start/chat) — caller handles
 
 // Apply a C2S action against `state`, mutating in place. Throws engine errors
 // (ERR_*) on validation failure; caller translates to WS error frames.

@@ -1,10 +1,10 @@
-import type { Variant } from "@online-rummy/shared";
-import BasicRules from "../content/howToPlay/basic";
-import Rum500Rules from "../content/howToPlay/rum500";
-import GinRules from "../content/howToPlay/gin";
-import Modal from "./Modal";
-import { t } from "../theme/tokens";
-import { variationLabel } from "../theme/variations";
+import type { Variant } from '@online-rummy/shared';
+import BasicRules from '../content/howToPlay/basic';
+import Rum500Rules from '../content/howToPlay/rum500';
+import GinRules from '../content/howToPlay/gin';
+import Modal from './Modal';
+import { t } from '../theme/tokens';
+import { variationLabel } from '../theme/variations';
 
 interface Props {
   variant: Variant;
@@ -20,17 +20,17 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
         background: t.surfaceModalNavy,
         padding: 28,
         width: 480,
-        maxWidth: "calc(100vw - 32px)",
-        maxHeight: "80vh",
-        overflowY: "auto",
+        maxWidth: 'calc(100vw - 32px)',
+        maxHeight: '80vh',
+        overflowY: 'auto',
         color: t.text100,
       }}
     >
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: 20,
         }}
       >
@@ -40,21 +40,21 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
         <button
           onClick={onClose}
           style={{
-            background: "transparent",
+            background: 'transparent',
             fontSize: 22,
-            padding: "0 6px",
+            padding: '0 6px',
             lineHeight: 1,
             color: t.text60,
-            cursor: "pointer",
+            cursor: 'pointer',
           }}
         >
           ×
         </button>
       </div>
 
-      {variant === "basic" && <BasicRules />}
-      {variant === "rum500" && <Rum500Rules />}
-      {variant === "gin" && <GinRules />}
+      {variant === 'basic' && <BasicRules />}
+      {variant === 'rum500' && <Rum500Rules />}
+      {variant === 'gin' && <GinRules />}
     </Modal>
   );
 }

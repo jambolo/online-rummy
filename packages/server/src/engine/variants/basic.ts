@@ -4,14 +4,7 @@ import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
 import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
 import type { GameState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
-import {
-  advanceTurn,
-  buildBaseState,
-  detectMeldKind,
-  lookupCard,
-  makeMeldId,
-  requireTurn,
-} from '../util.js';
+import { advanceTurn, buildBaseState, detectMeldKind, lookupCard, makeMeldId, requireTurn } from '../util.js';
 import { formatLayoffError } from '../layoff-error.js';
 
 // rules.md A.1 — Basic Rummy (Rum)
@@ -70,7 +63,10 @@ export const basicVariant: VariantEngine = {
     const unmelded = new Map<PlayerId, number>();
     for (const player of state.players) {
       if (player.status === 'forfeited') continue;
-      unmelded.set(player.id, player.hand.reduce((s, c) => s + cardPoints(c, 1), 0));
+      unmelded.set(
+        player.id,
+        player.hand.reduce((s, c) => s + cardPoints(c, 1), 0),
+      );
     }
 
     const winner = state.players.find((p) => p.hand.length === 0 && p.status === 'active');
@@ -104,8 +100,7 @@ export const basicVariant: VariantEngine = {
 
   // ---- Lifecycle / actions (Phase 3 promotion) ----
 
-  createGame: (roomId, players, rng, firstPlayerIndex) =>
-    createBasicGame(roomId, players, rng, firstPlayerIndex),
+  createGame: (roomId, players, rng, firstPlayerIndex) => createBasicGame(roomId, players, rng, firstPlayerIndex),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
   applyMeld: (state, playerId, cardIds) => ({ handEnded: applyMeld(state, playerId, cardIds) }),
@@ -139,9 +134,7 @@ export const basicVariant: VariantEngine = {
     }
     for (const p of state.players) {
       for (const m of p.melds) {
-        const meldCards = m.cardIds
-          .map((id) => state.cardRegistry.get(id))
-          .filter((c): c is Card => c !== undefined);
+        const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
         for (const card of meldCards) {
           const placer = state.meldedBy.get(card.id) ?? p.id;
           (meldCredits[placer] ??= []).push({ card, pts: cardPoints(card, 1) });
@@ -168,11 +161,7 @@ export function createBasicGame(
 // ---- Turn actions ----
 
 // rules.md A.1.6 step 1
-export function applyDraw(
-  state: GameState,
-  playerId: PlayerId,
-  from: 'stock' | 'discard',
-): void {
+export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 'discard'): void {
   requireTurn(state, playerId);
   if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
 
@@ -191,11 +180,7 @@ export function applyDraw(
 }
 
 // rules.md A.1.6 step 2
-export function applyMeld(
-  state: GameState,
-  playerId: PlayerId,
-  cardIds: string[],
-): boolean {
+export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[]): boolean {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
@@ -227,12 +212,7 @@ export function applyMeld(
 }
 
 // rules.md A.1.6 step 3
-export function applyLayoff(
-  state: GameState,
-  playerId: PlayerId,
-  meldId: string,
-  cardId: string,
-): boolean {
+export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string, cardId: string): boolean {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
@@ -275,11 +255,7 @@ export function applyLayoff(
 }
 
 // rules.md A.1.6 step 4
-export function applyDiscard(
-  state: GameState,
-  playerId: PlayerId,
-  cardId: string,
-): { handEnded: boolean } {
+export function applyDiscard(state: GameState, playerId: PlayerId, cardId: string): { handEnded: boolean } {
   const player = requireTurn(state, playerId);
   if (state.phase !== 'discard' && state.phase !== 'meld') throw new Error('ERR_WRONG_PHASE');
 

@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeSeededRNG } from '../../rng.js';
 import { createBasicGame } from '../variants/basic.js';
-import {
-  advanceTurn,
-  buildBaseState,
-  detectMeldKind,
-  lookupCard,
-  makeMeldId,
-  requireTurn,
-} from '../util.js';
+import { advanceTurn, buildBaseState, detectMeldKind, lookupCard, makeMeldId, requireTurn } from '../util.js';
 
 const players = [
   { id: 'p1', name: 'Alice' },
@@ -113,15 +106,7 @@ describe('buildBaseState', () => {
 
   it('uses rng to pick the first player when firstPlayerIndex is omitted', () => {
     // Seeded rng(0,2) is deterministic, so the chosen first player is stable.
-    const state = buildBaseState(
-      'r',
-      'basic',
-      players,
-      { hands: [[], []], stock: [], discard: [] },
-      makeSeededRNG(1),
-      'draw',
-      {},
-    );
+    const state = buildBaseState('r', 'basic', players, { hands: [[], []], stock: [], discard: [] }, makeSeededRNG(1), 'draw', {});
     expect(['p1', 'p2']).toContain(state.firstPlayerId);
     expect(state.turnPlayerId).toBe(state.firstPlayerId);
   });

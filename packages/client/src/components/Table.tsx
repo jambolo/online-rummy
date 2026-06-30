@@ -1,11 +1,11 @@
-import { useState } from "react";
-import type { Card } from "@online-rummy/shared";
-import { RANK_INDEX, validateMeld } from "@online-rummy/shared";
-import { useAppStore } from "../store";
-import CardComponent from "./Card";
-import PileDiveModal from "./PileDiveModal";
-import { t, sectionLabel } from "../theme/tokens";
-import { variationAccent } from "../theme/variations";
+import { useState } from 'react';
+import type { Card } from '@online-rummy/shared';
+import { RANK_INDEX, validateMeld } from '@online-rummy/shared';
+import { useAppStore } from '../store';
+import CardComponent from './Card';
+import PileDiveModal from './PileDiveModal';
+import { t, sectionLabel } from '../theme/tokens';
+import { variationAccent } from '../theme/variations';
 
 // 500 Rummy meld options: ace-either-end (rules.md A.4.3).
 const RUM500_OPTS = { aceHigh: false, roundTheCorner: false, aceEitherEnd: true } as const;
@@ -16,7 +16,7 @@ const CARD_BACK_MONOGRAM = `url("data:image/svg+xml,${encodeURIComponent(
     `<rect x="4" y="4" width="48" height="72" rx="4" fill="none" stroke="#c6a04b" stroke-width="1.5"/>` +
     `<rect x="8.5" y="8.5" width="39" height="63" rx="3" fill="none" stroke="#c6a04b" stroke-width="0.75" opacity="0.55"/>` +
     `<text x="28" y="47" text-anchor="middle" font-family="Georgia,serif" font-size="24" font-weight="700" letter-spacing="-3" fill="#c6a04b">RR</text>` +
-    `</svg>`
+    `</svg>`,
 )}")`;
 
 // 500 Rummy pile-dive preflight — checks if `selected` could anchor a run given the
@@ -25,8 +25,7 @@ const CARD_BACK_MONOGRAM = `url("data:image/svg+xml,${encodeURIComponent(
 function canFormRunWith(others: Card[], selected: Card): boolean {
   const sameSuit = others.filter((c) => c.suit === selected.suit);
   for (const aceHigh of [false, true]) {
-    const idxOf = (c: Card) =>
-      c.rank === "A" ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank];
+    const idxOf = (c: Card) => (c.rank === 'A' ? (aceHigh ? 13 : 0) : RANK_INDEX[c.rank]);
     const target = idxOf(selected);
     const have = new Set(sameSuit.map(idxOf));
     have.add(target);
@@ -52,11 +51,11 @@ export default function Table() {
   if (!publicState) return null;
 
   const isMyTurn = publicState.turnPlayerId === myPlayerId;
-  const drawPhase = publicState.phase === "draw";
+  const drawPhase = publicState.phase === 'draw';
   // rules.md A.2.2: during firstUpcardOffer the discard pile is clickable as the
   // accept-upcard action (Gin-only; basic/500Rum never enter this phase).
-  const upcardOfferPhase = publicState.phase === "firstUpcardOffer";
-  const is500 = publicState.variant === "rum500";
+  const upcardOfferPhase = publicState.phase === 'firstUpcardOffer';
+  const is500 = publicState.variant === 'rum500';
   const accent = variationAccent(publicState.variant);
   const canDraw = isMyTurn && drawPhase;
   const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
@@ -66,13 +65,13 @@ export default function Table() {
   const interactive = is500 && canDraw;
 
   function drawStock() {
-    send({ t: "draw", from: "stock" });
+    send({ t: 'draw', from: 'stock' });
   }
 
   function handleDiscardClick() {
     if (!pileHasCards) return;
     if (!is500 && canDrawDiscard) {
-      send({ t: "draw", from: "discard" });
+      send({ t: 'draw', from: 'discard' });
       return;
     }
     setShowPile(true);
@@ -81,8 +80,8 @@ export default function Table() {
   function handlePilePick(cardId: string, isTopCard: boolean) {
     // Rules.md A.4.4: top-card pick is a plain draw, not a pile dive. Routing here keeps
     // the modal generic and prevents the server from setting mustMeldCardId for a top draw.
-    if (isTopCard) send({ t: "draw", from: "discard" });
-    else send({ t: "drawFromPile", cardId });
+    if (isTopCard) send({ t: 'draw', from: 'discard' });
+    else send({ t: 'drawFromPile', cardId });
     setShowPile(false);
   }
 
@@ -108,12 +107,10 @@ export default function Table() {
   }
 
   return (
-    <div style={{ display: "flex", gap: 24, alignItems: "flex-end" }}>
+    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end' }}>
       {/* Stock pile */}
-      <div style={{ textAlign: "center" }}>
-        <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>
-          Stock ({publicState.stockSize})
-        </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>Stock ({publicState.stockSize})</div>
         <div
           onClick={canDraw ? drawStock : undefined}
           style={{
@@ -122,34 +119,33 @@ export default function Table() {
             border: `2px solid ${t.borderModal}`,
             borderRadius: t.radiusControl,
             background: t.cardBack,
-            backgroundImage: publicState.stockSize === 0 ? "none" : CARD_BACK_MONOGRAM,
-            backgroundSize: "cover",
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: "center",
-            cursor: canDraw ? "pointer" : "default",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            backgroundImage: publicState.stockSize === 0 ? 'none' : CARD_BACK_MONOGRAM,
+            backgroundSize: 'cover',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center',
+            cursor: canDraw ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             color: t.text40,
             fontSize: 11,
             boxShadow: canDraw
-              ? "0 0 10px rgba(74,158,255,0.6)" // NS-1 one-off: focus-ring glow
-              : "1px 2px 4px rgba(0,0,0,0.4)",   // NS-1 one-off: pile shadow
-            transition: "box-shadow 0.15s",
+              ? '0 0 10px rgba(74,158,255,0.6)' // NS-1 one-off: focus-ring glow
+              : '1px 2px 4px rgba(0,0,0,0.4)', // NS-1 one-off: pile shadow
+            transition: 'box-shadow 0.15s',
           }}
         >
-          {publicState.stockSize === 0 ? "—" : ""}
+          {publicState.stockSize === 0 ? '—' : ''}
         </div>
       </div>
 
       {/* Discard pile */}
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: 'center' }}>
         <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>
-          Discard ({publicState.discardPileSize})
-          {is500 && publicState.discardPileSize > 1 && " · dive"}
+          Discard ({publicState.discardPileSize}){is500 && publicState.discardPileSize > 1 && ' · dive'}
         </div>
         {publicState.discardTop ? (
-          <div style={{ position: "relative", display: "inline-block" }}>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
             {/* 500 Rummy: edges of buried cards peek out to the right so pile depth
                 is visible without opening the dive modal. */}
             {is500 &&
@@ -160,7 +156,7 @@ export default function Table() {
                   key={i}
                   aria-hidden
                   style={{
-                    position: "absolute",
+                    position: 'absolute',
                     top: 0,
                     left: 7 * (i + 1),
                     width: 56,
@@ -180,10 +176,10 @@ export default function Table() {
                 ? {
                     onClick: handleDiscardClick,
                     style: canDrawDiscard
-                      ? { position: "relative", zIndex: 100, boxShadow: "0 0 10px rgba(74,158,255,0.6)" } // NS-1 one-off
-                      : { position: "relative", zIndex: 100, cursor: "pointer" },
+                      ? { position: 'relative', zIndex: 100, boxShadow: '0 0 10px rgba(74,158,255,0.6)' } // NS-1 one-off
+                      : { position: 'relative', zIndex: 100, cursor: 'pointer' },
                   }
-                : { style: { position: "relative", zIndex: 100 } })}
+                : { style: { position: 'relative', zIndex: 100 } })}
             />
           </div>
         ) : (
@@ -193,9 +189,9 @@ export default function Table() {
               height: 80,
               border: `2px dashed ${t.borderModal}`,
               borderRadius: t.radiusControl,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               color: t.text30,
               fontSize: 11,
             }}
@@ -209,9 +205,7 @@ export default function Table() {
         <PileDiveModal
           pile={publicState.discardPile}
           onClose={() => setShowPile(false)}
-          {...(interactive
-            ? { onPick: handlePilePick, canPick: canPickDeep }
-            : { readOnly: true })}
+          {...(interactive ? { onPick: handlePilePick, canPick: canPickDeep } : { readOnly: true })}
         />
       )}
     </div>

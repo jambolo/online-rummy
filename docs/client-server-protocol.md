@@ -157,9 +157,12 @@ Creates a new room and places the sender in it as the host. `name` is the player
 
 **Normal join:** Omit `sessionId`. The player is added to the lobby as a new participant.
 
-**Reconnect:** Include the `sessionId` that was previously received in a `lobby` message. The server verifies the token and re-associates this socket with the player's existing slot. The `name` field is ignored during reconnect. Reconnect is only available while the room is still in lobby state.
+**Reconnect:** Include the `sessionId` that was previously received in a `lobby` message. The server verifies the token and re-associates this socket with the player's existing slot. The `name` field is ignored during reconnect. Reconnect works both in lobby state **and mid-game** — a socket that drops during play has a 60-second grace window (see [Disconnect Behavior](#disconnect-behavior)) before the player is forfeited. Reconnect is rejected only once the player has been forfeited (grace expired) or the room has ended.
 
-**Response:** A [`lobby`](#lobby--lobby-state) message is broadcast to all players in the room.
+**Response:**
+
+- **Lobby reconnect:** a [`lobby`](#lobby--lobby-state) message is broadcast to all players in the room.
+- **Mid-game reconnect:** the reconnecting player receives a [`lobby`](#lobby--lobby-state) message (carrying their `sessionId` and the roster, so a reloaded tab can resolve its own player ID) followed by a full [`state`](#state--game-state) message with their `private` hand. The **other** players receive a [`playerReconnected`](#event--game-event) event and a fresh `state`.
 
 **Errors:**
 
@@ -167,7 +170,7 @@ Creates a new room and places the sender in it as the host. `name` is the player
 | --- | --- |
 | `ERR_ALREADY_IN_ROOM` | This socket is already associated with a room |
 | `ERR_ROOM_NOT_FOUND` | No room exists with that code |
-| `ERR_GAME_IN_PROGRESS` | Room is not in lobby state (normal join); or room is not in lobby state (reconnect) |
+| `ERR_GAME_IN_PROGRESS` | Normal join: room is not in lobby state. Reconnect: the player was already forfeited (grace window expired) or the room has ended |
 | `ERR_ROOM_FULL` | Room has reached the game variation's maximum player count |
 | `ERR_INVALID_NAME` | `name` is empty after trimming (normal join only) |
 | `ERR_INVALID_SESSION` | `sessionId` failed signature verification |
@@ -562,7 +565,7 @@ Gin only. Valid only during `phase = "firstUpcardOffer"` (rules.md A.2.2). The n
 }
 ```
 
-Sent to all players in the room whenever the lobby changes: when a player creates, joins, or reconnects, and when a player's lobby reconnect window expires and they are removed.
+Sent to all players in the room whenever the lobby changes: when a player creates, joins, or reconnects, and when a player's lobby reconnect window expires and they are removed. Also sent to a **single** player on a successful mid-game reconnect (followed by a `state` message) so a reloaded tab can recover its identity, roster, and `sessionId`.
 
 `hostId` identifies which player is the host. The host can change — if the host disconnects, the server promotes the next connected player.
 
@@ -580,9 +583,9 @@ Sent to all players in the room whenever the lobby changes: when a player create
 }
 ```
 
-Sent after every game action and on game start, hand end, and forfeit. `private` is present only when the message is addressed specifically to you:
+Sent after every game action and on game start, hand end, forfeit, and mid-game reconnect. `private` is present only when the message is addressed specifically to you:
 
-- **On game start, hand end, or forfeit:** every connected player receives a `state` message that includes both `public` and their own `private` hand.
+- **On game start, hand end, forfeit, or any player's mid-game reconnect:** every connected player receives a `state` message that includes both `public` and their own `private` hand.
 - **On draw, meld, layoff, or discard:** only the acting player receives a `state` with `private`. All other players receive `state` with `public` only.
 
 When you receive a `state` message without `private`, your hand has not changed. Do not clear it from local state.
@@ -603,8 +606,10 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `wonHand` | Hand ended with a winner | `{ finalHands, meldCredits, handDeadwood, ginInfo? }` — see below |
 | `handCancelled` | Gin hand cancelled (stock-depletion, rules.md A.2.3) | absent |
 | `playerLeft` | A player left the room via the leave button; game cancelled | absent |
-| `forfeit` | A player disconnected during play | absent |
-| `gameOver` | The game-ending score threshold has been reached | absent |
+| `playerDisconnected` | A player's socket dropped mid-game; the 60s reconnect grace window is now open | absent |
+| `playerReconnected` | A previously-disconnected player rebound their socket within the grace window | absent |
+| `forfeit` | A player's grace window expired (or they dropped non-gracefully) and they are now out of the hand | absent |
+| `gameOver` | The game-ending score threshold has been reached, or only one active player remains after a forfeit | absent |
 | `drew` | Reserved — defined but not yet emitted | — |
 | `melded` | Reserved — defined but not yet emitted | — |
 | `laidOff` | Reserved — defined but not yet emitted | — |
@@ -678,7 +683,7 @@ Relayed to the other players in a room when one player sends a [`keepalive`](#ke
 
 When you connect and send `create` or `join`, the server assigns you a player ID and a session. The session is delivered as a `sessionId` field inside the `lobby` message — not via an HTTP cookie. You must save this value yourself (e.g., in `localStorage`).
 
-If your WebSocket connection drops while the room is still in lobby state, you have a 60-second window to reconnect and resume your seat.
+If your WebSocket connection drops you have a 60-second window to reconnect and resume — both in the lobby (seat held) and mid-game (same hand resumed). Clients should auto-reconnect on an unexpected close and re-send `join` with the saved `sessionId` on each successful reconnect; the reference client does this with capped exponential backoff over roughly the grace window.
 
 ### Example: Creating a Room
 
@@ -745,7 +750,7 @@ Alice stores `"signed.token.alice"` and `"A7K3M"`.
 
 Alice and Bob receive the same `lobby` message except for the `sessionId` field, which is unique per player.
 
-### Example: Reconnecting After Disconnect
+### Example: Reconnecting in the Lobby
 
 Bob's connection drops. Within 60 seconds, Bob reconnects and sends:
 
@@ -757,10 +762,23 @@ The server broadcasts a `lobby` message to Alice and Bob as normal. Bob's seat i
 
 If more than 60 seconds pass before Bob reconnects, his seat is removed and `lobby` is broadcast to the remaining players with Bob absent. Bob would need to join as a new player (send `join` without `sessionId`).
 
-Mid-game reconnect is not currently supported. If the game has already started when Bob attempts to reconnect, the server returns:
+### Example: Reconnecting Mid-Game
+
+The game has started and Bob's connection drops. The server broadcasts a `playerDisconnected` event to Alice and starts a 60-second grace timer. Within that window Bob reconnects and sends the same `join`+`sessionId` message:
 
 ```json
-{ "t": "error", "code": "ERR_GAME_IN_PROGRESS", "msg": "Cannot reconnect mid-game" }
+{ "t": "join", "roomCode": "A7K3M", "name": "ignored", "sessionId": "signed.token.bob" }
+```
+
+The server cancels the grace timer and:
+
+- sends **Bob** a `lobby` message (identity recovery) followed by a `state` message with his `private` hand;
+- sends **Alice** a `playerReconnected` event and a fresh `state`.
+
+If the grace window expires first, Bob is forfeited: the server broadcasts `forfeit` (and `gameOver` if only one active player remains). A later reconnect attempt then returns:
+
+```json
+{ "t": "error", "code": "ERR_GAME_IN_PROGRESS", "msg": "Cannot reconnect — the game has ended" }
 ```
 
 ---
@@ -884,7 +902,14 @@ When a player's socket closes during the lobby phase, their seat is held for 60 
 
 ### Disconnect During Play
 
-When a player's socket closes during the game, the server immediately:
+A socket close during the game does **not** forfeit the player immediately. Instead the server:
+
+1. Broadcasts an [`event`](#event--game-event) with `kind: "playerDisconnected"` to the remaining players (so they can show a "waiting for reconnect" cue)
+2. Starts a 60-second grace timer
+
+**If the player reconnects within the window** (via `join`+`sessionId`, see [Reconnecting Mid-Game](#example-reconnecting-mid-game)), the timer is cancelled, the returning player gets a `lobby`+`state` pair, and the others get a `playerReconnected` event plus fresh `state`. The hand resumes exactly where it was. While a player is disconnected it remains their turn if it was — the game waits for them rather than skipping ahead.
+
+**If the window expires**, the server forfeits the player:
 
 1. Sets the player's status to `"forfeited"` in both the room and the engine
 2. Removes that player's hand and melds from play (they are not returned to the stock or discard pile)
@@ -894,8 +919,10 @@ When a player's socket closes during the game, the server immediately:
 
 If only one active player remains after the forfeit, that player wins and the server additionally broadcasts `kind: "gameOver"` before the final `state`.
 
-There is no reconnect window during play.
+A re-deal (host starts the next hand) drops any still-disconnected player and clears their pending grace timer.
 
 ### Silent-drop detection (client-side)
 
-A clean socket close triggers the server's forfeit path above. But an ungraceful drop (network partition, sleeping laptop) may leave the server's socket open with no `close` event, so no `forfeit` is ever sent. To cover this, each client tracks a per-player last-seen time, refreshed by any frame attributable to that player: a relayed [`keepalive`](#keepalive--relayed-keep-alive), an [`event`](#event--game-event), a [`chat`](#chat--chat-message), or a [`state`](#state--game-state) broadcast (a state broadcast proves the server just processed an action, so every non-self player was alive). If a player goes unheard for **5 minutes**, the client shows a "probably disconnected — cancel the game?" prompt; confirming sends [`leave`](#leave--leave-the-room). Because keepalives are emitted on a last-*sent* timer, both players keep emitting even during long idle stretches, so this threshold is only crossed by a genuine drop. A subsequent `forfeit` or `gameOver` for the warned player clears the prompt automatically.
+A clean socket close triggers the server's grace-then-forfeit path above. But an ungraceful drop (network partition, sleeping laptop) may leave the server's socket open with no `close` event, so neither `playerDisconnected` nor `forfeit` is ever sent. To cover this, each client tracks a per-player last-seen time, refreshed by any frame attributable to that player: a relayed [`keepalive`](#keepalive--relayed-keep-alive), an [`event`](#event--game-event), a [`chat`](#chat--chat-message), or a [`state`](#state--game-state) broadcast (a state broadcast proves the server just processed an action, so every non-self player was alive). If a player goes unheard for **5 minutes**, the client shows a "probably disconnected — cancel the game?" prompt; confirming sends [`leave`](#leave--leave-the-room). This 5-minute heuristic is a slow backstop for the server's faster 60-second grace path — the latter handles ordinary clean drops. Because keepalives are emitted on a last-*sent* timer, both players keep emitting even during long idle stretches, so this threshold is only crossed by a genuine drop. A subsequent `forfeit` or `gameOver` for the warned player clears the prompt automatically.
+
+> Note: the reference client also surfaces its **own** connection state — a fixed banner shows "reconnecting…" during auto-reconnect and an opponent-disconnected banner while the server's grace window is open (driven by `playerDisconnected`/`playerReconnected`).

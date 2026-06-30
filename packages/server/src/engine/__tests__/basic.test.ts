@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '@online-rummy/shared';
 import { makeSeededRNG } from '../../rng.js';
-import {
-  applyDiscard,
-  applyDraw,
-  applyLayoff,
-  applyMeld,
-  basicVariant,
-  createBasicGame,
-} from '../variants/basic.js';
+import { applyDiscard, applyDraw, applyLayoff, applyMeld, basicVariant, createBasicGame } from '../variants/basic.js';
 
 function c(rank: Card['rank'], suit: Card['suit'], id?: string): Card {
   return { id: id ?? `${rank}${suit}`, rank, suit };
@@ -111,9 +104,7 @@ describe('createBasicGame', () => {
   });
 
   it('rejects invalid player count', () => {
-    expect(() =>
-      createBasicGame('r', [{ id: 'p1', name: 'A' }], makeSeededRNG(1)),
-    ).toThrow('ERR_INVALID_PLAYER_COUNT');
+    expect(() => createBasicGame('r', [{ id: 'p1', name: 'A' }], makeSeededRNG(1))).toThrow('ERR_INVALID_PLAYER_COUNT');
   });
 });
 

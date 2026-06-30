@@ -66,7 +66,7 @@ export function addPlayer(room: Room, player: Player): void {
 }
 
 export function removePlayer(room: Room, playerId: PlayerId): void {
-  const idx = room.players.findIndex(p => p.id === playerId);
+  const idx = room.players.findIndex((p) => p.id === playerId);
   if (idx === -1) return;
   const removed = room.players.splice(idx, 1)[0];
   if (removed !== undefined) sessionIndex.delete(removed.sessionId);
@@ -75,17 +75,17 @@ export function removePlayer(room: Room, playerId: PlayerId): void {
     return;
   }
   if (room.hostId === playerId) {
-    const next = room.players.find(p => p.socket !== null) ?? room.players[0];
+    const next = room.players.find((p) => p.socket !== null) ?? room.players[0];
     if (next !== undefined) room.hostId = next.id;
   }
 }
 
 export function getPlayerBySession(room: Room, sessionId: string): Player | undefined {
-  return room.players.find(p => p.sessionId === sessionId);
+  return room.players.find((p) => p.sessionId === sessionId);
 }
 
 export function activePlayers(room: Room): Player[] {
-  return room.players.filter(p => p.status === 'active');
+  return room.players.filter((p) => p.status === 'active');
 }
 
 export function variantLimits(variant: Variant): { min: number; max: number } {

@@ -27,15 +27,5 @@ export const copy = {
     empty: 'Nothing said yet',
   },
   // Thematic rank ladder (branding.md §2) — reserved for NS-5 identity/progression.
-  ranks: [
-    'Associate',
-    'Bootlegger',
-    'Runner',
-    'Distiller',
-    'Smuggler',
-    'Enforcer',
-    'Capo',
-    'Kingpin',
-    'The Don',
-  ],
+  ranks: ['Associate', 'Bootlegger', 'Runner', 'Distiller', 'Smuggler', 'Enforcer', 'Capo', 'Kingpin', 'The Don'],
 } as const;

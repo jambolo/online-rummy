@@ -28,14 +28,14 @@ The **ultimate, ideal state** projects this foundation into an immersive 1920s s
 - Understand the rules in-context via a per-game-variation "How to Play" modal.
 - Read a full per-player scoring breakdown at hand end (melded credit + unmelded deadwood, per card).
 - Communicate via in-room text chat.
-- Recover gracefully from a lobby reconnect, and be warned when an opponent goes silent.
+- Recover gracefully from a dropped connection — auto-reconnect (lobby or mid-game, resuming the same hand within a 60s grace window) with a connection-status banner, and be warned when an opponent goes silent.
 
 **Under the expanded feature set [North Star]:**
 
 - Maintain a persistent identity ("The Dossier") with a climbing rank, history, and statistics.
 - Discover and enter high-stakes or themed rooms beyond a single shared code.
 - Experience tactile, animated card dealing and melding (PixiJS).
-- Spectate active games; reconnect mid-hand without forfeiting.
+- Spectate active games. (Mid-hand reconnect without forfeiting is now implemented — see the Liveness/WS notes below.)
 - Play comfortably on a phone with a layout that reflows rather than fixed-width panels.
 - Customize table felt, card backs, and theme.
 - As host, configure a game variation's house rules before starting a hand — toggling each documented deviation from canonical (e.g. ace-either-end, going-rummy flat +10, 500 Rummy jokers).
@@ -220,7 +220,8 @@ All components are function components consuming the single Zustand store via **
 - **Reactive ingestion.** `handleMessage` switches on `msg.t` (`lobby` | `state` | `keepalive` | `chat` | `error` | `event`) and `set`s derived slices. Hand-end snapshotting (`prevScores`), final-hand breakdowns (`finalHands`, `meldCredits`, `handDeadwood`, `ginInfo`), Gin staging buffers (`knockMelds`, `ginDefenderMelds`, `ginLayoffs`), and the mid-turn meld-highlight bookkeeping (`meldHighlights`, `meldHighlightOwnerId` — track cards just placed in basic/rum500, persist through the next player's pre-draw window, clear the moment they draw) are all maintained here.
 - **Card cache.** `cardCache: Record<id, Card>` is populated from every private-hand broadcast so melded cards (which leave the hand) can still be rendered; `lookupCard(id)` reads it.
 - **Identity inference.** The server never says "you are X"; the client matches `pendingName` against `lobby.players[].name` on the first `lobby` message. `pendingName` is persisted to `sessionStorage.playerName` (alongside `sessionId` and `roomCode`) and restored on next load so the create/join form pre-populates across sessions.
-- **Liveness.** `playerLastSeen` is refreshed by keepalive/event/chat and by every `state` broadcast for non-self players; `checkDisconnects` (30s interval from App) raises `disconnectWarning` after 5min silence.
+- **Liveness.** `playerLastSeen` is refreshed by keepalive/event/chat and by every `state` broadcast for non-self players; `checkDisconnects` (30s interval from App) raises `disconnectWarning` after 5min silence — a slow backstop behind the server's 60s grace path.
+- **Connection status.** `connStatus` (`connecting`/`connected`/`reconnecting`/`disconnected`) is driven by the WS layer's `onStatus` callback as it auto-reconnects; `opponentConn` holds an opponent dropped within the server grace window (set on `playerDisconnected`, cleared on `playerReconnected`/`forfeit`/`gameOver`). `ConnectionBanner` (in `Room.tsx`, both lobby and game views) renders these: amber "reconnecting…", red "disconnected" + Reload, or amber "{opponent} disconnected — waiting…".
 - **`myPlayerId === hostId`** is the host check used to gate Start / Re-deal / New Hand controls (and, under NS-8, the `HouseRuleConfig` editor).
 
 > **Selector invariant:** never pass an object/array literal to `useAppStore` — it returns a new reference each render and causes an infinite loop with `useSyncExternalStore`. One hook call per value. (See Section 4.)
@@ -332,7 +333,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 
 ### 3.11 Networking layer ([net/ws.ts](packages/client/src/net/ws.ts))
 
-- Not visual, but governs UI liveness. `connect/send/disconnect` with an **epoch counter** to ignore stale events from React StrictMode double-mounts. Keep-alive emits `{ t:'keepalive' }` after 30s of no *sent* frames (keyed off last-sent so receive-only players still ping). Drives `connected` (gates form submits) and feeds liveness/`playerLastSeen`.
+- Not visual, but governs UI liveness. `connect/send/disconnect` with an **epoch counter** to ignore stale events from React StrictMode double-mounts (and to dedupe the onerror+onclose pair of a single drop). **Auto-reconnect** with capped exponential backoff (~60s, matching the server grace) on unexpected close, surfaced via the `onStatus(ConnStatus)` callback. Keep-alive emits `{ t:'keepalive' }` after 30s of no *sent* frames (keyed off last-sent so receive-only players still ping). Drives `connStatus` → `connected` (gates form submits) + the `ConnectionBanner`, and feeds liveness/`playerLastSeen`.
 
 ### 3.12 `HouseRuleConfig` — host house-rule editor [North Star NS-8 — designed, not yet implemented]
 

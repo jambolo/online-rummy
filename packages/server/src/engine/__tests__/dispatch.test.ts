@@ -101,9 +101,16 @@ describe('applyAction — gin paths', () => {
   it('gin knock (0 deadwood) returns { kind: "stateAll" }, advances to layoff, then ginLayoff returns { kind: "handEnded" }', () => {
     const state = ginGame();
     const p1Hand = [
-      c('A', 'C', 'g1'), c('2', 'C', 'g2'), c('3', 'C', 'g3'), c('4', 'C', 'g4'),
-      c('A', 'D', 'g5'), c('2', 'D', 'g6'), c('3', 'D', 'g7'),
-      c('A', 'H', 'g8'), c('2', 'H', 'g9'), c('3', 'H', 'g10'),
+      c('A', 'C', 'g1'),
+      c('2', 'C', 'g2'),
+      c('3', 'C', 'g3'),
+      c('4', 'C', 'g4'),
+      c('A', 'D', 'g5'),
+      c('2', 'D', 'g6'),
+      c('3', 'D', 'g7'),
+      c('A', 'H', 'g8'),
+      c('2', 'H', 'g9'),
+      c('3', 'H', 'g10'),
       c('K', 'S', 'g_disc'),
     ];
     const p2Hand = [c('7', 'C', 'd1'), c('8', 'D', 'd2'), c('9', 'H', 'd3')];
@@ -113,7 +120,11 @@ describe('applyAction — gin paths', () => {
     state.phase = 'discard';
     const knockResult = applyAction(state, 'p1', {
       t: 'knock',
-      melds: [['g1', 'g2', 'g3', 'g4'], ['g5', 'g6', 'g7'], ['g8', 'g9', 'g10']],
+      melds: [
+        ['g1', 'g2', 'g3', 'g4'],
+        ['g5', 'g6', 'g7'],
+        ['g8', 'g9', 'g10'],
+      ],
       discardId: 'g_disc',
     });
     // Defender gets a layoff turn (to group own melds — not to lay off against gin).
@@ -129,8 +140,11 @@ describe('applyAction — gin paths', () => {
   it('non-gin knock returns { kind: "stateAll" } and advances to layoff, then ginLayoff returns { kind: "handEnded" }', () => {
     const state = ginGame();
     const p1Hand = [
-      c('A', 'C', 'k1'), c('2', 'C', 'k2'), c('3', 'C', 'k3'),
-      c('4', 'C', 'k4'), c('5', 'C', 'k5'),
+      c('A', 'C', 'k1'),
+      c('2', 'C', 'k2'),
+      c('3', 'C', 'k3'),
+      c('4', 'C', 'k4'),
+      c('5', 'C', 'k5'),
       c('K', 'D', 'k_disc'),
     ];
     const p2Hand = [c('4', 'C', 'd1'), c('5', 'C', 'd2'), c('6', 'C', 'd3')];
@@ -171,29 +185,21 @@ describe('applyAction — gin paths', () => {
 describe('applyAction — not implemented for variant', () => {
   it('drawFromPile on basic throws ERR_NOT_IMPLEMENTED', () => {
     const state = basicGame();
-    expect(() => applyAction(state, 'p1', { t: 'drawFromPile', cardId: 'x' })).toThrow(
-      'ERR_NOT_IMPLEMENTED:drawFromPile',
-    );
+    expect(() => applyAction(state, 'p1', { t: 'drawFromPile', cardId: 'x' })).toThrow('ERR_NOT_IMPLEMENTED:drawFromPile');
   });
 
   it('passUpcard on basic throws ERR_NOT_IMPLEMENTED', () => {
     const state = basicGame();
-    expect(() => applyAction(state, 'p1', { t: 'passUpcard' })).toThrow(
-      'ERR_NOT_IMPLEMENTED:passUpcard',
-    );
+    expect(() => applyAction(state, 'p1', { t: 'passUpcard' })).toThrow('ERR_NOT_IMPLEMENTED:passUpcard');
   });
 
   it('knock on basic throws ERR_NOT_IMPLEMENTED', () => {
     const state = basicGame();
-    expect(() => applyAction(state, 'p1', { t: 'knock', discardId: 'x' })).toThrow(
-      'ERR_NOT_IMPLEMENTED:knock',
-    );
+    expect(() => applyAction(state, 'p1', { t: 'knock', discardId: 'x' })).toThrow('ERR_NOT_IMPLEMENTED:knock');
   });
 
   it('ginLayoff on basic throws ERR_NOT_IMPLEMENTED', () => {
     const state = basicGame();
-    expect(() => applyAction(state, 'p1', { t: 'ginLayoff', layoffs: [] })).toThrow(
-      'ERR_NOT_IMPLEMENTED:ginLayoff',
-    );
+    expect(() => applyAction(state, 'p1', { t: 'ginLayoff', layoffs: [] })).toThrow('ERR_NOT_IMPLEMENTED:ginLayoff');
   });
 });

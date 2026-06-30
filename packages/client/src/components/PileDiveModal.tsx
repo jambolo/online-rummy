@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
-import type { Card } from "@online-rummy/shared";
-import CardComponent from "./Card";
-import Modal from "./Modal";
-import { useReducedMotion } from "../theme/useReducedMotion";
-import { t } from "../theme/tokens";
+import { useRef, useState } from 'react';
+import type { Card } from '@online-rummy/shared';
+import CardComponent from './Card';
+import Modal from './Modal';
+import { useReducedMotion } from '../theme/useReducedMotion';
+import { t } from '../theme/tokens';
 
 interface Props {
   pile: Card[];
@@ -34,8 +34,7 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
   const reverseIdx = (i: number) => pile.length - 1 - i;
   const isTop = (i: number) => i === 0;
   const willTake = (i: number) => !readOnly && hoverIdx !== null && i <= hoverIdx;
-  const pickable = (i: number, c: Card) =>
-    !readOnly && (isTop(i) || canPick === undefined || canPick(c.id, i));
+  const pickable = (i: number, c: Card) => !readOnly && (isTop(i) || canPick === undefined || canPick(c.id, i));
 
   function handleClick(card: Card, i: number) {
     if (readOnly || onPick === undefined) return;
@@ -85,32 +84,32 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
       panelStyle={{
         background: t.surfaceModalNavy,
         padding: 24,
-        width: "min(720px, calc(100vw - 32px))",
-        maxHeight: "80vh",
-        overflow: "auto",
+        width: 'min(720px, calc(100vw - 32px))',
+        maxHeight: '80vh',
+        overflow: 'auto',
         color: t.text100,
       }}
     >
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: 6,
         }}
       >
         <h2 id="pile-dive-title" style={{ fontSize: 16, margin: 0 }}>
-          {readOnly ? "Discard pile" : "Discard pile — pick a card to take"}
+          {readOnly ? 'Discard pile' : 'Discard pile — pick a card to take'}
         </h2>
         <button
           onClick={onClose}
           style={{
-            background: "transparent",
+            background: 'transparent',
             fontSize: 22,
-            padding: "0 6px",
+            padding: '0 6px',
             lineHeight: 1,
             color: t.text60,
-            cursor: "pointer",
+            cursor: 'pointer',
           }}
         >
           ×
@@ -124,15 +123,15 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
         }}
       >
         {readOnly
-          ? "Top card is on the left."
-          : "Top card on the left. The top card is a free draw (no must-use). Picking a deeper card also takes every card above it, and that card must be used in a meld or lay-off this turn. Grayed cards have no legal placement with your current hand."}
+          ? 'Top card is on the left.'
+          : 'Top card on the left. The top card is a free draw (no must-use). Picking a deeper card also takes every card above it, and that card must be used in a meld or lay-off this turn. Grayed cards have no legal placement with your current hand.'}
       </div>
 
       <div
         style={{
-          display: "flex",
+          display: 'flex',
           gap: 6,
-          flexWrap: "wrap",
+          flexWrap: 'wrap',
           padding: 6,
         }}
       >
@@ -142,7 +141,9 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
           return (
             <div
               key={card.id}
-              ref={(el) => { cardRefs.current[i] = el; }}
+              ref={(el) => {
+                cardRefs.current[i] = el;
+              }}
               tabIndex={!readOnly && ok ? 0 : -1}
               onMouseEnter={() => !readOnly && ok && setHoverIdx(i)}
               onMouseLeave={() => !readOnly && setHoverIdx(null)}
@@ -151,22 +152,20 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
               onClick={() => handleClick(card, i)}
               onKeyDown={(e) => handleCardKeyDown(e, card, i)}
               style={{
-                cursor: readOnly ? "default" : ok ? "pointer" : "not-allowed",
+                cursor: readOnly ? 'default' : ok ? 'pointer' : 'not-allowed',
                 opacity: !readOnly && !ok ? 0.35 : 1,
-                outline: highlight
-                  ? `3px solid ${t.accentAttention}`
-                  : "3px solid transparent",
+                outline: highlight ? `3px solid ${t.accentAttention}` : '3px solid transparent',
                 outlineOffset: 1,
                 borderRadius: 8, // NS-1 one-off: wrapper radius, between panel(8) and card(12)
-                transition: reducedMotion ? undefined : "outline-color 0.1s, opacity 0.1s",
+                transition: reducedMotion ? undefined : 'outline-color 0.1s, opacity 0.1s',
               }}
               title={
                 readOnly
                   ? undefined
                   : !ok
-                    ? "No legal meld or lay-off possible with this card"
+                    ? 'No legal meld or lay-off possible with this card'
                     : isTop(i)
-                      ? "Take only the top card (free, no must-use)"
+                      ? 'Take only the top card (free, no must-use)'
                       : `Take ${ordered.length - i} cards (down to position ${reverseIdx(i) + 1}); must meld or lay off ${card.rank}`
               }
             >
@@ -184,13 +183,11 @@ export default function PileDiveModal({ pile, onPick, onClose, canPick, readOnly
           }}
         >
           {isTop(hoverIdx)
-            ? "Take 1 card (top) — no must-use restriction."
+            ? 'Take 1 card (top) — no must-use restriction.'
             : (() => {
                 const card = ordered[hoverIdx];
                 if (!card) return null;
-                const suit = ({ C: "♣", D: "♦", H: "♥", S: "♠" } as Record<string, string>)[
-                  card.suit
-                ];
+                const suit = ({ C: '♣', D: '♦', H: '♥', S: '♠' } as Record<string, string>)[card.suit];
                 return `Take ${hoverIdx + 1} cards — must meld or lay off the ${card.rank}${suit} this turn.`;
               })()}
         </div>

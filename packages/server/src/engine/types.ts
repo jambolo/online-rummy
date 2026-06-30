@@ -61,9 +61,9 @@ type BaseGameState = {
 };
 
 export type GameState =
-  | (BaseGameState & { variant: 'basic';  variantState: BasicState })
+  | (BaseGameState & { variant: 'basic'; variantState: BasicState })
   | (BaseGameState & { variant: 'rum500'; variantState: Rum500State })
-  | (BaseGameState & { variant: 'gin';    variantState: GinState });
+  | (BaseGameState & { variant: 'gin'; variantState: GinState });
 
 // Result of an apply*-style action that may end the hand or cancel it.
 // Basic / 500 Rummy: { handEnded }. Gin: { handEnded, cancelled? } (stock-depletion).
@@ -91,12 +91,7 @@ export interface VariantEngine {
 
   // Setup
   deal(playerCount: number, rng: RNG): { hands: Card[][]; stock: Card[]; discard: Card[] };
-  createGame(
-    roomId: string,
-    players: Array<{ id: string; name: string }>,
-    rng: RNG,
-    firstPlayerIndex?: number,
-  ): GameState;
+  createGame(roomId: string, players: Array<{ id: string; name: string }>, rng: RNG, firstPlayerIndex?: number): GameState;
 
   // Predicates / scoring
   validateMeld(cards: Card[]): boolean;

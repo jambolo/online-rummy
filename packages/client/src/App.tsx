@@ -1,38 +1,36 @@
-import { useEffect } from "react";
-import { connect, disconnect, send } from "./net/ws";
-import { useAppStore } from "./store";
-import Home from "./routes/Home";
-import Room from "./routes/Room";
+import { useEffect } from 'react';
+import { connect, disconnect } from './net/ws';
+import { useAppStore } from './store';
+import Home from './routes/Home';
+import Room from './routes/Room';
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
-  (window.location.protocol === "https:"
-    ? `wss://${window.location.hostname}`
-    : `ws://${window.location.hostname}:8080`);
+  (window.location.protocol === 'https:' ? `wss://${window.location.hostname}` : `ws://${window.location.hostname}:8080`);
 
 export default function App() {
-  const setConnected = useAppStore((s) => s.setConnected);
+  const setConnStatus = useAppStore((s) => s.setConnStatus);
   const handleMessage = useAppStore((s) => s.handleMessage);
   const checkDisconnects = useAppStore((s) => s.checkDisconnects);
   const roomCode = useAppStore((s) => s.roomCode);
-  const sessionId = useAppStore((s) => s.sessionId);
 
   useEffect(() => {
     connect(WS_URL, {
-      onConnect: () => {
-        setConnected(true);
-        // Skip reconnect if we're already mid-game (e.g. HMR remount in dev).
-        if (useAppStore.getState().publicState !== null) return;
-        // Attempt lobby reconnect if we have stored credentials.
-        const sid =
-          sessionStorage.getItem("sessionId") ?? sessionId ?? undefined;
-        const rc = sessionStorage.getItem("roomCode");
-        const playerName = sessionStorage.getItem("playerName");
+      onStatus: (status) => {
+        setConnStatus(status);
+        if (status !== 'connected') return;
+        // On every (re)connect, rebind to the room if we have stored credentials. Mid-game
+        // the server resumes the same hand within its grace window; otherwise it's a normal
+        // lobby reconnect. Routed through the store's send so pendingName is set — that lets
+        // the lobby payload resolve "me" even after a full page reload.
+        const store = useAppStore.getState();
+        const sid = sessionStorage.getItem('sessionId') ?? store.sessionId ?? undefined;
+        const rc = sessionStorage.getItem('roomCode');
+        const playerName = sessionStorage.getItem('playerName');
         if (sid && rc && playerName) {
-          send({ t: "join", roomCode: rc, name: playerName, sessionId: sid });
+          store.send({ t: 'join', roomCode: rc, name: playerName, sessionId: sid });
         }
       },
-      onDisconnect: () => setConnected(false),
       onMessage: handleMessage,
     });
 
