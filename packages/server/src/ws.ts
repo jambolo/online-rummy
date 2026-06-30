@@ -423,12 +423,17 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         const nextFirstIndex = engine.nextFirstPlayerIndex(oldState, newPlayers);
         room.status = 'playing';
         const newState = engine.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
-        // Carry forward cumulative scores and score history.
-        for (const gp of newState.players) {
-          const prev = oldState?.players.find((op) => op.id === gp.id);
-          if (prev !== undefined) {
-            gp.score = prev.score;
-            newState.scoreSheet.set(gp.id, oldState?.scoreSheet.get(gp.id) ?? []);
+        // "New Hand" carries scores forward; "Play Again" after game over starts fresh.
+        // Both arrive as the same `start` message, so re-derive which one this is.
+        const gameWasOver = oldState !== null && engine.isGameOver(oldState.scoreSheet);
+        if (!gameWasOver) {
+          // Carry forward cumulative scores and score history.
+          for (const gp of newState.players) {
+            const prev = oldState?.players.find((op) => op.id === gp.id);
+            if (prev !== undefined) {
+              gp.score = prev.score;
+              newState.scoreSheet.set(gp.id, oldState?.scoreSheet.get(gp.id) ?? []);
+            }
           }
         }
         room.gameState = newState;
