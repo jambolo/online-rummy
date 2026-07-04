@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { Variant } from '@online-rummy/shared';
+import type { Variant, HouseRules } from '@online-rummy/shared';
+import { canonicalHouseRules } from '@online-rummy/shared';
 import { useAppStore } from '../store';
 import { t } from '../theme/tokens';
 import { variationLabel } from '../theme/variations';
 import { copy } from '../content/copy';
+import HouseRuleConfig from '../components/HouseRuleConfig';
 
 const VARIANTS: Variant[] = ['basic', 'gin', 'rum500'];
 
@@ -17,6 +19,7 @@ export default function Home() {
 
   const [name, setName] = useState(() => sessionStorage.getItem('playerName') ?? localStorage.getItem('playerName') ?? '');
   const [variant, setVariant] = useState<Variant>('basic');
+  const [houseRules, setHouseRules] = useState<HouseRules>(() => canonicalHouseRules('basic'));
   const [joinCode, setJoinCode] = useState('');
   const [mode, setMode] = useState<'create' | 'join'>('create');
 
@@ -26,7 +29,7 @@ export default function Home() {
     if (!n || !connected) return;
     sessionStorage.setItem('playerName', n);
     localStorage.setItem('playerName', n);
-    send({ t: 'create', variant, name: n });
+    send({ t: 'create', variant, name: n, houseRules });
   }
 
   function handleJoin(e: React.FormEvent) {
@@ -181,7 +184,11 @@ export default function Home() {
               <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>{copy.home.variationLabel}</label>
               <select
                 value={variant}
-                onChange={(e) => setVariant(e.target.value as Variant)}
+                onChange={(e) => {
+                  const v = e.target.value as Variant;
+                  setVariant(v);
+                  setHouseRules(canonicalHouseRules(v));
+                }}
                 style={{ width: '100%', marginBottom: 16 }}
               >
                 {VARIANTS.map((v) => (
@@ -190,6 +197,9 @@ export default function Home() {
                   </option>
                 ))}
               </select>
+              <div style={{ marginBottom: 16 }}>
+                <HouseRuleConfig variant={variant} value={houseRules} onChange={setHouseRules} collapsible />
+              </div>
               <button type="submit" className="primary" disabled={!name.trim() || !connected} style={{ width: '100%' }}>
                 {copy.home.createCta}
               </button>

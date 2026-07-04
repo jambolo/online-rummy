@@ -1,4 +1,4 @@
-import type { Card, Meld, Phase, PlayerId, Variant as VariantId } from '@online-rummy/shared';
+import type { Card, HouseRules, Meld, Phase, PlayerId, Variant as VariantId } from '@online-rummy/shared';
 import type { RNG } from '../rng.js';
 
 export type ScoreSheet = Map<PlayerId, number[]>; // per-hand scores indexed by hand number
@@ -18,7 +18,14 @@ export type GamePlayer = {
 // shared GameState type stays minimal; per-variant fields stop leaking into other
 // variants. Adding a new variant = define its state type + add to VariantStateMap.
 
-export type BasicState = Record<string, never>;
+export type BasicState = {
+  // rules.md A.1.6 step 2 [PG-R]: maxOneMeldPerTurn house rule needs per-turn
+  // tracking. Set by applyMeld; reset when the turn advances. Optional (not
+  // required) so pre-existing direct buildBaseState({}) call sites (e.g.
+  // util.test.ts) keep type-checking; basic.ts always sets it explicitly and
+  // reads treat absence as false.
+  meldedThisTurn?: boolean;
+};
 
 export type Rum500State = {
   // 500 Rummy (rules.md A.4.4): pile-dive must-use restriction. Set by applyDrawFromPile;
@@ -58,6 +65,9 @@ type BaseGameState = {
   // 500 Rummy (rules.md A.4.6, A.4.7): scoring credits the player who placed a card,
   // not the meld's original owner. Used by basic + 500 (only 500 reads it for scoring).
   meldedBy: Map<string, PlayerId>;
+  // NS-8 (T-NS8-2): configured house rules for this game. Stamped at createGame; {} = canonical.
+  // Stored only — the engine does not consume any flag in this phase.
+  houseRules: HouseRules;
 };
 
 export type GameState =
@@ -91,7 +101,13 @@ export interface VariantEngine {
 
   // Setup
   deal(playerCount: number, rng: RNG): { hands: Card[][]; stock: Card[]; discard: Card[] };
-  createGame(roomId: string, players: Array<{ id: string; name: string }>, rng: RNG, firstPlayerIndex?: number): GameState;
+  createGame(
+    roomId: string,
+    players: Array<{ id: string; name: string }>,
+    rng: RNG,
+    firstPlayerIndex?: number,
+    houseRules?: HouseRules,
+  ): GameState;
 
   // Predicates / scoring
   validateMeld(cards: Card[]): boolean;

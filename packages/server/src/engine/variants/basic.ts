@@ -1,10 +1,17 @@
-import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
+import type { Card, HouseRules, MeldKind, MeldOptions, PlayerId } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
 import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
-import type { GameState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
-import { advanceTurn, buildBaseState, detectMeldKind, lookupCard, makeMeldId, requireTurn } from '../util.js';
+import type { BasicState, GameState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
+import {
+  advanceTurn as baseAdvanceTurn,
+  buildBaseState,
+  detectMeldKind,
+  lookupCard,
+  makeMeldId,
+  requireTurn,
+} from '../util.js';
 import { formatLayoffError } from '../layoff-error.js';
 
 // rules.md A.1 — Basic Rummy (Rum)
@@ -12,6 +19,28 @@ import { formatLayoffError } from '../layoff-error.js';
 
 // rules.md A.1.2: deal counts per player count
 const DEAL_COUNTS: Record<number, number> = { 2: 10, 3: 7, 4: 7, 5: 6, 6: 6, 7: 10 };
+
+// rules.md A.1.4: canonical Basic Rummy is ace-low. The aceEitherEnd and
+// roundTheCorner house rules widen run validation. roundTheCorner implies
+// aceEitherEnd (decision D4) — implemented here; state.houseRules itself is
+// never normalized and keeps exactly what the host toggled.
+function meldOptsBasic(state: GameState): MeldOptions {
+  const rtc = state.houseRules.roundTheCorner === true;
+  const aee = rtc || state.houseRules.aceEitherEnd === true;
+  return { aceHigh: false, roundTheCorner: rtc, aceEitherEnd: aee };
+}
+
+// Narrowing helper: every function here is only ever called on a Basic Rummy state.
+function bs(state: GameState): BasicState {
+  if (state.variant !== 'basic') throw new Error('ERR_VARIANT_MISMATCH:basic');
+  return state.variantState;
+}
+
+// Basic clears its per-turn meld tracking on turn end (rules.md A.1.6 step 2 [PG-R]).
+function advanceTurn(state: GameState): void {
+  baseAdvanceTurn(state);
+  bs(state).meldedThisTurn = false;
+}
 
 export const basicVariant: VariantEngine = {
   id: 'basic',
@@ -60,12 +89,15 @@ export const basicVariant: VariantEngine = {
 
   scoreHand(state: GameState): Map<PlayerId, number> {
     // rules.md A.1.8: A=1, 2-10=pip, JQK=10. Winner earns sum of opponents' unmelded values.
+    // rules.md A.1.8 (P1/D1): unmelded ace scores 15 when the aceEitherEnd or
+    // roundTheCorner house rule is enabled.
+    const aceVal = state.houseRules.aceEitherEnd === true || state.houseRules.roundTheCorner === true ? 15 : 1;
     const unmelded = new Map<PlayerId, number>();
     for (const player of state.players) {
       if (player.status === 'forfeited') continue;
       unmelded.set(
         player.id,
-        player.hand.reduce((s, c) => s + cardPoints(c, 1), 0),
+        player.hand.reduce((s, c) => s + cardPoints(c, aceVal), 0),
       );
     }
 
@@ -84,7 +116,10 @@ export const basicVariant: VariantEngine = {
       // rules.md A.1.7: going rummy = winner placed no card all hand (no meld, no layoff).
       // meldedBy tracks placer for every card on the table. No entry for winner ⇒ went rummy.
       const wentRummy = ![...state.meldedBy.values()].includes(winner.id);
-      result.set(winner.id, wentRummy ? earned * 2 : earned);
+      // rules.md A.1.7 [PG-R]: goingRummyFlat10 house rule — flat +10 to the winner's
+      // normal score instead of doubling each opponent's contribution.
+      const rummyScore = state.houseRules.goingRummyFlat10 === true ? earned + 10 : earned * 2;
+      result.set(winner.id, wentRummy ? rummyScore : earned);
     }
 
     return result;
@@ -100,7 +135,8 @@ export const basicVariant: VariantEngine = {
 
   // ---- Lifecycle / actions (Phase 3 promotion) ----
 
-  createGame: (roomId, players, rng, firstPlayerIndex) => createBasicGame(roomId, players, rng, firstPlayerIndex),
+  createGame: (roomId, players, rng, firstPlayerIndex, houseRules) =>
+    createBasicGame(roomId, players, rng, firstPlayerIndex, houseRules),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
   applyMeld: (state, playerId, cardIds) => ({ handEnded: applyMeld(state, playerId, cardIds) }),
@@ -124,13 +160,16 @@ export const basicVariant: VariantEngine = {
   // Hand-end payload: per-player final hand, per-card meld credits (basic ace=1),
   // and per-player deadwood (sum of unmelded card values).
   handEndPayload(state, _scores): WonHandData {
+    // rules.md A.1.8 (P1/D1): unmelded ace scores 15 when the aceEitherEnd or
+    // roundTheCorner house rule is enabled.
+    const aceVal = state.houseRules.aceEitherEnd === true || state.houseRules.roundTheCorner === true ? 15 : 1;
     const finalHands: Record<PlayerId, Card[]> = {};
     const meldCredits: Record<PlayerId, { card: Card; pts: number }[]> = {};
     const handDeadwood: Record<PlayerId, number> = {};
     for (const p of state.players) {
       finalHands[p.id] = p.hand;
       meldCredits[p.id] = [];
-      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 1), 0);
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, aceVal), 0);
     }
     for (const p of state.players) {
       for (const m of p.melds) {
@@ -153,9 +192,22 @@ export function createBasicGame(
   rng: RNG,
   // When omitted, first player is chosen randomly. Pass an explicit index for re-deals.
   firstPlayerIndex?: number,
+  houseRules?: HouseRules,
 ): GameState & { variant: 'basic' } {
   const deal = basicVariant.deal(players.length, rng);
-  return buildBaseState(roomId, 'basic', players, deal, rng, 'draw', {}, firstPlayerIndex) as GameState & { variant: 'basic' };
+  return buildBaseState(
+    roomId,
+    'basic',
+    players,
+    deal,
+    rng,
+    'draw',
+    { meldedThisTurn: false },
+    firstPlayerIndex,
+    houseRules,
+  ) as GameState & {
+    variant: 'basic';
+  };
 }
 
 // ---- Turn actions ----
@@ -184,13 +236,18 @@ export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
+  // rules.md A.1.6 step 2 [PG-R]: maxOneMeldPerTurn house rule — at most one meld per turn.
+  if (state.houseRules.maxOneMeldPerTurn === true && bs(state).meldedThisTurn) {
+    throw new Error('ERR_MAX_ONE_MELD');
+  }
+
   const cards = cardIds.map((id) => {
     const c = lookupCard(state, id);
     if (!player.hand.find((h) => h.id === id)) throw new Error(`ERR_CARD_NOT_IN_HAND:${id}`);
     return c;
   });
 
-  if (!basicVariant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
+  if (!coreMeldCheck(cards, meldOptsBasic(state))) throw new Error('ERR_INVALID_MELD');
 
   player.hand = player.hand.filter((c) => !cardIds.includes(c.id));
   const meld = { id: makeMeldId(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
@@ -200,6 +257,7 @@ export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[
   }
   player.melds.push(meld);
   for (const id of cardIds) state.meldedBy.set(id, playerId);
+  bs(state).meldedThisTurn = true;
 
   // rules.md A.1.7: player goes out immediately if hand is now empty.
   if (player.hand.length === 0) {
@@ -216,6 +274,12 @@ export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string
   const player = requireTurn(state, playerId);
   if (state.phase !== 'meld' && state.phase !== 'discard') throw new Error('ERR_WRONG_PHASE');
 
+  // rules.md A.1.6 step 3 [WP]: layoffRequiresPriorMeld house rule — a player may lay
+  // off only after having placed at least one meld of their own.
+  if (state.houseRules.layoffRequiresPriorMeld === true && player.melds.length === 0) {
+    throw new Error('ERR_LAYOFF_REQUIRES_MELD');
+  }
+
   const card = lookupCard(state, cardId);
   if (!player.hand.find((c) => c.id === cardId)) throw new Error(`ERR_CARD_NOT_IN_HAND:${cardId}`);
 
@@ -229,7 +293,7 @@ export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string
 
   // Validate extended meld — build a descriptive message when invalid
   const existingCards = targetMeld.cardIds.map((id) => lookupCard(state, id));
-  if (!basicVariant.validateMeld([...existingCards, card])) {
+  if (!coreMeldCheck([...existingCards, card], meldOptsBasic(state))) {
     throw new Error(formatLayoffError(targetMeld, existingCards, card));
   }
 

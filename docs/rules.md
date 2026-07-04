@@ -69,7 +69,7 @@ Be first to dispose of all cards by forming **melds** (sets + runs), laying off,
 
 **Ace-either-end** *(house rule)* `[BIC-R]`: ace may rank as either high or low in a run, so **both** `A-2-3` and `Q-K-A` are valid. `K-A-2` is **still invalid** under this rule alone — that requires the separate round-the-corner house rule.
 
-**Round-the-corner** *(house rule)*: `K-A-2` is legal (ace wraps the deck).
+**Round-the-corner** *(house rule)*: `K-A-2` is legal (ace wraps the deck). Enabling round-the-corner **implies ace-either-end** — `A-2-3`, `Q-K-A`, and `K-A-2` are all valid.
 
 ### A.1.5 Melds
 
@@ -101,7 +101,7 @@ Card values:
 
 | Card | Points |
 | --- | --- |
-| Ace | 1 (or 11 in ace-either-end and round-the-corner house rules) |
+| Ace | 1 (or 15 when the ace-either-end or round-the-corner house rule is enabled) |
 | 2-10 | face value |
 | J, Q, K | 10 |
 
@@ -314,8 +314,9 @@ Hand ends on knock or going out (laying all cards down on final turn without dis
 | J, Q, K | 10 |
 | Ace | 15, or 1 when melded as A-2-3 sequence. |
 
-Aces-score-15 house rule: Aces always 15 pts `[RP]`
+Aces-score-15 house rule: Aces always 15 pts, **including when melded in A-2-3** (explicit override of the melded-ace low value) `[RP]`
 low-5 house rule: 2-9 and ace in A-2-3 meld score 5, instead of face value and 1, respectively.
+Precedence: if both aces-score-15 and low-5 are enabled, aces-score-15 governs aces (an A-2-3 ace scores 15); low-5 continues to apply to 2-9.
 
 ### A.4.3 Melds
 
@@ -564,12 +565,12 @@ if game == basic_rummy:
     deck = 1*52 (2*52 for 7P), no jokers
     players in [2,7]
     deal = {2:10, 3:7, 4:7, 5:6, 6:6, 7:10}
-    ace = low default (configurable high)
+    ace = low default (configurable high; round-the-corner implies ace-either-end)
     melds: set(3-4 same rank) | run(3+ same suit sequential)
     turn: draw(stock|top_discard) -> meld(*) -> lay_off? -> discard
     constraint: if drew top_discard, cannot discard same card same turn
     going_rummy_bonus: score *= 2  (or +10 house rule per PG-R)
-    score: opp_unmelded; A=1, 2-10=pip, JQK=10
+    score: opp_unmelded; A=1 (15 when ace-either-end/round-the-corner enabled), 2-10=pip, JQK=10
 elif game == gin:
     deck = 1*52, no jokers; players == 2; deal = 10
     ace = low only; A=1, 2-10=pip, JQK=10

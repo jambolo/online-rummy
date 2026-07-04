@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Card } from '@online-rummy/shared';
+import type { Card, MeldOptions } from '@online-rummy/shared';
 import { RANK_INDEX, validateMeld } from '@online-rummy/shared';
 import { useAppStore } from '../store';
 import CardComponent from './Card';
@@ -37,23 +37,35 @@ function canFormRunWith(others: Card[], selected: Card): boolean {
   return false;
 }
 
-function canLayoffOnto(meldCards: Card[], selected: Card): boolean {
-  return validateMeld([...meldCards, selected], RUM500_OPTS);
+function canLayoffOnto(meldCards: Card[], selected: Card, opts: MeldOptions): boolean {
+  return validateMeld([...meldCards, selected], opts);
 }
 
 // Chained run layoff reachability (rules.md A.4.6) — mirror of server canBridgeRunToSelected.
 // Greedily extends the run with same-suit bridge cards (monotonic), retesting selected after
 // each addition. UX hint only; server is authoritative.
-function canBridgeRunToSelected(meldCards: Card[], bridgePool: Card[], selected: Card): boolean {
+function canBridgeRunToSelected(meldCards: Card[], bridgePool: Card[], selected: Card, opts: MeldOptions): boolean {
   const run = [...meldCards];
   const pool = bridgePool.filter((c) => c.suit === selected.suit && c.id !== selected.id);
   for (;;) {
-    if (validateMeld([...run, selected], RUM500_OPTS)) return true;
-    const i = pool.findIndex((c) => validateMeld([...run, c], RUM500_OPTS));
+    if (validateMeld([...run, selected], opts)) return true;
+    const i = pool.findIndex((c) => validateMeld([...run, c], opts));
     if (i === -1) return false;
     run.push(pool[i]!);
     pool.splice(i, 1);
   }
+}
+
+// rules.md A.4.3 [PG-5]: under setsRequireDistinctSuits, a new set needs selected + 2 cards
+// of suits distinct from selected AND from each other; canonical only needs 2 same-rank cards.
+// Mirror of server canUseSelectedInMeldOrLayoff's set branch. UX hint only.
+function canFormSetWith(others: Card[], selected: Card, distinctSuits: boolean): boolean {
+  const sameRank = others.filter((c) => c.rank === selected.rank);
+  if (distinctSuits) {
+    const suits = new Set(sameRank.filter((c) => c.suit !== selected.suit).map((c) => c.suit));
+    return suits.size >= 2;
+  }
+  return sameRank.length >= 2;
 }
 
 export default function Table() {
@@ -110,15 +122,20 @@ export default function Table() {
     const wouldTake = pile.slice(pickedBottomIdx);
     const available: Card[] = [...privateState.hand, ...wouldTake];
 
+    // rules.md A.4.3 [PG-5]: honor the setsRequireDistinctSuits house rule so the client
+    // usability hint matches the server preflight (server is authoritative regardless).
+    const distinctSuits = publicState!.houseRules?.setsRequireDistinctSuits === true;
+    const meldOpts: MeldOptions = { ...RUM500_OPTS, setsRequireDistinctSuits: distinctSuits };
+
     const others = available.filter((c) => c.id !== selected.id);
     for (const p of publicState!.players) {
       for (const m of p.melds) {
         const cards = m.cards ?? [];
-        if (canLayoffOnto(cards, selected)) return true;
-        if (m.kind === 'run' && canBridgeRunToSelected(cards, others, selected)) return true;
+        if (canLayoffOnto(cards, selected, meldOpts)) return true;
+        if (m.kind === 'run' && canBridgeRunToSelected(cards, others, selected, meldOpts)) return true;
       }
     }
-    if (others.filter((c) => c.rank === selected.rank).length >= 2) return true;
+    if (canFormSetWith(others, selected, distinctSuits)) return true;
     return canFormRunWith(others, selected);
   }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Card } from '@online-rummy/shared';
+import type { Card, HouseRules } from '@online-rummy/shared';
 import { RANK_INDEX, cardPoints } from '@online-rummy/shared';
 import { useAppStore } from '../store';
 import CardComponent from '../components/Card';
@@ -10,7 +10,9 @@ import ActionBar from '../components/ActionBar';
 import Chat from '../components/Chat';
 import HowToPlayModal from '../components/HowToPlayModal';
 import Modal from '../components/Modal';
-import { t } from '../theme/tokens';
+import HouseRuleConfig from '../components/HouseRuleConfig';
+import HouseRuleSummary, { HouseRuleChip, SCORING_HOUSE_RULE_IDS, deviations } from '../components/HouseRuleSummary';
+import { t, sectionLabel } from '../theme/tokens';
 import { variationAccent, variationLabel } from '../theme/variations';
 import { useBreakpoint } from '../theme/useBreakpoint';
 
@@ -237,6 +239,8 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   const hostId = useAppStore((s) => s.hostId);
   const myPlayerId = useAppStore((s) => s.myPlayerId);
   const send = useAppStore((s) => s.send);
+  const houseRules = useAppStore((s) => s.houseRules);
+  const setHouseRules = useAppStore((s) => s.setHouseRules);
 
   const isHost = myPlayerId === hostId;
 
@@ -292,6 +296,19 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           ))}
         </div>
 
+        {variant && (
+          <div style={{ marginBottom: 20 }}>
+            {isHost ? (
+              <HouseRuleConfig variant={variant} value={houseRules} onChange={setHouseRules} />
+            ) : (
+              <>
+                <div style={{ ...sectionLabel, marginBottom: 4 }}>House rules</div>
+                <HouseRuleSummary variant={variant} houseRules={houseRules} />
+              </>
+            )}
+          </div>
+        )}
+
         {isHost ? (
           <button
             className="primary"
@@ -338,13 +355,15 @@ function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
   );
 }
 
-// Card point values per variant. Basic / Gin: rules.md A.1.8 (ace = 1).
-// 500 Rummy: rules.md A.4.2 (ace in hand always 15 per locked house rule simplification).
-function cardPtsBasic(c: Card): number {
-  return cardPoints(c, 1);
+// Card point values per game variation, honoring the table's configured house rules.
+// Basic: rules.md A.1.8 — unmelded ace scores 15 when aceEitherEnd or roundTheCorner
+// is enabled, else 1. Gin's registry is empty, so this always yields ace = 1 there.
+function cardPtsBasic(c: Card, hr: HouseRules): number {
+  return cardPoints(c, hr.aceEitherEnd === true || hr.roundTheCorner === true ? 15 : 1);
 }
-function cardPts500(c: Card): number {
-  return cardPoints(c, 15);
+// 500 Rummy: rules.md A.4.2 — hand ace always 15; low5Scoring scores 2-9 at 5.
+function cardPts500(c: Card, hr: HouseRules): number {
+  return cardPoints(c, 15, { low5Scoring: hr.low5Scoring === true });
 }
 function handPts(cards: Card[], ptsFn: (c: Card) => number): number {
   return cards.reduce((s, c) => s + ptsFn(c), 0);
@@ -379,7 +398,8 @@ function ScoreOverlay() {
   const sorted = [...publicState.players].sort((a, b) => b.score - a.score);
   const is500 = publicState.variant === 'rum500';
   const isGin = publicState.variant === 'gin';
-  const cardPts = is500 ? cardPts500 : cardPtsBasic;
+  const hr = publicState.houseRules;
+  const cardPts = (c: Card) => (is500 ? cardPts500(c, hr) : cardPtsBasic(c, hr));
   const gameTarget = is500 ? 500 : 100;
 
   // rules.md A.2.3 stock-depletion cancel: no scoring; show simple banner + Re-deal.
@@ -476,6 +496,16 @@ function ScoreOverlay() {
       >
         {isGameOver ? `A player reached ${gameTarget} pts` : `Game target: ${gameTarget} pts`}
       </div>
+
+      {(() => {
+        const scoringDevs = deviations(publicState.variant, hr).filter((d) => SCORING_HOUSE_RULE_IDS.includes(d.id));
+        if (scoringDevs.length === 0) return null;
+        return (
+          <div style={{ textAlign: 'center', fontSize: 11, color: t.accentAttention, marginBottom: 16 }}>
+            ⚖ House rules affected scoring: {scoringDevs.map((d) => d.label).join(' · ')}
+          </div>
+        );
+      })()}
 
       {sorted.map((p, i) => {
         const prev = prevScores[p.id] ?? 0;
@@ -705,6 +735,7 @@ export default function Room() {
         >
           {variationLabel(publicState.variant)}
         </span>
+        <HouseRuleChip variant={publicState.variant} houseRules={publicState.houseRules} />
         <div style={{ flex: 1 }}>
           <OpponentStrip />
         </div>

@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import type { PlayerId, Variant } from '@online-rummy/shared';
+import type { HouseRules, PlayerId, Variant } from '@online-rummy/shared';
+import { canonicalHouseRules } from '@online-rummy/shared';
 import type { GameState } from './engine/types.js';
 import { VARIANTS } from './engine/variants/index.js';
 
@@ -23,6 +24,9 @@ export type Room = {
   players: Player[];
   status: RoomStatus;
   gameState: GameState | null;
+  // NS-8 (T-NS8-2): configured house rules for this room. Defaults to canonical at create;
+  // the host may replace it in the lobby via setHouseRules. Passed into game creation.
+  houseRules: HouseRules;
 };
 
 const rooms = new Map<string, Room>();
@@ -38,7 +42,15 @@ function generateCode(): string {
 
 export function createRoom(variant: Variant, host: Player): Room {
   const code = generateCode();
-  const room: Room = { code, variant, hostId: host.id, players: [host], status: 'lobby', gameState: null };
+  const room: Room = {
+    code,
+    variant,
+    hostId: host.id,
+    players: [host],
+    status: 'lobby',
+    gameState: null,
+    houseRules: canonicalHouseRules(variant),
+  };
   rooms.set(code, room);
   sessionIndex.set(host.sessionId, code);
   return room;

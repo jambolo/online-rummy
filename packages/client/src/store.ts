@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
-import type { PublicState, PrivateState } from '@online-rummy/shared';
+import type { HouseRules, PublicState, PrivateState } from '@online-rummy/shared';
 import { send as wsSend, type ConnStatus } from './net/ws';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -23,17 +23,21 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_INVALID_VARIANT: 'Unknown game variation.',
   ERR_NOT_IMPLEMENTED: "That game variation isn't implemented yet.",
   ERR_MUST_USE_PILE_CARD: 'You drew a card from the discard pile — you must meld or lay it off before discarding.',
-  ERR_NO_LEGAL_DIVE: "You can't pile-dive that card — there's no legal meld or lay-off for it with your current hand.",
+  ERR_NO_LEGAL_DIVE: "You can't take that card from the discard pile — there's no legal meld or lay-off for it with your current hand.",
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
   ERR_DISCARD_EMPTY: 'The discard pile is empty.',
   ERR_STOCK_EMPTY: 'The stock pile is empty.',
   ERR_INVALID_LAYOFF: "That card doesn't fit on the selected meld.",
   ERR_KNOCK_REQUIRES_DISCARD: 'Select a card to discard face-down when knocking.',
   ERR_CANNOT_DISCARD_MELDED_CARD: "You can't discard a card that's in one of your declared melds.",
+  ERR_MAX_ONE_MELD: 'House rule: only one meld may be placed per turn.',
+  ERR_LAYOFF_REQUIRES_MELD: 'House rule: you must place a meld of your own before laying off.',
   ERR_RATE_LIMIT: 'Sending messages too fast — slow down.',
   ERR_TOO_MANY_CONNECTIONS: 'Too many connections from your network.',
   ERR_INVALID_JSON: 'Malformed message sent to server.',
   ERR_INVALID_MSG: 'Unrecognised message type.',
+  ERR_INVALID_HOUSE_RULE: 'That house rule setting is not valid for this game variation.',
+  ERR_UNSUPPORTED_HOUSE_RULE: "That house rule isn't available yet.",
 };
 
 function friendlyError(code: string, raw: string): string {
@@ -75,6 +79,9 @@ interface AppState {
   // Game (populated on state msg)
   publicState: PublicState | null;
   privateState: PrivateState | null;
+  // NS-8: configured house rules for the current room/game. Fed from the lobby message and
+  // from publicState; server-authoritative — never a local guess [S9].
+  houseRules: HouseRules;
 
   // UI
   selectedCardIds: string[];
@@ -124,6 +131,7 @@ interface AppState {
   send(msg: C2S): void;
   handleMessage(msg: S2C): void;
   leaveGame(): void;
+  setHouseRules(hr: HouseRules): void;
   checkDisconnects(): void;
   dismissDisconnectWarning(): void;
   toggleSelect(cardId: string): void;
@@ -159,6 +167,7 @@ const HOME_RESET = {
   lobbyPlayers: [],
   publicState: null,
   privateState: null,
+  houseRules: {},
   selectedCardIds: [],
   handOrder: [],
   chatMessages: [],
@@ -200,6 +209,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   lobbyPlayers: [],
   publicState: null,
   privateState: null,
+  houseRules: {},
   selectedCardIds: [],
   handOrder: [],
   chatMessages: [],
@@ -239,6 +249,9 @@ export const useAppStore = create<AppState>()((set, _get) => ({
     set({ ...HOME_RESET, notice: 'You left the game.' });
   },
 
+  // Host-only house-rule change; server validates + rebroadcasts lobby. No optimistic update [S2].
+  setHouseRules: (hr) => wsSend({ t: 'setHouseRules', houseRules: hr }),
+
   handleMessage: (msg) => {
     switch (msg.t) {
       case 'lobby':
@@ -257,6 +270,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             hostId: msg.hostId,
             lobbyPlayers: msg.players,
             sessionId: msg.sessionId,
+            houseRules: msg.houseRules,
             myPlayerId,
             playerLastSeen,
             lastError: null, // clear pre-join errors (e.g. invalid room code)
@@ -331,6 +345,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           if (msg.private === undefined) {
             return {
               publicState: msg.public,
+              houseRules: msg.public.houseRules,
               playerLastSeen,
               prevScores,
               finalHands,
@@ -355,6 +370,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           }
           return {
             publicState: msg.public,
+            houseRules: msg.public.houseRules,
             privateState: msg.private,
             handOrder: [...kept, ...added],
             selectedCardIds: s.selectedCardIds.filter((id) => newIds.has(id)),

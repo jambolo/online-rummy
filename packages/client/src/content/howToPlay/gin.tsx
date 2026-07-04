@@ -197,7 +197,8 @@ export default function GinRules() {
       </section>
 
       <section>
-        <h3 style={h3Style}>House rules (locked)</h3>
+        <h3 style={h3Style}>House rules</h3>
+        <p style={pStyle}>Gin Rummy plays canonical rules only — no host-configurable house rules in this game variation.</p>
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>
             Ace is <strong>low only</strong> — A–2–3 valid; Q–K–A not valid.

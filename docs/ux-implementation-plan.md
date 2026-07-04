@@ -6,7 +6,7 @@
 >
 > **Authoritative sources (read before editing):** [docs/ux-design.md](ux-design.md) (the UIDD — binding §4 guardrails), [docs/branding.md](branding.md) (NS-2 visual direction), [docs/plan.md](plan.md) (house-rule picks, architecture), [docs/rules.md](rules.md) (rule citations). When this plan and the UIDD disagree, the UIDD wins; update both in the same change (UIDD rule [E8]).
 
-**Progress (as of 2026-05-30):** Phase A (NS-1 tokens), Phase B (NS-6 a11y), Phase C (NS-4 responsive), Phase D (NS-7 variation theming), and Phase E (NS-2 speakeasy re-skin) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3, T-NS4-1, T-NS4-2, T-NS7-1, T-NS7-2, T-NS2-1, T-NS2-2 landed (commits 5073f18, 9d8a5de, 0cc149b, e6a1fb7). T-GAP-2 (central copy module) also done with Phase E. Remaining phases (NS-8, NS-5, NS-3, T-GAP-3) not started. See §4 master checklist.
+**Progress (as of 2026-07-04):** Phase A (NS-1 tokens), Phase B (NS-6 a11y), Phase C (NS-4 responsive), Phase D (NS-7 variation theming), Phase E (NS-2 speakeasy re-skin), and Phase F (NS-8 house-rule config & disclosure) complete — T-NS1-1, T-NS1-2, T-NS6-1, T-NS6-2, T-NS6-3, T-NS4-1, T-NS4-2, T-NS7-1, T-NS7-2, T-NS2-1, T-NS2-2, T-NS8-1…T-NS8-5 landed (commits 5073f18, 9d8a5de, 0cc149b, e6a1fb7, 46e1fc2, f4a3f09, b8e15ec, 0a96af6, 2e76f98). T-GAP-2 (central copy module) also done with Phase E. Remaining phases: NS-5 (Phase G, BLOCKED on T-NS5-0 persistence decision), NS-3 (Phase H = M8), T-GAP-3. See §4 master checklist.
 
 ---
 
@@ -535,8 +535,9 @@ rule:    For EACH flag below, implement + add golden tests proving canonical (de
          enabled behavior, THEN flip its registry `supported:true`. Do NOT expose before tested.
 flags:
   basic.aceEitherEnd            → pass aceEitherEnd:true into the basic meld-validation opts
-                                  (mirror rum500's existing path); A=11 in run scoring when high.
-  basic.roundTheCorner          → set roundTheCorner from config in core meld check (K-A-2 legal).
+                                  (mirror rum500's existing path); unmelded A=15 when enabled (rules.md A.1.8).
+  basic.roundTheCorner          → set roundTheCorner from config in core meld check (K-A-2 legal);
+                                  implies aceEitherEnd (Q-K-A also legal); unmelded A=15 (rules.md A.1.8).
   basic.maxOneMeldPerTurn       → applyMeld rejects a 2nd meld this turn (track meldedThisTurn).
   basic.layoffRequiresPriorMeld → applyLayoff requires the player has ≥1 own meld placed.
   basic.goingRummyFlat10        → hand scoring: flat +10 to winner instead of ×2 doubling.
@@ -698,12 +699,12 @@ Phase D — NS-7 variation theming                         (commit e6a1fb7; reso
 Phase E — NS-2 speakeasy re-skin  ✅ COMPLETE  (resolves #4,#34,#35; #16 advanced — closes at T-GAP-3)
   [x] T-NS2-1 typography faces                            (issue #4 partial → resolved by T-NS2-2)
   [x] T-NS2-2 re-skin token values + card back + copy     (issues #4,#34,#35; T-GAP-1 banner + T-GAP-2 copy folded in)
-Phase F — NS-8 house rules
-  [ ] T-NS8-1 shared registry + types
-  [ ] T-NS8-2 protocol + state plumbing
-  [ ] T-NS8-3 engine consumption per flag (+ tests, flip supported)
-  [ ] T-NS8-4 HouseRuleConfig editor
-  [ ] T-NS8-5 HouseRuleSummary disclosure
+Phase F — NS-8 house rules  ✅ COMPLETE  (resolves #28,#29,#30,#31,#32,#33,#37; jokers registered supported:false — hidden; T-GAP-4 folded into T-NS8-5)
+  [x] T-NS8-1 shared registry + types                     (commit 46e1fc2; issue #28)
+  [x] T-NS8-2 protocol + state plumbing                   (commit f4a3f09; issues #29,#30)
+  [x] T-NS8-3 engine consumption per flag (+ tests, flip supported)  (commit b8e15ec; issue #31)
+  [x] T-NS8-4 HouseRuleConfig editor                      (commit 0a96af6; issue #32)
+  [x] T-NS8-5 HouseRuleSummary disclosure                 (commit 2e76f98; issues #33,#37)
 Phase G — NS-5 identity/progression  (BLOCKED — see T-NS5-0)
   [x] T-NS5-0 DECISION GATE (persistence)                 — defer (2026-06-04; recorded in plan.md Decisions)
   [ ] T-NS5-1… BLOCKED until T-NS5-0 is revisited

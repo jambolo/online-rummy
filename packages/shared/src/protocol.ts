@@ -1,9 +1,11 @@
 import type { PlayerId, PrivateState, PublicState, Variant } from './cards.js';
+import type { HouseRules } from './houseRules.js';
 
 export type LobbyPlayer = { id: PlayerId; name: string };
 
 export type C2S =
-  | { t: 'create'; variant: Variant; name: string }
+  | { t: 'create'; variant: Variant; name: string; houseRules?: HouseRules }
+  | { t: 'setHouseRules'; houseRules: HouseRules } // host-only, lobby-only — replace the room's house-rule config
   | { t: 'join'; roomCode: string; name: string; sessionId?: string }
   | { t: 'start' }
   | { t: 'draw'; from: 'stock' | 'discard' }
@@ -34,7 +36,7 @@ export type EventKind =
 
 export type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
-  | { t: 'lobby'; roomCode: string; variant: Variant; hostId: PlayerId; players: LobbyPlayer[]; sessionId: string }
+  | { t: 'lobby'; roomCode: string; variant: Variant; hostId: PlayerId; players: LobbyPlayer[]; sessionId: string; houseRules: HouseRules }
   | { t: 'event'; kind: EventKind; playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'keepalive'; from: PlayerId } // relayed idle keep-alive from another room player

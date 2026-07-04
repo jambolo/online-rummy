@@ -110,7 +110,7 @@ The `players` array is in turn order. `discardTop` is `null` only if the discard
 
 **Phase values are per-game-variation subsets:**
 
-- `basic` / `rum500`: `draw → meld → ended` (with `discard` reserved for the "max one meld per turn" house rule, currently unused).
+- `basic` / `rum500`: `draw → meld → ended` (the "maximum one meld per turn" house rule is enforced via `ERR_MAX_ONE_MELD` during the `meld` phase, without a phase change; the `discard` phase value is not set by these game variations and remains unused).
 - `gin`: `firstUpcardOffer → draw → discard → layoff? → ended`. No `meld` phase — Gin reveals melds only at knock time.
 
 ### `PrivateState`
@@ -130,10 +130,12 @@ The contents of your own hand. Sent only to the player who owns the hand.
 ### `create` — Create a room
 
 ```json
-{ "t": "create", "variant": "basic"|"gin"|"rum500", "name": "string" }
+{ "t": "create", "variant": "basic"|"gin"|"rum500", "name": "string", "houseRules": { "aceEitherEnd": true, "...": "..." } }
 ```
 
 Creates a new room and places the sender in it as the host. `name` is the player's display name and is trimmed to 20 characters server-side.
+
+`houseRules` is optional. Each entry is validated against the chosen game variation's house-rule registry and merged over that game variation's canonical defaults. Omit it (or send `{}`) for a fully canonical table.
 
 **Response:** A [`lobby`](#lobby--lobby-state) message is sent to the creating player.
 
@@ -144,6 +146,8 @@ Creates a new room and places the sender in it as the host. `name` is the player
 | `ERR_ALREADY_IN_ROOM` | This socket is already associated with a room |
 | `ERR_INVALID_VARIANT` | `variant` is not one of the three accepted values |
 | `ERR_INVALID_NAME` | `name` is empty after trimming |
+| `ERR_INVALID_HOUSE_RULE` | A `houseRules` id is unknown to this game variation, or its value has the wrong type |
+| `ERR_UNSUPPORTED_HOUSE_RULE` | A `houseRules` entry sets a non-canonical value for a house rule that is registered but not yet available (e.g. `jokers`) |
 
 ---
 
@@ -218,6 +222,28 @@ Player count requirements by game variation:
 
 ---
 
+### `setHouseRules` — Update house rules (host, lobby only)
+
+```json
+{ "t": "setHouseRules", "houseRules": { "roundTheCorner": true, "...": "..." } }
+```
+
+Host-only, lobby-only. Replaces the room's house-rule configuration. The `houseRules` map is validated the same way as `create`'s `houseRules` (unknown id or wrong value type → `ERR_INVALID_HOUSE_RULE`; non-canonical value for a not-yet-available house rule → `ERR_UNSUPPORTED_HOUSE_RULE`), then stored merged over the room's game variation's canonical defaults. On success, the server rebroadcasts [`lobby`](#lobby--lobby-state) (carrying the new `houseRules`) to every player in the room — there is no separate success reply.
+
+**Response:** A [`lobby`](#lobby--lobby-state) message broadcast to all players in the room.
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_NOT_HOST` | Sender is not the host |
+| `ERR_WRONG_STATE` | Room is not in `lobby` state |
+| `ERR_INVALID_HOUSE_RULE` | A `houseRules` id is unknown to this room's game variation, or its value has the wrong type |
+| `ERR_UNSUPPORTED_HOUSE_RULE` | A `houseRules` entry sets a non-canonical value for a house rule that is registered but not yet available (e.g. `jokers`) |
+
+---
+
 ### `draw` — Draw a card
 
 ```json
@@ -246,6 +272,7 @@ After a successful draw, `phase` advances to `"meld"`.
 | `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile (basic) |
 | `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rummy) |
 | `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
+| `ERR_NO_LEGAL_DIVE` | 500 Rummy only, "Unified draw obligation" house rule enabled: the top discard has no legal meld or lay-off use given your hand, so the draw is refused |
 
 ---
 
@@ -258,6 +285,8 @@ After a successful draw, `phase` advances to `"meld"`.
 500 Rummy only. Take any card from the discard pile; the selected card plus every card on top of it move to your hand. Valid only on your turn when `phase` is `"draw"`.
 
 **Top-card shortcut:** if `cardId` is the top card of the discard pile, this behaves identically to `draw {from:"discard"}` — only `drewFromDiscardId` is set (cannot re-discard that card this turn), and `mustMeldCardId` is **not** set (no must-use obligation). Use `draw {from:"discard"}` for a plain top-card draw; `drawFromPile` with the top card's id works but is equivalent.
+
+**"Unified draw obligation" house rule:** when enabled, picking the top card behaves like a dive — the same `ERR_NO_LEGAL_DIVE` preflight applies to a top-card pick, and a successful top-card draw also sets `mustMeldCardId` (the must-use obligation), so a subsequent `discard` can return `ERR_MUST_USE_PILE_CARD` just as it would for a true pile dive.
 
 **True pile dive (card below the top):** the selected card plus every card above it move to your hand. `PublicState.mustMeldCardId` is set to the selected card's id — you must place it in a meld or layoff before discarding. The server runs a preflight check: if the selected card cannot be legally melded or laid off given the hand you would have after taking all taken cards, the dive is rejected with `ERR_NO_LEGAL_DIVE` (prevents an unresolvable obligation).
 
@@ -293,7 +322,7 @@ A **set** is 3 or 4 cards of the same rank. A **run** is 3 or more consecutive c
 
 Game-variation differences:
 
-- **Basic:** ace is low only; round-the-corner is disabled. Multiple melds per turn are allowed (the "maximum one meld per turn" rule is a host-configurable house rule, currently off). The phase stays at `"meld"` after a meld so the player can meld further before discarding.
+- **Basic:** ace is low only; round-the-corner is disabled unless the corresponding house rules are enabled. Multiple melds per turn are allowed unless the "maximum one meld per turn" house rule is enabled, in which case a second meld in the same turn returns `ERR_MAX_ONE_MELD`. The phase stays at `"meld"` after a meld so the player can meld further before discarding.
 - **500 Rummy:** ace direction is inferred per meld from the run's neighbors (`A-2-3...` → low, `...Q-K-A` → high). Multiple melds and layoffs are allowed per turn; the phase stays at `"meld"` until the player discards.
 - **Gin:** **not supported** — Gin reveals melds only at knock time. `meld` always returns `ERR_NOT_SUPPORTED`. Use [`knock`](#knock--gin-knock-or-go-gin) instead.
 
@@ -310,11 +339,11 @@ If the player's `PublicState.mustMeldCardId` is included in `cardIds`, that fiel
 | `ERR_NOT_YOUR_TURN` | It is not this player's turn |
 | `ERR_WRONG_PHASE` | Current phase is not `"meld"` or `"discard"` |
 | `ERR_NOT_SUPPORTED` | Game variation is `gin` (melds declared at knock time) |
-| `ERR_ALREADY_MELDED_THIS_TURN` | A meld has already been placed this turn (only emitted when the host-configurable "maximum one meld per turn" rule is enabled; currently off in v1) |
 | `ERR_CARD_NOT_IN_HAND:<id>` | A specified card is not in the player's hand |
 | `ERR_UNKNOWN_CARD:<id>` | A specified card ID is not recognized |
 | `ERR_INVALID_MELD` | The cards do not form a valid set or run |
 | `ERR_CANNOT_PLAY_LAST_CARD` | 500 Rummy only: the meld would empty the hand. A player must retain a card to discard (rules.md A.4.8). The "last card may be played" house rule would lift this; not scaffolded |
+| `ERR_MAX_ONE_MELD` | Basic only, "Maximum one meld per turn" house rule enabled: a meld has already been placed this turn |
 
 ---
 
@@ -328,7 +357,7 @@ Adds one card from your hand onto any meld already on the table (your own or ano
 
 Game-variation differences:
 
-- **Basic:** layoff is unrestricted. The "layoff requires prior meld" rule (rules.md A.1.6 step 3) is documented as a future host-configurable house rule; not currently scaffolded.
+- **Basic:** layoff is unrestricted unless the "layoff requires a prior meld" house rule is enabled (rules.md A.1.6 step 3), in which case a player with no meld of their own gets `ERR_LAYOFF_REQUIRES_MELD`.
 - **500 Rummy:** no own-meld requirement. The card is credited to the layoff player for scoring purposes, not the meld's original owner. Layoffs that include `mustMeldCardId` clear that obligation.
 - **Gin:** **not supported during regular play** — Gin layoffs happen only in the `layoff` phase after a knock, via the separate [`ginLayoff`](#ginlayoff--gin-defender-layoff) message. Plain `layoff` returns `ERR_NOT_SUPPORTED` in Gin.
 
@@ -797,7 +826,7 @@ If the grace window expires first, Bob is forfeited: the server broadcasts `forf
 
 After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
 
-The `"discard"` phase value exists but is not set by basic or 500 Rummy in v1. It is reserved for the "maximum one meld per turn" house rule (currently off); if that rule were active, the engine would transition from `"meld"` to `"discard"` after the player's first meld, blocking further melds. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
+The `"discard"` phase value exists but is not set by basic or 500 Rummy. The "maximum one meld per turn" house rule is enforced without a phase change — a second meld while the rule is enabled returns `ERR_MAX_ONE_MELD`, still from the `"meld"` phase. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
 
 **Gin:**
 
