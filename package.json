@@ -1,8 +1,8 @@
 {
   "name": "online-rummy",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
-  "packageManager": "pnpm@11.4.0",
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "test": "pnpm -r test",
     "build": "pnpm -r build",
@@ -16,9 +16,9 @@
   "license": "MIT",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.5.0",
+    "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "prettier": "^3.8.4",
-    "typescript-eslint": "^8.61.1"
+    "prettier": "^3.9.4",
+    "typescript-eslint": "^8.62.1"
   }
 }

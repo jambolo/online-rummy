@@ -70,6 +70,7 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
       engine.applyGinLayoff(state, playerId, action.layoffs, action.ownMelds);
       return { kind: 'handEnded' };
     }
+    case 'setHouseRules':
     case 'create':
     case 'join':
     case 'start':

@@ -117,22 +117,33 @@ export default function Rum500Rules() {
       </section>
 
       <section>
-        <h3 style={h3Style}>House rules (locked)</h3>
+        <h3 style={h3Style}>House rules</h3>
+        <p style={pStyle}>
+          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are
+          listed under &ldquo;Table house rules&rdquo; below. Canonical defaults:
+        </p>
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>
-            Deal: <strong>13 cards</strong> for 2 players, <strong>7 cards</strong> for 3 or more.
+            Deal: <strong>13 cards</strong> for 2 players (a house rule can make it 10), <strong>7 cards</strong> for 3 or more.
           </li>
           <li>Decks: 1 deck for up to 4 players, 2 decks for 5+. No jokers.</li>
-          <li>Same-suit cards allowed in a set (e.g. two 7♥ in 2-deck play).</li>
+          <li>
+            Same-suit cards allowed in a set by default — the <em>Sets require distinct suits</em> house rule forbids them.
+          </li>
+          <li>
+            Aces score 15, or 1 when melded in A–2–3 — house rules can make aces <strong>always 15</strong>, or score low cards
+            (2–9) at <strong>5</strong>.
+          </li>
+          <li>
+            Top-discard draw: cannot discard that card the same turn, and by default no meld is required — the <em>Unified draw
+            obligation</em> house rule makes it must-use like a pile dive.
+          </li>
           <li>
             <strong>No own-meld requirement</strong> — you can lay off onto anyone&apos;s meld immediately.
           </li>
           <li>
-            Top-discard draw: cannot discard that card the same turn, but no meld required. Pile dive: the picked card must be
-            melded or laid off before discarding; other taken cards are unrestricted.
-          </li>
-          <li>
-            Game target: <strong>500 cumulative points</strong>. If multiple players cross 500 in the same hand, highest score wins.
+            Game target: <strong>500 cumulative points</strong>. If multiple players cross 500 in the same hand, highest score
+            wins.
           </li>
         </ul>
       </section>

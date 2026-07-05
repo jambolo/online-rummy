@@ -99,19 +99,26 @@ export default function BasicRules() {
       </section>
 
       <section>
-        <h3 style={h3Style}>House rules (locked)</h3>
+        <h3 style={h3Style}>House rules</h3>
+        <p style={pStyle}>
+          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are
+          listed under &ldquo;Table house rules&rdquo; below. Canonical defaults:
+        </p>
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>
-            Ace is <strong>low only</strong> — A–2–3 valid; Q–K–A not valid.
+            Ace is <strong>low only</strong> by default — the <em>Ace either end</em> and <em>Round the corner</em> house rules
+            widen runs, and make unmelded aces worth 15.
           </li>
           <li>
-            You <strong>cannot discard</strong> the card you drew from the discard pile on the same turn.
+            Going rummy bonus is <strong>score × 2</strong> by default — a house rule can make it a flat +10 instead.
           </li>
           <li>
-            Going rummy bonus is <strong>score × 2</strong> (not flat +10).
+            By default melds per turn are <strong>unlimited</strong> and laying off <strong>needs no prior meld</strong> — house
+            rules can restrict both.
           </li>
           <li>
-            Game target: <strong>100 cumulative points</strong>.
+            Always in force: you <strong>cannot discard</strong> the card you drew from the discard pile on the same turn; game
+            target is <strong>100 cumulative points</strong>.
           </li>
         </ul>
       </section>

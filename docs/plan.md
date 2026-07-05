@@ -23,7 +23,7 @@ Compressed reference. Reload before resuming work.
 | Forfeit disposition | Hand + melds out of play (NOT returned to stock). Stock + discard pile untouched |
 | Spectators | None v1 |
 | Devices | Desktop + mobile web responsive |
-| House rules | Fixed canonical per game variation (rules.md primaries). See "House rule picks" below |
+| House rules | Host-configurable per game variation via the NS-8 house-rule registry (`packages/shared/src/houseRules.ts`). Canonical defaults (all OFF) per "House rule picks" below; host toggles supported deviations at create/lobby, server validates + stamps `GameState.houseRules`, all players see active deviations. Gin = canonical-only (empty registry) |
 | Chat | Text in-room |
 | TS config | `strict: true`, ESLint + Prettier defaults, no `any` without comment |
 
@@ -200,9 +200,9 @@ either caller.
 
 Cite section IDs in code comments (e.g. `// rules.md A.1.6 step 4`).
 
-## House rule picks (locked)
+## House rule picks (canonical defaults)
 
-Rules.md lists multiple options per house rule. Defaults for v1:
+Rules.md lists multiple options per house rule. The values below are the **canonical defaults** (what a room runs when the host toggles nothing). Under NS-8 these are no longer locked: the host may enable any `supported:true` deviation via the house-rule registry (`packages/shared/src/houseRules.ts`) at create or in the lobby. Each deviation is validated server-side, stamped onto `GameState.houseRules`, and disclosed to every player (`HouseRuleSummary`). Rules flagged *(HR)* here are the toggleable ones; `jokers` stays `supported:false` (hidden) in v1; Gin has an empty registry (canonical-only).
 
 ### Basic Rummy
 
@@ -421,7 +421,7 @@ v1 = M1-M7. M8 after.
   - Turn flow — draw → meld/layoff (optional) → discard; note game-variation deviations
   - Meld rules — sets (3+ same rank) and runs (3+ same suit sequential); Gin: no lay-off; 500 Rummy: pile dive
   - Scoring — point values per card, how hand score is computed, game target
-  - Active house rules — list only the locked picks from plan.md (e.g. ace low, layoff unrestricted, going-rummy ×2)
+  - Active house rules — under NS-8 the "Table house rules" section (rendered by `HouseRuleSummary`) lists the room's actual deviations from canonical (diffed against the registry); a canonical table shows "Canonical rules — no deviations"
 - **Content source:** `docs/rules.md` sections A.1 (Basic), A.2 (Gin), A.4 (500 Rummy) are the authoritative reference. Client-side copy is static prose; do NOT re-use engine validation logic.
 - **Content files:** co-locate with the modal as `src/content/howToPlay/{basic,gin,rum500}.tsx` — each exports a React fragment so rich formatting (bold terms, tables) is possible without a markdown parser dependency.
 - **No protocol change needed** — the game variation is already in `PublicState.variant`; lobby view reads it from `lobbyVariant` in the Zustand store.
@@ -508,5 +508,5 @@ M1–M7 complete (v1, v0.5.0). Structural refactor landed (commit d053563); the 
 
 Post-v1 streams (parallel, not strict order):
 
-- **UX overhaul** — see `docs/ux-design.md` + `docs/ux-implementation-plan.md`. Phases A–E (NS-1 tokens, NS-6 a11y, NS-4 responsive, NS-7 variation theming, NS-2 speakeasy re-skin) all landed. Open: NS-8 house-rule config (Phase F), NS-5 identity/progression (Phase G, gated on the T-NS5-0 persistence decision — still recorded as "None, in-memory" in this doc's Decisions table), NS-3 PixiJS (Phase H = M8), and a handful of smaller `[Gap]` items.
+- **UX overhaul** — see `docs/ux-design.md` + `docs/ux-implementation-plan.md`. Phases A–F (NS-1 tokens, NS-6 a11y, NS-4 responsive, NS-7 variation theming, NS-2 speakeasy re-skin, NS-8 house-rule config & disclosure) all landed. Open: NS-5 identity/progression (Phase G, gated on the T-NS5-0 persistence decision — still recorded as "None, in-memory" in this doc's Decisions table), NS-3 PixiJS (Phase H = M8), and a handful of smaller `[Gap]` items.
 - **M8 (PixiJS card layer)** — the only milestone still outstanding from the original plan; sits inside Phase H of the UX plan.

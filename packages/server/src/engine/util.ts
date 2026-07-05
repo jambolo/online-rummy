@@ -3,7 +3,7 @@
 // Each function here was previously duplicated across basic.ts, rum500.ts, and gin.ts.
 
 import { randomUUID } from 'node:crypto';
-import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
+import type { Card, HouseRules, MeldKind, PlayerId } from '@online-rummy/shared';
 import type { RNG } from '../rng.js';
 import type { GamePlayer, GameState, VariantStateMap } from './types.js';
 
@@ -60,6 +60,7 @@ export function buildBaseState<V extends keyof VariantStateMap>(
   initialPhase: GameState['phase'],
   variantState: VariantStateMap[V],
   firstPlayerIndex?: number,
+  houseRules: HouseRules = {},
 ): GameState {
   const cardRegistry = new Map<string, Card>();
   const registerAll = (cards: Card[]) => cards.forEach((c) => cardRegistry.set(c.id, c));
@@ -93,6 +94,7 @@ export function buildBaseState<V extends keyof VariantStateMap>(
     scoreSheet: new Map(players.map((p) => [p.id, []])),
     meldedBy: new Map(),
     variantState,
+    houseRules,
   } as GameState;
 }
 

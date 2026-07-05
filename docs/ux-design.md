@@ -1,6 +1,6 @@
 # Rum Runner — User-Interface Design Document (UIDD)
 
-> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.5.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress:** NS-1 (design tokens), NS-6 (a11y & motion), NS-4 (responsive), NS-7 (variation theming), and NS-2 (speakeasy re-skin) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. Also landed out-of-plan (logged in §4.1 of the implementation plan): mid-turn meld highlight (basic/rum500 — Card `highlighted` prop, store `meldHighlights`/`meldHighlightOwnerId`), `playerName` persistence in `sessionStorage`, and the 500 Rummy discard pile-count label. The token VALUES in §2.3 below are the post-NS-2 speakeasy palette (parchment text ramp, charcoal-navy panels, brass edges, deep-emerald felt gradient, branded RR card back, Poiret One / Work Sans faces). NS-3/5/8 not yet started; "current reality" notes for those items remain accurate.
+> **Status:** Authoritative UI/UX reference for the `@online-rummy/client` package as of v0.5.0 (M1–M7 complete; M8 PixiJS layer pending). **UX overhaul progress:** NS-1 (design tokens), NS-6 (a11y & motion), NS-4 (responsive), NS-7 (variation theming), and NS-2 (speakeasy re-skin) landed — see [docs/ux-implementation-plan.md](ux-implementation-plan.md) §4. Also landed out-of-plan (logged in §4.1 of the implementation plan): mid-turn meld highlight (basic/rum500 — Card `highlighted` prop, store `meldHighlights`/`meldHighlightOwnerId`), `playerName` persistence in `sessionStorage`, and the 500 Rummy discard pile-count label. The token VALUES in §2.3 below are the post-NS-2 speakeasy palette (parchment text ramp, charcoal-navy panels, brass edges, deep-emerald felt gradient, branded RR card back, Poiret One / Work Sans faces). NS-8 (house-rule configuration & disclosure) landed — shared registry houseRules.ts, protocol/state plumbing, engine consumption of 10 flags under golden tests (jokers registered but supported:false/hidden), HouseRuleConfig host editor (Home create disclosure + Lobby panel), HouseRuleSummary disclosure (Lobby, game-header chip→popover, HowToPlay "Table house rules", ScoreOverlay scoring line) — see §3.12/§3.13. NS-3/5 not yet started; "current reality" notes for those items remain accurate.
 >
 > **Audience:** Human developers extending the client, and future LLM sessions implementing or refactoring the UI.
 >
@@ -228,10 +228,10 @@ All components are function components consuming the single Zustand store via **
 
 ### 3.1 `Home` ([routes/Home.tsx](packages/client/src/routes/Home.tsx))
 
-- **State management:** Reads `connected`, `send`, `lastError`/`dismissError`, `notice`/`dismissNotice`. Local `useState`: `name`, `variant`, `joinCode`, `mode` ('create'|'join'). Submits `{ t: 'create' }` or `{ t: 'join' }`.
+- **State management:** Reads `connected`, `send`, `lastError`/`dismissError`, `notice`/`dismissNotice`. Local `useState`: `name`, `variant`, `joinCode`, `mode` ('create'|'join'), `houseRules`. Submits `{ t: 'create' }` or `{ t: 'join' }`.
 - **Structure:** Full-height column → banner image → centered 360-wide translucent card → logo → conditional status banners (connecting / notice / error) → name input → create/join segmented tabs → game-variation `<select>` (create) or 5-char code input (join) → primary submit.
 - **Styling constraints:** Card `bg rgba(0,0,0,0.35), radius 12, padding 32, width 360`. Tabs are two `flex:1` buttons with conjoined radii (`4px 0 0 4px` / `0 4px 4px 0`) and active state via `rgba(255,255,255,0.2)` vs `0.05`. Error banner uses danger hue `rgba(174,42,26,0.8)`; notice uses info-blue; connecting uses danger-tint. Join code input forces `textTransform: uppercase` and `maxLength 5`; submit disabled until `name && code.length===5 && connected`.
-- **Aspirations & Gaps:** Game-variation choice is a bare native `<select>` showing un-themed labels — **[North Star]** elevate to themed game-variation cards with art and per-game-variation accent (NS-7). No room discovery/browser (NS-5). Fixed 360 width is acceptable on mobile; the banner is now art-directed (T-GAP-1/#34) — fluid `clamp(120px,24vw,200px)` height, top-anchored crop keeping the wordmark in frame, and a bottom gradient dissolving into `--felt-base`. Branding terminology is now applied — the create CTA reads "Enter the High-Stakes Room", join "Slip in the Back Door", sourced from [src/content/copy.ts](packages/client/src/content/copy.ts) (T-GAP-2). **[North Star NS-8]** an expandable "House rules" disclosure (`HouseRuleConfig`, 3.12) belongs in this create form, seeded with the selected game variation's canonical defaults.
+- **Aspirations & Gaps:** Game-variation choice is a bare native `<select>` showing un-themed labels — **[North Star]** elevate to themed game-variation cards with art and per-game-variation accent (NS-7). No room discovery/browser (NS-5). Fixed 360 width is acceptable on mobile; the banner is now art-directed (T-GAP-1/#34) — fluid `clamp(120px,24vw,200px)` height, top-anchored crop keeping the wordmark in frame, and a bottom gradient dissolving into `--felt-base`. Branding terminology is now applied — the create CTA reads "Enter the High-Stakes Room", join "Slip in the Back Door", sourced from [src/content/copy.ts](packages/client/src/content/copy.ts) (T-GAP-2). **[NS-8 — implemented]** the create form mounts a collapsed "House rules" disclosure (HouseRuleConfig, 3.12) between the game-variation select and the submit button; its local map is seeded from canonicalHouseRules(variant), re-seeded whenever the selected game variation changes, and rides the create message as create.houseRules.
 
 ### 3.2 `Room` (shell + sub-components) ([routes/Room.tsx](packages/client/src/routes/Room.tsx))
 
@@ -259,15 +259,15 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 #### 3.2.5 `Lobby`
 
 - Centered 360 card (mirrors Home). Logo 72, `Room {code}` heading, `{variant} · share code` subtitle (raw game-variation string, not the friendly label **[Gap]**), player list with host (gold) / you (cyan) tags. Host sees Start (disabled `< 2` players); others see "Waiting for host…". How-to-Play + Leave buttons below.
-- **[North Star NS-8]** This is the primary home for house-rule configuration: the host sees the editable `HouseRuleConfig` panel (3.12) before pressing Start; **all** players (host included) see the read-only `HouseRuleSummary` (3.13) of active deviations beneath the player list, so everyone agrees on the rules before the deal.
+- **[NS-8 — implemented]** beneath the player list the host sees the editable HouseRuleConfig panel (3.12) — each edit dispatches the store's setHouseRules action; the server validates against the registry and rebroadcasts lobby — while non-hosts see a "House rules" section label with the read-only HouseRuleSummary (3.13). The host's editor doubles as their deviation display: non-canonical rows carry the amber "house rule" chip.
 
 #### 3.2.6 `ScoreOverlay`
 
 - The most complex view. Renders when `publicState.phase === 'ended'`. Two modes:
   - **Hand-cancelled (Gin stock-depletion):** simple banner + score list + Re-deal (host) / "Waiting for host…".
   - **Normal hand/game end:** title ("Game Over!" vs "Hand Over"), target subtitle, then per-player (sorted by score desc) breakdown: name row with 🏆 winner marker, colored delta (`+/−`), and total; Gin result line (gin/knock/undercut + deadwood + bonuses); melded-cards strip (compact 36×50 cards with green `+pts` badges, credited to placer); unmelded-cards strip (with gray pts badges). Footer: Play Again / New Hand (host) or wait message + Leave.
-- **State:** Reads `prevScores`, `finalHands`, `meldCredits`, `handDeadwood`, `ginInfo`, `isGameOver`, `handCancelled`. Card point values computed **client-side** (`cardPtsBasic` Ace=1 / `cardPts500` Ace=15) for display only — authoritative scoring is server-side. `sortCardsDesc(cards, pointsFor)` sorts by scoring value → `RANK_INDEX` → suit.
-- **Aspirations & Gaps:** Dense and functional but un-themed; **[North Star]** this is the natural home for celebratory animation, rank-change ("you advanced to Bootlegger"), and history (NS-3, NS-5). z-index 100 (below other modals) is intentional but undocumented elsewhere. **[North Star NS-8]** when a deviating house rule affected scoring (e.g. flat +10, aces-always-15), surface a compact `HouseRuleSummary` (3.13) line so the result is self-explanatory.
+- **State:** Reads `prevScores`, `finalHands`, `meldCredits`, `handDeadwood`, `ginInfo`, `isGameOver`, `handCancelled`. Card point values computed **client-side** by config-aware helpers (cardPtsBasic(c, houseRules): ace 15 when aceEitherEnd or roundTheCorner is enabled, else 1; cardPts500(c, houseRules): low5Scoring scores 2–9 at 5) for display only — authoritative scoring is server-side. `sortCardsDesc(cards, pointsFor)` sorts by scoring value → `RANK_INDEX` → suit.
+- **Aspirations & Gaps:** Dense and functional but un-themed; **[North Star]** this is the natural home for celebratory animation, rank-change ("you advanced to Bootlegger"), and history (NS-3, NS-5). z-index 100 (below other modals) is intentional but undocumented elsewhere. **[NS-8 — implemented]** when an active deviation is in SCORING_HOUSE_RULE_IDS (goingRummyFlat10, acesAlways15, low5Scoring, aceEitherEnd, roundTheCorner — exported by HouseRuleSummary.tsx), a centered amber line "⚖ House rules affected scoring: {labels}" renders under the target subtitle, so the result is self-explanatory.
 
 ### 3.3 `Card` ([components/Card.tsx](packages/client/src/components/Card.tsx))
 
@@ -329,13 +329,13 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 - **State:** Stateless; props `variant`, `onClose`. Renders one of three static fragments ([basic](packages/client/src/content/howToPlay/basic.tsx) / [gin](packages/client/src/content/howToPlay/gin.tsx) / [rum500](packages/client/src/content/howToPlay/rum500.tsx)).
 - **Structure:** Scrim (z-200) → navy panel width 480, `maxHeight 80vh` scroll, title "How to Play — {label}" + close. Content fragments use sectioned `h3` + prose/lists/tables.
 - **Styling constraints:** Content `h3` color encodes a **partial game-variation identity**: Basic & 500 Rummy use cyan `#7fd4ff`; Gin uses amber `#ffd166`. Body 13px, line-height 1.65–1.8. Tables are inline-styled with right-aligned values.
-- **Aspirations & Gaps:** This is the **proto-example of NS-7 (game-variation theming)** — formalize the accent-per-game-variation into a token map and apply it across Table/MeldZone/ActionBar, not just rules text. Content is hand-maintained TSX (intentional, to avoid a markdown dep). **[North Star NS-8]** fold in a "Table house rules" section (a `HouseRuleSummary`, 3.13) so the rules screen reflects the *actual* table config, not just canon.
+- **Aspirations & Gaps:** This is the **proto-example of NS-7 (game-variation theming)** — formalize the accent-per-game-variation into a token map and apply it across Table/MeldZone/ActionBar, not just rules text. Content is hand-maintained TSX (intentional, to avoid a markdown dep). **[NS-8 — implemented]** the modal ends with a "Table house rules" section rendering HouseRuleSummary (3.13) from the store's houseRules (kept current in both lobby and game); the three content fragments' former "House rules (locked)" sections are retitled "House rules" — basic/rum500 describe canonical defaults vs host-configurable options, gin states it plays canonical rules only.
 
 ### 3.11 Networking layer ([net/ws.ts](packages/client/src/net/ws.ts))
 
 - Not visual, but governs UI liveness. `connect/send/disconnect` with an **epoch counter** to ignore stale events from React StrictMode double-mounts (and to dedupe the onerror+onclose pair of a single drop). **Auto-reconnect** with capped exponential backoff (~60s, matching the server grace) on unexpected close, surfaced via the `onStatus(ConnStatus)` callback. Keep-alive emits `{ t:'keepalive' }` after 30s of no *sent* frames (keyed off last-sent so receive-only players still ping). Drives `connStatus` → `connected` (gates form submits) + the `ConnectionBanner`, and feeds liveness/`playerLastSeen`.
 
-### 3.12 `HouseRuleConfig` — host house-rule editor [North Star NS-8 — designed, not yet implemented]
+### 3.12 `HouseRuleConfig` — host house-rule editor [NS-8 — implemented]
 
 - **Purpose & placement:** Lets the **host** enable/disable documented house rules for the room's game variation. Mounts in two host-only surfaces: (a) an expandable "House rules" disclosure in the Home create form (3.1), seeded with canonical defaults; (b) an editable panel in the Lobby (3.2.5), live until Start. Non-hosts never see the editor — only the read-only `HouseRuleSummary` (3.13).
 - **State management:** Reads `variant` + `houseRules` from the store. The option set is **data-driven** from a shared registry `HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]>` (new shared module), where `HouseRuleDef = { id: HouseRuleId; label: string; description: string; canonical: boolean | number | string; kind: 'toggle' | 'choice'; choices?: Array<{ value; label }>; rulesRef: string }`. Editing dispatches a store action that sends a new C2S `{ t: 'setHouseRules', houseRules }` (lobby-only, host-only; server validates against the registry and re-broadcasts `lobby`). At creation the chosen map rides along on `{ t: 'create', variant, name, houseRules }`. Canonical defaults and the rule catalogue are sourced from [rules.md](rules.md) house-rule flags + [plan.md](plan.md) "House rule picks"; each entry MUST cite its rules.md section id.
@@ -350,7 +350,7 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 | Basic | `goingRummyFlat10` | off (bonus = ×2) | A.1.7 |
 | 500 Rummy | `acesAlways15` | off (15, or 1 in A-2-3) | A.4.2 |
 | 500 Rummy | `low5Scoring` | off | A.4.2 |
-| 500 Rummy | `jokers` | off | A.4.5 |
+| 500 Rummy | `jokers` | off (registered supported:false — hidden in v1) | A.4.5 |
 | 500 Rummy | `unifiedObligation` | off (dive-only must-use) | A.4.4 |
 | 500 Rummy | `setsRequireDistinctSuits` | off (same-suit allowed) | A.4.3 |
 | 500 Rummy | `deal10For2P` | off (deal 13) | A.4.1 |
@@ -368,16 +368,16 @@ Container that branches: no `publicState` → `<Lobby>`; otherwise the game view
 ```
 
 - **Styling constraints:** Reuse the panel + section-label idioms (2.2/2.3) and global control classes. A row whose value is **non-canonical** carries the amber attention accent `#ffd166` plus a small "house rule" chip; rows left at canonical show no chip (so deviations pop). Tooltips reuse the How-to-Play prose voice. Controls MUST be keyboard-operable and labelled (NS-6). Empty-registry game variations still render the disclosure (discoverability) — do not hide it.
-- **Aspirations & Gaps:** Net-new. Requires: shared `houseRules.ts` (types + registry); protocol `houseRules` on `create` + new host-only `setHouseRules`; `PublicState.houseRules` so the **engine's** active config (not a client guess) is authoritative; and engine consumption of each flag (today most are documented-but-unscaffolded per [plan.md](plan.md)/CLAUDE.md). **Hard rule:** a toggle MUST NOT be exposed until the engine actually honors it — never offer a rule the server silently ignores (see [E9]).
+- **Status:** Implemented end-to-end. The registry lives in packages/shared/src/houseRules.ts; the editor renders only supportedDefs(variant), so the [E9] hard rule (never offer a rule the server silently ignores) is enforced structurally — jokers stays supported:false and never renders. Both mounts (Home create disclosure, Lobby host panel) are live; non-hosts never see the editor.
 
-### 3.13 `HouseRuleSummary` — active-deviation disclosure [North Star NS-8 — designed, not yet implemented]
+### 3.13 `HouseRuleSummary` — active-deviation disclosure [NS-8 — implemented]
 
 - **Purpose & placement:** Shows **all players** which house rules deviate from canonical for the current room. Read-only. Mounts: (a) in the Lobby under the player list (3.2.5); (b) in the game-view header row (3.2) as a compact chip that opens a popover; (c) folded into `HowToPlayModal` (3.10) as a "Table house rules" section so the rules screen reflects the *actual* table, not just canon; (d) summarized on `ScoreOverlay` (3.2.6) when a deviating rule affected scoring (e.g. flat +10, aces-always-15).
 - **State management:** Derives purely from `publicState.houseRules` (in game) or the lobby `houseRules` (pre-game), diffed against `HOUSE_RULE_DEFS[variant][id].canonical`. A rule is a **deviation** iff `configured !== canonical`. Only deviations are listed; a fully-canonical table renders "Canonical rules" with no list. No local state beyond popover open/close.
 - **Structure:**
 
 ```text
-Header chip:  "⚖ House rules · {deviationCount}"     (secondary/hidden when count === 0)
+Header chip:  "⚖ House rules · {deviationCount}"     (muted, no count, still clickable when count === 0 — popover shows the no-deviations line)
 Popover / lobby block:
   "These rules deviate from canonical {VariantLabel}:"
   └── per deviation:  {label} — {configuredValue}  (was {canonicalValue})  · "ⓘ" {description}
@@ -385,7 +385,7 @@ Popover / lobby block:
 ```
 
 - **Styling constraints:** Deviation chip + count badge use the amber attention accent `#ffd166` (consistent with the editor and mustMeld/pile-dive language) and the section-counter idiom. The popover follows the modal/scrim pattern (V3) at z-index 200. Per line: `{label}` 13px, `{configuredValue}` bold, `{canonicalValue}` in the 0.5 white-opacity ramp.
-- **Aspirations & Gaps:** Net-new; depends on the same shared registry + `PublicState.houseRules`. Because the list is generated by diffing config against `canonical`, **newly registered house rules surface here automatically** with no per-rule UI work — see [E9]. This component is the disclosure half of NS-8 and is what keeps every seat honest about the rule set.
+- **Status:** Implemented at all four mounts (Lobby block, game-header chip→popover via the shared Modal at z 200, HowToPlayModal "Table house rules" section, ScoreOverlay scoring line). deviations(variant, houseRules) diffs the full registry, so newly registered house rules surface automatically with no per-rule UI work. SCORING_HOUSE_RULE_IDS includes the basic ace flags because rules.md A.1.8 scores an unmelded ace 15 when either is enabled.
 
 ---
 
@@ -584,9 +584,9 @@ Popover / lobby block:
 | Responsive breakpoint hook (NS-4) | [src/theme/useBreakpoint.ts](packages/client/src/theme/useBreakpoint.ts) |
 | Reduced-motion hook (NS-6) | [src/theme/useReducedMotion.ts](packages/client/src/theme/useReducedMotion.ts) |
 | Central thematic copy (T-GAP-2) | [src/content/copy.ts](packages/client/src/content/copy.ts) |
-| Host house-rule editor (NS-8 target) | `src/components/HouseRuleConfig.tsx` (designed §3.12; not yet created) |
-| Active house-rule deviation display (NS-8 target) | `src/components/HouseRuleSummary.tsx` (designed §3.13; not yet created) |
-| House-rule registry + types (NS-8 target) | `packages/shared/src/houseRules.ts` (designed; not yet created) |
+| Host house-rule editor (NS-8) | [src/components/HouseRuleConfig.tsx](packages/client/src/components/HouseRuleConfig.tsx) (§3.12) |
+| Active house-rule deviation display (NS-8) | [src/components/HouseRuleSummary.tsx](packages/client/src/components/HouseRuleSummary.tsx) (§3.13) |
+| House-rule registry + types (NS-8) | [packages/shared/src/houseRules.ts](packages/shared/src/houseRules.ts) |
 | Brand direction (NS-2 source) | [docs/branding.md](branding.md) |
 | Architecture decisions & house rules | [docs/plan.md](plan.md) |
 

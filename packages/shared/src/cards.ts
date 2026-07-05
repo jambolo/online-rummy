@@ -1,3 +1,5 @@
+import type { HouseRules } from './houseRules.js';
+
 export type Suit = 'C' | 'D' | 'H' | 'S';
 export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 export type Card = { id: string; suit: Suit; rank: Rank };
@@ -47,6 +49,9 @@ export type PublicState = {
   meldedBy: Record<string, PlayerId>;
   // Per-variant fields. See VariantPublic.
   variantPublic: VariantPublic;
+  // NS-8 (T-NS8-2): configured house rules for this game. Variation-agnostic config —
+  // the sanctioned top-level exception; NOT part of variantPublic. [S5]
+  houseRules: HouseRules;
 };
 
 export type PrivateState = { hand: Card[] };

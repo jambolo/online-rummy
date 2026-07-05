@@ -5,6 +5,8 @@ import GinRules from '../content/howToPlay/gin';
 import Modal from './Modal';
 import { t } from '../theme/tokens';
 import { variationLabel } from '../theme/variations';
+import { useAppStore } from '../store';
+import HouseRuleSummary from './HouseRuleSummary';
 
 interface Props {
   variant: Variant;
@@ -12,6 +14,7 @@ interface Props {
 }
 
 export default function HowToPlayModal({ variant, onClose }: Props) {
+  const houseRules = useAppStore((s) => s.houseRules);
   return (
     <Modal
       titleId="how-to-play-title"
@@ -55,6 +58,11 @@ export default function HowToPlayModal({ variant, onClose }: Props) {
       {variant === 'basic' && <BasicRules />}
       {variant === 'rum500' && <Rum500Rules />}
       {variant === 'gin' && <GinRules />}
+
+      <section style={{ marginTop: 20 }}>
+        <h3 style={{ fontSize: 14, color: t.text70, marginTop: 0, marginBottom: 6 }}>Table house rules</h3>
+        <HouseRuleSummary variant={variant} houseRules={houseRules} />
+      </section>
     </Modal>
   );
 }

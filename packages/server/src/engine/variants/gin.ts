@@ -1,4 +1,4 @@
-import type { Card, PlayerId } from '@online-rummy/shared';
+import type { Card, HouseRules, PlayerId } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
@@ -122,7 +122,8 @@ export const ginVariant: VariantEngine = {
 
   // ---- Lifecycle / actions (Phase 3 promotion) ----
 
-  createGame: (roomId, players, rng, firstPlayerIndex) => createGinGame(roomId, players, rng, firstPlayerIndex),
+  createGame: (roomId, players, rng, firstPlayerIndex, houseRules) =>
+    createGinGame(roomId, players, rng, firstPlayerIndex, houseRules),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
   applyMeld: (state, playerId, cardIds) => {
@@ -205,6 +206,7 @@ export function createGinGame(
   players: Array<{ id: string; name: string }>,
   rng: RNG,
   firstPlayerIndex?: number,
+  houseRules?: HouseRules,
 ): GameState & { variant: 'gin' } {
   const deal = ginVariant.deal(players.length, rng);
   // rules.md A.2.2: hand opens with the upcard offered to the non-dealer (= first player).
@@ -218,6 +220,7 @@ export function createGinGame(
     'firstUpcardOffer',
     { ginKnockerId: null, cancelledHand: false },
     firstPlayerIndex,
+    houseRules,
   ) as GameState & { variant: 'gin' };
 }
 

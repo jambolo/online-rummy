@@ -917,6 +917,159 @@ describe('rum500 pile dive edge cases', () => {
     expect(state.discardPile.map((c) => c.id)).toEqual(['noLegal', 'noLegalFiller']);
     expect(state.variantState.mustMeldCardId).toBeNull();
   });
+
+  it('chained run layoff: dive succeeds when a hand card bridges the run to the selected card', () => {
+    // rules.md A.4.6 — run 5-6-7♠ on table, hand 8♠, dive 9♠. 9♠ has no direct placement,
+    // but is reachable: lay off 8♠ → 5-6-7-8♠, then 9♠ → 5-6-7-8-9♠.
+    const state = twoPlayerGame();
+    state.players[0]!.hand = [];
+    const run = [c('5', 'S', 'r5'), c('6', 'S', 'r6'), c('7', 'S', 'r7')];
+    run.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.melds.push({ id: 'mBridge', kind: 'run', cardIds: ['r5', 'r6', 'r7'], ownerId: 'p1' });
+    const bridge = c('8', 'S', 'h8');
+    state.players[0]!.hand.push(bridge);
+    state.cardRegistry.set(bridge.id, bridge);
+    const target = c('9', 'S', 'dive9');
+    const filler = c('K', 'D', 'fillerBridge');
+    state.discardPile = [target, filler];
+    state.cardRegistry.set(target.id, target);
+    state.cardRegistry.set(filler.id, filler);
+
+    expect(() => applyDrawFromPile(state, 'p1', 'dive9')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('dive9');
+  });
+
+  it('chained run layoff: dive still rejected when the bridge card is absent', () => {
+    // No 8♠ anywhere → 9♠ cannot reach the 5-6-7♠ run. Bridging must not over-permit.
+    const state = twoPlayerGame();
+    state.players[0]!.hand = [];
+    const run = [c('5', 'S', 'n5'), c('6', 'S', 'n6'), c('7', 'S', 'n7')];
+    run.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.melds.push({ id: 'mNoBridge', kind: 'run', cardIds: ['n5', 'n6', 'n7'], ownerId: 'p1' });
+    const target = c('9', 'S', 'noBridge9');
+    const filler = c('K', 'D', 'noBridgeFiller');
+    state.discardPile = [target, filler];
+    state.cardRegistry.set(target.id, target);
+    state.cardRegistry.set(filler.id, filler);
+
+    expect(() => applyDrawFromPile(state, 'p1', 'noBridge9')).toThrow('ERR_NO_LEGAL_DIVE');
+  });
+});
+
+// ---- chained run layoff reachability (rules.md A.4.6) ----
+
+describe('rum500 chained run layoff preflight (rules.md A.4.6)', () => {
+  // Register `cards` and seat a run meld owned by `ownerId`.
+  function seatRun(state: ReturnType<typeof twoPlayerGame>, ownerId: string, meldId: string, cards: Card[]): void {
+    cards.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players.find((p) => p.id === ownerId)!.melds.push({
+      id: meldId,
+      kind: 'run',
+      cardIds: cards.map((c) => c.id),
+      ownerId,
+    });
+  }
+
+  // Stack the discard pile bottom-first and register every card.
+  function stackPile(state: ReturnType<typeof twoPlayerGame>, cards: Card[]): void {
+    state.discardPile = [...cards];
+    cards.forEach((card) => state.cardRegistry.set(card.id, card));
+  }
+
+  // Put `cards` into p1's hand (after clearing it) and register them.
+  function giveHand(state: ReturnType<typeof twoPlayerGame>, cards: Card[]): void {
+    state.players[0]!.hand = [...cards];
+    cards.forEach((card) => state.cardRegistry.set(card.id, card));
+  }
+
+  it('multi-card bridge: two hand cards bridge the run to the selected card', () => {
+    // run 5-6-7♠, hand 8♠ 9♠, dive 10♠ → 8 then 9 then 10. Proves the fixpoint iterates.
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mMulti', [c('5', 'S', 'm5'), c('6', 'S', 'm6'), c('7', 'S', 'm7')]);
+    giveHand(state, [c('8', 'S', 'mh8'), c('9', 'S', 'mh9')]);
+    stackPile(state, [c('10', 'S', 'dive10'), c('K', 'D', 'multiFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'dive10')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('dive10');
+  });
+
+  it('low-end bridge: hand card bridges below the run to the selected card', () => {
+    // run 5-6-7♠, hand 4♠, dive 3♠ → lay 4 below (4-5-6-7), then 3 (3-4-5-6-7).
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mLow', [c('5', 'S', 'l5'), c('6', 'S', 'l6'), c('7', 'S', 'l7')]);
+    giveHand(state, [c('4', 'S', 'lh4')]);
+    stackPile(state, [c('3', 'S', 'dive3'), c('K', 'D', 'lowFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'dive3')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('dive3');
+  });
+
+  it('bridge card sourced from the taken pile, not the hand', () => {
+    // Hand empty. The bridging 8♠ sits in the pile ABOVE the dived 9♠, so it is part of
+    // wouldTake — proves `others` spans hand + taken pile, not just hand.
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mTaken', [c('5', 'S', 't5'), c('6', 'S', 't6'), c('7', 'S', 't7')]);
+    giveHand(state, []);
+    // bottom→top: [9♠ (dive target), 8♠ (bridge, taken with it)]
+    stackPile(state, [c('9', 'S', 'takeDive9'), c('8', 'S', 'takeBridge8')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'takeDive9')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('takeDive9');
+  });
+
+  it('ace-either-end: ace-low run extends downward to reach a dived ace', () => {
+    // run 5-6-7♠, hand 4♠ 3♠ 2♠, dive A♠ → 4-3-2 bridge then A low (A-2-3-4-5-6-7).
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mAce', [c('5', 'S', 'a5'), c('6', 'S', 'a6'), c('7', 'S', 'a7')]);
+    giveHand(state, [c('4', 'S', 'ah4'), c('3', 'S', 'ah3'), c('2', 'S', 'ah2')]);
+    stackPile(state, [c('A', 'S', 'diveAce'), c('K', 'D', 'aceFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'diveAce')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('diveAce');
+  });
+
+  it('ace no-wrap: ace-high run + ace must not bridge across K-A to a 2', () => {
+    // run 9-10-J♠, hand Q♠ K♠ A♠, dive 2♠. Greedy builds 9..K-A (ace high); 2 cannot
+    // attach (no Q-K-A-2 wrap). Confirms validateMeld blocks the wrap.
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mWrap', [c('9', 'S', 'w9'), c('10', 'S', 'w10'), c('J', 'S', 'wJ')]);
+    giveHand(state, [c('Q', 'S', 'whQ'), c('K', 'S', 'whK'), c('A', 'S', 'whA')]);
+    stackPile(state, [c('2', 'S', 'dive2'), c('K', 'D', 'wrapFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'dive2')).toThrow('ERR_NO_LEGAL_DIVE');
+  });
+
+  it('a set meld never bridges: same-suit neighbor cannot reach across a set', () => {
+    // Set 7♠7♥7♦ on table, hand 8♠, dive 9♠. Sets do not extend by sequence → no dive.
+    const state = twoPlayerGame();
+    const set = [c('7', 'S', 'se7s'), c('7', 'H', 'se7h'), c('7', 'D', 'se7d')];
+    set.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.melds.push({ id: 'mSet', kind: 'set', cardIds: set.map((c) => c.id), ownerId: 'p1' });
+    giveHand(state, [c('8', 'S', 'seh8')]);
+    stackPile(state, [c('9', 'S', 'setDive9'), c('K', 'D', 'setFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'setDive9')).toThrow('ERR_NO_LEGAL_DIVE');
+  });
+
+  it("bridges onto ANOTHER player's meld (layoff onto any meld)", () => {
+    // rules.md A.4.6 — run owned by p2, p1 dives 9♠ bridging via its own 8♠.
+    const state = twoPlayerGame();
+    seatRun(state, 'p2', 'mOther', [c('5', 'S', 'o5'), c('6', 'S', 'o6'), c('7', 'S', 'o7')]);
+    giveHand(state, [c('8', 'S', 'oh8')]);
+    stackPile(state, [c('9', 'S', 'otherDive9'), c('K', 'D', 'otherFiller')]);
+    expect(() => applyDrawFromPile(state, 'p1', 'otherDive9')).not.toThrow();
+    expect(state.variantState.mustMeldCardId).toBe('otherDive9');
+  });
+
+  it('preflight is honest: the dived card can actually be laid off via the chain', () => {
+    // End-to-end — dive then execute the chained layoffs; obligation must clear.
+    const state = twoPlayerGame();
+    seatRun(state, 'p1', 'mExec', [c('5', 'S', 'e5'), c('6', 'S', 'e6'), c('7', 'S', 'e7')]);
+    // Extra retained card so layoffs never hit the last-card rule.
+    giveHand(state, [c('8', 'S', 'eh8'), c('2', 'C', 'eKeep')]);
+    stackPile(state, [c('9', 'S', 'execDive9'), c('K', 'D', 'execFiller')]);
+    applyDrawFromPile(state, 'p1', 'execDive9');
+    expect(state.variantState.mustMeldCardId).toBe('execDive9');
+
+    applyLayoff(state, 'p1', 'mExec', 'eh8'); // bridge first
+    applyLayoff(state, 'p1', 'mExec', 'execDive9'); // then the dived card
+    expect(state.variantState.mustMeldCardId).toBeNull();
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['e5', 'e6', 'e7', 'eh8', 'execDive9']);
+  });
 });
 
 // ---- isGameOver ----

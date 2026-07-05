@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
-import type { C2S, Card, S2C, PublicState } from '@online-rummy/shared';
+import type { C2S, Card, S2C, PublicState, HouseRules, Variant } from '@online-rummy/shared';
+import { HOUSE_RULE_DEFS, canonicalHouseRules } from '@online-rummy/shared';
 import {
   createRoom,
   getRoom,
@@ -66,6 +67,7 @@ function sendLobby(ws: WebSocket, room: Room, player: Player): void {
     hostId: room.hostId,
     players: room.players.map((p) => ({ id: p.id, name: p.name })),
     sessionId: signSessionId(player.sessionId, _secret),
+    houseRules: room.houseRules,
   });
 }
 
@@ -83,6 +85,26 @@ function engineError(err: unknown): { code: string; msg: string } {
     return { code, msg: err.message };
   }
   return { code: 'ERR_UNKNOWN', msg: 'Unknown error' };
+}
+
+// NS-8 (T-NS8-2): validate a client house-rule map against the registry for `variant`.
+// Returns null when valid, else the wire error to send. Server-authoritative [S9]; a rule
+// at its canonical value is always allowed, only enabling an unsupported rule is rejected [E9].
+function validateHouseRules(variant: Variant, hr: HouseRules): { code: string; msg: string } | null {
+  const defs = HOUSE_RULE_DEFS[variant];
+  for (const [id, value] of Object.entries(hr)) {
+    if (value === undefined) continue;
+    const def = defs.find((d) => d.id === id);
+    if (def === undefined) return { code: 'ERR_INVALID_HOUSE_RULE', msg: `Unknown house rule: ${id}` };
+    const typeOk = def.kind === 'toggle'
+      ? typeof value === 'boolean'
+      : (def.choices ?? []).some((c) => c.value === value);
+    if (!typeOk) return { code: 'ERR_INVALID_HOUSE_RULE', msg: `Invalid value for house rule: ${id}` };
+    if (value !== def.canonical && !def.supported) {
+      return { code: 'ERR_UNSUPPORTED_HOUSE_RULE', msg: `House rule not yet available: ${id}` };
+    }
+  }
+  return null;
 }
 
 // Guard: require an in-progress game tied to a player + room. Returns narrowed
@@ -123,6 +145,7 @@ function buildPublicState(room: Room, state: GameState): PublicState {
     stockSize: state.stock.length,
     meldedBy: Object.fromEntries(state.meldedBy),
     variantPublic: buildVariantPublic(state),
+    houseRules: state.houseRules,
   };
 }
 
@@ -266,6 +289,13 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         sendError(ws, 'ERR_INVALID_NAME', 'Name cannot be empty');
         return;
       }
+      if (msg.houseRules !== undefined) {
+        const hrErr = validateHouseRules(msg.variant, msg.houseRules);
+        if (hrErr !== null) {
+          sendError(ws, hrErr.code, hrErr.msg);
+          return;
+        }
+      }
       const player: Player = {
         id: randomUUID(),
         name,
@@ -274,6 +304,9 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         status: 'active',
       };
       const room = createRoom(msg.variant, player);
+      if (msg.houseRules !== undefined) {
+        room.houseRules = { ...canonicalHouseRules(msg.variant), ...msg.houseRules };
+      }
       ctx.player = player;
       ctx.room = room;
       broadcastLobby(room);
@@ -393,6 +426,8 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
           room.code,
           room.players.map((p) => ({ id: p.id, name: p.name })),
           cryptoRNG,
+          undefined,
+          room.houseRules,
         );
         broadcast(room, { t: 'event', kind: 'gameStarted', playerId: player.id });
         broadcastStateAll(room, room.gameState);
@@ -422,7 +457,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         const newPlayers = room.players.map((p) => ({ id: p.id, name: p.name }));
         const nextFirstIndex = engine.nextFirstPlayerIndex(oldState, newPlayers);
         room.status = 'playing';
-        const newState = engine.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex);
+        const newState = engine.createGame(room.code, newPlayers, cryptoRNG, nextFirstIndex, room.houseRules);
         // "New Hand" carries scores forward; "Play Again" after game over starts fresh.
         // Both arrive as the same `start` message, so re-derive which one this is.
         const gameWasOver = oldState !== null && engine.isGameOver(oldState.scoreSheet);
@@ -442,6 +477,30 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       } else {
         sendError(ws, 'ERR_WRONG_STATE', 'Room not in lobby or ended state');
       }
+      break;
+    }
+
+    case 'setHouseRules': {
+      const { player, room } = ctx;
+      if (player === null || room === null) {
+        sendError(ws, 'ERR_NOT_IN_ROOM', 'Not in a room');
+        return;
+      }
+      if (room.hostId !== player.id) {
+        sendError(ws, 'ERR_NOT_HOST', 'Only the host can change house rules');
+        return;
+      }
+      if (room.status !== 'lobby') {
+        sendError(ws, 'ERR_WRONG_STATE', 'House rules can only be changed in the lobby');
+        return;
+      }
+      const hrErr = validateHouseRules(room.variant, msg.houseRules);
+      if (hrErr !== null) {
+        sendError(ws, hrErr.code, hrErr.msg);
+        return;
+      }
+      room.houseRules = { ...canonicalHouseRules(room.variant), ...msg.houseRules };
+      broadcastLobby(room);
       break;
     }
 

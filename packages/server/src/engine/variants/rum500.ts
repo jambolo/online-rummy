@@ -1,4 +1,4 @@
-import type { Card, MeldKind, PlayerId } from '@online-rummy/shared';
+import type { Card, HouseRules, MeldKind, MeldOptions, PlayerId, Score500Options } from '@online-rummy/shared';
 import { RANK_INDEX } from '@online-rummy/shared';
 import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
@@ -12,6 +12,25 @@ import { formatLayoffError } from '../layoff-error.js';
 function r500(state: GameState): Rum500State {
   if (state.variant !== 'rum500') throw new Error('ERR_VARIANT_MISMATCH:rum500');
   return state.variantState;
+}
+
+// rules.md A.4.3: configured meld options for this game. aceEitherEnd is canonical
+// 500 Rummy; setsRequireDistinctSuits is the [PG-5] house rule.
+function meldOpts500(state: GameState): MeldOptions {
+  return {
+    aceHigh: false,
+    roundTheCorner: false,
+    aceEitherEnd: true,
+    setsRequireDistinctSuits: state.houseRules.setsRequireDistinctSuits === true,
+  };
+}
+
+// rules.md A.4.2: configured meld-scoring options (acesAlways15 [RP], low5Scoring).
+function score500Opts(state: GameState): Score500Options {
+  return {
+    acesAlways15: state.houseRules.acesAlways15 === true,
+    low5Scoring: state.houseRules.low5Scoring === true,
+  };
 }
 
 // 500-Rum-specific scoring helpers (runAceDirection, score500MeldCard) now live in
@@ -33,6 +52,26 @@ function deckCount(playerCount: number): number {
   return playerCount <= 4 ? 1 : 2;
 }
 
+// rules.md A.4.1: 2P deals 13 (10 under the deal10For2P house rule [PR]); 3+P deals 7.
+function dealRum500(
+  playerCount: number,
+  rng: RNG,
+  houseRules: HouseRules,
+): { hands: Card[][]; stock: Card[]; discard: Card[] } {
+  const decks = deckCount(playerCount);
+  const deck = buildShuffledDeck(rng, decks);
+  const base = dealCount(playerCount);
+  const count = playerCount === 2 && houseRules.deal10For2P === true ? 10 : base;
+
+  const hands: Card[][] = [];
+  for (let i = 0; i < playerCount; i++) {
+    hands.push(dealN(deck, count));
+  }
+  const top = deck.shift();
+  if (!top) throw new Error('ERR_DECK_EXHAUSTED');
+  return { hands, stock: deck, discard: [top] };
+}
+
 export const rum500Variant: VariantEngine = {
   id: 'rum500',
   // rules.md A.4.1: 2-8 players.
@@ -43,17 +82,9 @@ export const rum500Variant: VariantEngine = {
   roundTheCorner: false,
 
   deal(playerCount: number, rng: RNG) {
-    const decks = deckCount(playerCount);
-    const deck = buildShuffledDeck(rng, decks);
-    const count = dealCount(playerCount);
-
-    const hands: Card[][] = [];
-    for (let i = 0; i < playerCount; i++) {
-      hands.push(dealN(deck, count));
-    }
-    const top = deck.shift();
-    if (!top) throw new Error('ERR_DECK_EXHAUSTED');
-    return { hands, stock: deck, discard: [top] };
+    // Interface member stays canonical (no houseRules param) — createRum500Game calls
+    // dealRum500 directly so the deal10For2P house rule can be honored.
+    return dealRum500(playerCount, rng, {});
   },
 
   validateMeld(cards: Card[]): boolean {
@@ -97,15 +128,16 @@ export const rum500Variant: VariantEngine = {
         const meldCards = meld.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
         for (const c of meldCards) {
           const placer = state.meldedBy.get(c.id) ?? p.id;
-          result.set(placer, (result.get(placer) ?? 0) + score500MeldCard(c, meldCards));
+          result.set(placer, (result.get(placer) ?? 0) + score500MeldCard(c, meldCards, score500Opts(state)));
         }
       }
     }
 
     // Subtract hand value (aces in hand = 15 — rules.md A.4.2, [RP] locked pick simplification).
+    // rules.md A.4.2: hand aces stay 15; low5Scoring scores 2-9 in hand at 5.
     for (const p of state.players) {
       if (p.status === 'forfeited') continue;
-      const handVal = p.hand.reduce((s, c) => s + cardPoints(c, 15), 0);
+      const handVal = p.hand.reduce((s, c) => s + cardPoints(c, 15, { low5Scoring: state.houseRules.low5Scoring === true }), 0);
       result.set(p.id, (result.get(p.id) ?? 0) - handVal);
     }
 
@@ -122,7 +154,8 @@ export const rum500Variant: VariantEngine = {
 
   // ---- Lifecycle / actions (Phase 3 promotion) ----
 
-  createGame: (roomId, players, rng, firstPlayerIndex) => createRum500Game(roomId, players, rng, firstPlayerIndex),
+  createGame: (roomId, players, rng, firstPlayerIndex, houseRules) =>
+    createRum500Game(roomId, players, rng, firstPlayerIndex, houseRules),
 
   applyDraw: (state, playerId, from) => applyDraw(state, playerId, from),
   applyMeld: (state, playerId, cardIds) => {
@@ -158,14 +191,15 @@ export const rum500Variant: VariantEngine = {
     for (const p of state.players) {
       finalHands[p.id] = p.hand;
       meldCredits[p.id] = [];
-      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 15), 0);
+      // rules.md A.4.2: hand aces stay 15; low5Scoring scores 2-9 in hand at 5.
+      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 15, { low5Scoring: state.houseRules.low5Scoring === true }), 0);
     }
     for (const p of state.players) {
       for (const m of p.melds) {
         const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
         for (const card of meldCards) {
           const placer = state.meldedBy.get(card.id) ?? p.id;
-          (meldCredits[placer] ??= []).push({ card, pts: score500MeldCard(card, meldCards) });
+          (meldCredits[placer] ??= []).push({ card, pts: score500MeldCard(card, meldCards, score500Opts(state)) });
         }
       }
     }
@@ -180,9 +214,20 @@ export function createRum500Game(
   players: Array<{ id: string; name: string }>,
   rng: RNG,
   firstPlayerIndex?: number,
+  houseRules?: HouseRules,
 ): GameState & { variant: 'rum500' } {
-  const deal = rum500Variant.deal(players.length, rng);
-  return buildBaseState(roomId, 'rum500', players, deal, rng, 'draw', { mustMeldCardId: null }, firstPlayerIndex) as GameState & {
+  const deal = dealRum500(players.length, rng, houseRules ?? {});
+  return buildBaseState(
+    roomId,
+    'rum500',
+    players,
+    deal,
+    rng,
+    'draw',
+    { mustMeldCardId: null },
+    firstPlayerIndex,
+    houseRules,
+  ) as GameState & {
     variant: 'rum500';
   };
 }
@@ -205,12 +250,22 @@ export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 
   requireTurn(state, playerId);
   if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
   if (from === 'discard') {
-    // Single top-card draw: no must-meld obligation; drawn card cannot be re-discarded same turn.
     const top = state.discardPile[state.discardPile.length - 1];
     if (!top) throw new Error('ERR_DISCARD_EMPTY');
+    const player = state.players.find((p) => p.id === playerId)!;
+    const unified = state.houseRules.unifiedObligation === true;
+    // rules.md A.4.4 unifiedObligation house rule: a top-card draw is must-use, so
+    // refuse it when unsatisfiable (mirrors the pile-dive preflight — otherwise the
+    // obligation would soft-lock the hand).
+    if (unified && !canUseSelectedInMeldOrLayoff(state, [...player.hand, top], top)) {
+      throw new Error('ERR_NO_LEGAL_DIVE');
+    }
     state.discardPile.pop();
-    state.players.find((p) => p.id === playerId)!.hand.push(top);
+    player.hand.push(top);
+    // rules.md A.4.4: drawn top card cannot be re-discarded same turn.
     state.drewFromDiscardId = top.id;
+    // rules.md A.4.4 unifiedObligation: must-use also applies (both fields simultaneously).
+    if (unified) r500(state).mustMeldCardId = top.id;
   } else {
     if (state.stock.length === 0) throw new Error('ERR_STOCK_EMPTY');
     const card = state.stock.shift()!;
@@ -220,8 +275,9 @@ export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 
 }
 
 // rules.md A.4.4: pile dive — take selected card + everything above it, must use selected card.
-// If the selected card IS the top card, this degrades to a plain top-card draw (no must-use)
-// per rules.md A.4.4: "pile dive" is defined as picking a card below the top.
+// If the selected card IS the top card, this degrades to a plain top-card draw — no must-use
+// obligation UNLESS the unifiedObligation house rule is enabled, in which case a top-card pick
+// is must-use too (see mustUse below). "Pile dive" itself is always must-use regardless of flag.
 export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: string): { taken: Card[] } {
   requireTurn(state, playerId);
   if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
@@ -232,9 +288,11 @@ export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: 
   const player = state.players.find((p) => p.id === playerId)!;
   const selected = lookupCard(state, cardId);
 
-  if (!isTopOnly) {
-    // True pile dive — preflight so player cannot get stuck unable to meld/layoff the
-    // must-use card (rules.md A.4.4 obligation would otherwise be unsatisfiable).
+  // rules.md A.4.4: a true pile dive is always must-use; under the unifiedObligation
+  // house rule a top-card pick is too. Preflight any must-use draw so the obligation
+  // is never unsatisfiable.
+  const mustUse = !isTopOnly || state.houseRules.unifiedObligation === true;
+  if (mustUse) {
     const wouldTake = state.discardPile.slice(idx);
     if (!canUseSelectedInMeldOrLayoff(state, [...player.hand, ...wouldTake], selected)) {
       throw new Error('ERR_NO_LEGAL_DIVE');
@@ -244,9 +302,10 @@ export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: 
   const taken = state.discardPile.splice(idx);
   player.hand.push(...taken);
   if (isTopOnly) {
-    // rules.md A.4.4 simple top-card draw: cannot re-discard same turn, no must-use.
+    // rules.md A.4.4 simple top-card draw: cannot re-discard same turn.
     state.drewFromDiscardId = cardId;
-  } else {
+  }
+  if (mustUse) {
     r500(state).mustMeldCardId = cardId;
   }
   state.phase = 'meld';
@@ -258,15 +317,44 @@ export function applyDrawFromPile(state: GameState, playerId: PlayerId, cardId: 
 // onto any existing meld in play. Used by applyDrawFromPile and exposed for the client
 // modal to gray out unusable cards.
 export function canUseSelectedInMeldOrLayoff(state: GameState, available: Card[], selected: Card): boolean {
+  const others = available.filter((c) => c.id !== selected.id);
   for (const p of state.players) {
     for (const m of p.melds) {
       const meldCards = m.cardIds.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
-      if (rum500Variant.validateMeld([...meldCards, selected])) return true;
+      // Direct layoff onto this meld (set 4th card, or run end-extension).
+      if (coreMeldCheck([...meldCards, selected], meldOpts500(state))) return true;
+      // Chained run layoff (rules.md A.4.6): bridge from this run to the selected card
+      // using other available same-suit cards as intermediate layoffs. Sets never bridge.
+      if (m.kind === 'run' && canBridgeRunToSelected(meldCards, others, selected)) return true;
     }
   }
-  const others = available.filter((c) => c.id !== selected.id);
-  if (others.filter((c) => c.rank === selected.rank).length >= 2) return true;
+  const sameRank = others.filter((c) => c.rank === selected.rank);
+  if (state.houseRules.setsRequireDistinctSuits === true) {
+    // rules.md A.4.3 [PG-5]: preflight mirrors the distinct-suit set rule so a
+    // must-use obligation is never unsatisfiable.
+    const suits = new Set(sameRank.filter((c) => c.suit !== selected.suit).map((c) => c.suit));
+    if (suits.size >= 2) return true;
+  } else if (sameRank.length >= 2) {
+    return true;
+  }
   return canFormRunWith(others, selected);
+}
+
+// Chained run layoff reachability (rules.md A.4.6). Layoffs are monotonic — each valid
+// extension grows the run's rank interval by one at an end and never blocks another — so a
+// greedy fixpoint reaches the maximal interval coverable by the bridge pool, order-independent.
+// O(pool²) per run; no combinatorial search. Each run is tested with its own full copy of the
+// pool (cross-meld chaining is impossible: bridge cards are independently available).
+function canBridgeRunToSelected(meldCards: Card[], bridgePool: Card[], selected: Card): boolean {
+  const run = [...meldCards];
+  const pool = bridgePool.filter((c) => c.suit === selected.suit && c.id !== selected.id);
+  for (;;) {
+    if (rum500Variant.validateMeld([...run, selected])) return true;
+    const i = pool.findIndex((c) => rum500Variant.validateMeld([...run, c]));
+    if (i === -1) return false;
+    run.push(pool[i]!);
+    pool.splice(i, 1);
+  }
 }
 
 function canFormRunWith(others: Card[], selected: Card): boolean {
@@ -298,7 +386,7 @@ export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[
     return c;
   });
 
-  if (!rum500Variant.validateMeld(cards)) throw new Error('ERR_INVALID_MELD');
+  if (!coreMeldCheck(cards, meldOpts500(state))) throw new Error('ERR_INVALID_MELD');
 
   // rules.md A.4.8: 500 Rummy player cannot play their last card — must retain one to
   // discard. (House rule "Last card may be played" would lift this; not scaffolded.)
@@ -351,7 +439,7 @@ export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string
   if (!targetMeld) throw new Error('ERR_MELD_NOT_FOUND');
 
   const existingCards = targetMeld.cardIds.map((id) => lookupCard(state, id));
-  if (!rum500Variant.validateMeld([...existingCards, card])) {
+  if (!coreMeldCheck([...existingCards, card], meldOpts500(state))) {
     throw new Error(formatLayoffError(targetMeld, existingCards, card));
   }
 

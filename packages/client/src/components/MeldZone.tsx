@@ -19,6 +19,12 @@ function canLayoffOnMeld(meld: Meld, newCard: Card): boolean {
 function computeInterimScores(publicState: PublicState, resolveCard: (id: string) => Card | undefined): Map<string, number> | null {
   if (publicState.variant !== 'rum500') return null;
   const is500 = true;
+  // rules.md A.4.2: mirror the engine's configured scoring so the interim total
+  // matches authoritative server scores.
+  const opts = {
+    acesAlways15: publicState.houseRules.acesAlways15 === true,
+    low5Scoring: publicState.houseRules.low5Scoring === true,
+  };
   const scores = new Map<string, number>();
   for (const player of publicState.players) scores.set(player.id, 0);
 
@@ -27,7 +33,7 @@ function computeInterimScores(publicState: PublicState, resolveCard: (id: string
       const meldCards = meld.cardIds.map((id, i) => meld.cards?.[i] ?? resolveCard(id)).filter((c): c is Card => c !== undefined);
       for (const card of meldCards) {
         const placer = publicState.meldedBy[card.id] ?? meld.ownerId;
-        const pts = is500 ? score500MeldCard(card, meldCards) : cardPoints(card, 1);
+        const pts = is500 ? score500MeldCard(card, meldCards, opts) : cardPoints(card, 1);
         scores.set(placer, (scores.get(placer) ?? 0) + pts);
       }
     }
