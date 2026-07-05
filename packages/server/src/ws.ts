@@ -96,9 +96,7 @@ function validateHouseRules(variant: Variant, hr: HouseRules): { code: string; m
     if (value === undefined) continue;
     const def = defs.find((d) => d.id === id);
     if (def === undefined) return { code: 'ERR_INVALID_HOUSE_RULE', msg: `Unknown house rule: ${id}` };
-    const typeOk = def.kind === 'toggle'
-      ? typeof value === 'boolean'
-      : (def.choices ?? []).some((c) => c.value === value);
+    const typeOk = def.kind === 'toggle' ? typeof value === 'boolean' : (def.choices ?? []).some((c) => c.value === value);
     if (!typeOk) return { code: 'ERR_INVALID_HOUSE_RULE', msg: `Invalid value for house rule: ${id}` };
     if (value !== def.canonical && !def.supported) {
       return { code: 'ERR_UNSUPPORTED_HOUSE_RULE', msg: `House rule not yet available: ${id}` };

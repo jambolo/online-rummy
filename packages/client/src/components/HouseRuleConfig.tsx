@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { HouseRuleDef, HouseRules, Variant } from '@online-rummy/shared';
+import type { HouseRules, Variant } from '@online-rummy/shared';
 import { canonicalHouseRules, isDeviation, supportedDefs } from '@online-rummy/shared';
 import { t, sectionLabel } from '../theme/tokens';
 
@@ -49,7 +49,9 @@ export default function HouseRuleConfig({ variant, value, onChange, collapsible 
             return (
               <div key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13 }}>
                 <span style={{ flex: 1 }}>{def.label}</span>
-                <span title={def.description} aria-label={def.description} style={{ color: t.text50, cursor: 'help' }}>ⓘ</span>
+                <span title={def.description} aria-label={def.description} style={{ color: t.text50, cursor: 'help' }}>
+                  ⓘ
+                </span>
                 {(def.choices ?? []).map((choice) => (
                   <button
                     key={String(choice.value)}
@@ -84,7 +86,9 @@ export default function HouseRuleConfig({ variant, value, onChange, collapsible 
                 onChange={(e) => onChange({ ...value, [def.id]: e.target.checked })}
               />
               <span style={{ flex: 1 }}>{def.label}</span>
-              <span title={def.description} aria-label={def.description} style={{ color: t.text50, cursor: 'help' }}>ⓘ</span>
+              <span title={def.description} aria-label={def.description} style={{ color: t.text50, cursor: 'help' }}>
+                ⓘ
+              </span>
               {deviates && <DeviationChip />}
             </label>
           );

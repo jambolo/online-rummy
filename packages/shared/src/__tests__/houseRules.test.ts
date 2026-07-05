@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Variant } from '../cards.js';
-import {
-  HOUSE_RULE_DEFS,
-  canonicalHouseRules,
-  isDeviation,
-  supportedDefs,
-  type HouseRuleId,
-} from '../houseRules.js';
+import { HOUSE_RULE_DEFS, canonicalHouseRules, isDeviation, supportedDefs, type HouseRuleId } from '../houseRules.js';
 
 describe('HOUSE_RULE_DEFS', () => {
   it('lists the v1 basic ids in order', () => {
@@ -48,8 +42,7 @@ describe('HOUSE_RULE_DEFS', () => {
   });
 
   it('maps each id to its rules.md section', () => {
-    const ref = (v: Variant, id: HouseRuleId): string | undefined =>
-      HOUSE_RULE_DEFS[v].find((d) => d.id === id)?.rulesRef;
+    const ref = (v: Variant, id: HouseRuleId): string | undefined => HOUSE_RULE_DEFS[v].find((d) => d.id === id)?.rulesRef;
     expect(ref('basic', 'aceEitherEnd')).toBe('A.1.4');
     expect(ref('basic', 'roundTheCorner')).toBe('A.1.4');
     expect(ref('basic', 'maxOneMeldPerTurn')).toBe('A.1.6');

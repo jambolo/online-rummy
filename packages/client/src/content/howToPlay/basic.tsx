@@ -101,8 +101,8 @@ export default function BasicRules() {
       <section>
         <h3 style={h3Style}>House rules</h3>
         <p style={pStyle}>
-          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are
-          listed under &ldquo;Table house rules&rdquo; below. Canonical defaults:
+          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are listed
+          under &ldquo;Table house rules&rdquo; below. Canonical defaults:
         </p>
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>

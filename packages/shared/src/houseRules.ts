@@ -44,8 +44,7 @@ export const HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]> = {
     {
       id: 'aceEitherEnd',
       label: 'Ace either end',
-      description:
-        'Aces may end a run high or low, so both A-2-3 and Q-K-A are valid runs. Unmelded aces then score 15.',
+      description: 'Aces may end a run high or low, so both A-2-3 and Q-K-A are valid runs. Unmelded aces then score 15.',
       canonical: false,
       kind: 'toggle',
       rulesRef: 'A.1.4', // rules.md A.1.4
@@ -73,8 +72,7 @@ export const HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]> = {
     {
       id: 'layoffRequiresPriorMeld',
       label: 'Layoff requires a prior meld',
-      description:
-        'A player may lay off onto melds only after having placed at least one meld of their own.',
+      description: 'A player may lay off onto melds only after having placed at least one meld of their own.',
       canonical: false,
       kind: 'toggle',
       rulesRef: 'A.1.6', // rules.md A.1.6
@@ -83,8 +81,7 @@ export const HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]> = {
     {
       id: 'goingRummyFlat10',
       label: 'Going Rummy flat bonus',
-      description:
-        'Going Rummy scores a flat +10 for the winner instead of doubling the value of each losing hand.',
+      description: 'Going Rummy scores a flat +10 for the winner instead of doubling the value of each losing hand.',
       canonical: false,
       kind: 'toggle',
       rulesRef: 'A.1.7', // rules.md A.1.7
@@ -104,8 +101,7 @@ export const HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]> = {
     {
       id: 'low5Scoring',
       label: 'Low cards score 5',
-      description:
-        'Number cards 2 through 9 score 5 points; an ace melded in A-2-3 scores 5.',
+      description: 'Number cards 2 through 9 score 5 points; an ace melded in A-2-3 scores 5.',
       canonical: false,
       kind: 'toggle',
       rulesRef: 'A.4.2', // rules.md A.4.2
@@ -114,8 +110,7 @@ export const HOUSE_RULE_DEFS: Record<Variant, HouseRuleDef[]> = {
     {
       id: 'unifiedObligation',
       label: 'Unified draw obligation',
-      description:
-        'Drawing the single top discard also obliges you to use that card in a meld this turn.',
+      description: 'Drawing the single top discard also obliges you to use that card in a meld this turn.',
       canonical: false,
       kind: 'toggle',
       rulesRef: 'A.4.4', // rules.md A.4.4
@@ -163,11 +158,7 @@ export function canonicalHouseRules(variant: Variant): HouseRules {
 
 // True when `value` differs from the registry canonical for (variant, id).
 // An id not present in the variation's registry is treated as not a deviation.
-export function isDeviation(
-  variant: Variant,
-  id: HouseRuleId,
-  value: HouseRuleValue,
-): boolean {
+export function isDeviation(variant: Variant, id: HouseRuleId, value: HouseRuleValue): boolean {
   const def = HOUSE_RULE_DEFS[variant].find((d) => d.id === id);
   return def ? value !== def.canonical : false;
 }

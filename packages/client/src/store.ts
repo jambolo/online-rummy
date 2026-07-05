@@ -23,7 +23,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_INVALID_VARIANT: 'Unknown game variation.',
   ERR_NOT_IMPLEMENTED: "That game variation isn't implemented yet.",
   ERR_MUST_USE_PILE_CARD: 'You drew a card from the discard pile — you must meld or lay it off before discarding.',
-  ERR_NO_LEGAL_DIVE: "You can't take that card from the discard pile — there's no legal meld or lay-off for it with your current hand.",
+  ERR_NO_LEGAL_DIVE:
+    "You can't take that card from the discard pile — there's no legal meld or lay-off for it with your current hand.",
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
   ERR_DISCARD_EMPTY: 'The discard pile is empty.',
   ERR_STOCK_EMPTY: 'The stock pile is empty.',

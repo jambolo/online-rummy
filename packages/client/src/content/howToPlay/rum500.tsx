@@ -119,8 +119,8 @@ export default function Rum500Rules() {
       <section>
         <h3 style={h3Style}>House rules</h3>
         <p style={pStyle}>
-          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are
-          listed under &ldquo;Table house rules&rdquo; below. Canonical defaults:
+          The host can enable house rules for this game variation when creating a room or in the lobby. Active deviations are listed
+          under &ldquo;Table house rules&rdquo; below. Canonical defaults:
         </p>
         <ul style={{ ...ulStyle, marginBottom: 0 }}>
           <li>
@@ -135,15 +135,14 @@ export default function Rum500Rules() {
             (2–9) at <strong>5</strong>.
           </li>
           <li>
-            Top-discard draw: cannot discard that card the same turn, and by default no meld is required — the <em>Unified draw
-            obligation</em> house rule makes it must-use like a pile dive.
+            Top-discard draw: cannot discard that card the same turn, and by default no meld is required — the{' '}
+            <em>Unified draw obligation</em> house rule makes it must-use like a pile dive.
           </li>
           <li>
             <strong>No own-meld requirement</strong> — you can lay off onto anyone&apos;s meld immediately.
           </li>
           <li>
-            Game target: <strong>500 cumulative points</strong>. If multiple players cross 500 in the same hand, highest score
-            wins.
+            Game target: <strong>500 cumulative points</strong>. If multiple players cross 500 in the same hand, highest score wins.
           </li>
         </ul>
       </section>

@@ -36,7 +36,15 @@ export type EventKind =
 
 export type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }
-  | { t: 'lobby'; roomCode: string; variant: Variant; hostId: PlayerId; players: LobbyPlayer[]; sessionId: string; houseRules: HouseRules }
+  | {
+      t: 'lobby';
+      roomCode: string;
+      variant: Variant;
+      hostId: PlayerId;
+      players: LobbyPlayer[];
+      sessionId: string;
+      houseRules: HouseRules;
+    }
   | { t: 'event'; kind: EventKind; playerId: string; data?: unknown }
   | { t: 'error'; code: string; msg: string }
   | { t: 'keepalive'; from: PlayerId } // relayed idle keep-alive from another room player
