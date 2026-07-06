@@ -1,20 +1,9 @@
 import { useState } from 'react';
-import type { HouseRuleDef, HouseRuleId, HouseRules, HouseRuleValue, Variant } from '@online-rummy/shared';
+import type { HouseRuleDef, HouseRules, HouseRuleValue, Variant } from '@online-rummy/shared';
 import { HOUSE_RULE_DEFS } from '@online-rummy/shared';
 import Modal from './Modal';
 import { t } from '../theme/tokens';
 import { variationLabel } from '../theme/variations';
-
-// House rules that change scoring — ScoreOverlay shows its deviation line only for
-// these. goingRummyFlat10 (rules.md A.1.7), acesAlways15 / low5Scoring (rules.md
-// A.4.2), and the basic ace flags (rules.md A.1.8: unmelded ace = 15 when enabled).
-export const SCORING_HOUSE_RULE_IDS: HouseRuleId[] = [
-  'goingRummyFlat10',
-  'acesAlways15',
-  'low5Scoring',
-  'aceEitherEnd',
-  'roundTheCorner',
-];
 
 // Deviation = configured value present and !== registry canonical. Diffs the
 // full registry so newly registered house rules surface with no per-rule UI work.
@@ -47,8 +36,7 @@ export default function HouseRuleSummary({ variant, houseRules }: { variant: Var
           style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 13, padding: '3px 0', flexWrap: 'wrap' }}
         >
           <span>{def.label}</span>
-          <span style={{ fontWeight: t.weightBold }}>— {fmt(houseRules[def.id])}</span>
-          <span style={{ color: t.text50 }}>(was {fmt(def.canonical)})</span>
+          {houseRules[def.id] !== true && <span style={{ fontWeight: t.weightBold }}>— {fmt(houseRules[def.id])}</span>}
           <span title={def.description} aria-label={def.description} style={{ color: t.text50, cursor: 'help' }}>
             ⓘ
           </span>

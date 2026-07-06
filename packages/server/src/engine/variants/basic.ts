@@ -4,14 +4,7 @@ import type { RNG } from '../../rng.js';
 import { buildShuffledDeck, dealN } from '../deck.js';
 import { cardPoints, validateMeld as coreMeldCheck } from '@online-rummy/shared';
 import type { BasicState, GameState, ScoreSheet, VariantEngine, WonHandData } from '../types.js';
-import {
-  advanceTurn as baseAdvanceTurn,
-  buildBaseState,
-  detectMeldKind,
-  lookupCard,
-  makeMeldId,
-  requireTurn,
-} from '../util.js';
+import { advanceTurn as baseAdvanceTurn, buildBaseState, detectMeldKind, lookupCard, makeMeldId, requireTurn } from '../util.js';
 import { formatLayoffError } from '../layoff-error.js';
 
 // rules.md A.1 — Basic Rummy (Rum)
@@ -231,6 +224,22 @@ export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 
   state.phase = 'meld';
 }
 
+// Display order for runs. Ascending RANK_INDEX (A=0) misorders wrap runs under the
+// roundTheCorner house rule (K-A-2 → A-2-K) and ace-high runs under aceEitherEnd
+// (Q-K-A → A-Q-K). Sort ascending, then rotate so the sequence starts after the
+// single circular gap — run validation guarantees at most one.
+function sortRunCardIds(state: GameState, cardIds: string[]): void {
+  cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
+  for (let i = 1; i < cardIds.length; i++) {
+    const gap =
+      RANK_INDEX[lookupCard(state, cardIds[i] as string).rank] - RANK_INDEX[lookupCard(state, cardIds[i - 1] as string).rank];
+    if (gap > 1) {
+      cardIds.push(...cardIds.splice(0, i));
+      return;
+    }
+  }
+}
+
 // rules.md A.1.6 step 2
 export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[]): boolean {
   const player = requireTurn(state, playerId);
@@ -253,7 +262,7 @@ export function applyMeld(state: GameState, playerId: PlayerId, cardIds: string[
   const meld = { id: makeMeldId(), kind: detectMeldKind(cards), cardIds: [...cardIds], ownerId: playerId };
   // Sort runs by rank so display order always matches card sequence.
   if (meld.kind === 'run') {
-    meld.cardIds.sort((a, b) => RANK_INDEX[lookupCard(state, a).rank] - RANK_INDEX[lookupCard(state, b).rank]);
+    sortRunCardIds(state, meld.cardIds);
   }
   player.melds.push(meld);
   for (const id of cardIds) state.meldedBy.set(id, playerId);
@@ -302,11 +311,7 @@ export function applyLayoff(state: GameState, playerId: PlayerId, meldId: string
   state.meldedBy.set(cardId, playerId);
   // Sort runs by rank so the display order matches card sequence.
   if (targetMeld.kind === 'run') {
-    targetMeld.cardIds.sort((a, b) => {
-      const ca = lookupCard(state, a);
-      const cb = lookupCard(state, b);
-      return RANK_INDEX[ca.rank] - RANK_INDEX[cb.rank];
-    });
+    sortRunCardIds(state, targetMeld.cardIds);
   }
 
   // rules.md A.1.7: player goes out immediately if hand is now empty.

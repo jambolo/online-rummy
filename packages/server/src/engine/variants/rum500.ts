@@ -53,11 +53,7 @@ function deckCount(playerCount: number): number {
 }
 
 // rules.md A.4.1: 2P deals 13 (10 under the deal10For2P house rule [PR]); 3+P deals 7.
-function dealRum500(
-  playerCount: number,
-  rng: RNG,
-  houseRules: HouseRules,
-): { hands: Card[][]; stock: Card[]; discard: Card[] } {
+function dealRum500(playerCount: number, rng: RNG, houseRules: HouseRules): { hands: Card[][]; stock: Card[]; discard: Card[] } {
   const decks = deckCount(playerCount);
   const deck = buildShuffledDeck(rng, decks);
   const base = dealCount(playerCount);
@@ -192,7 +188,10 @@ export const rum500Variant: VariantEngine = {
       finalHands[p.id] = p.hand;
       meldCredits[p.id] = [];
       // rules.md A.4.2: hand aces stay 15; low5Scoring scores 2-9 in hand at 5.
-      handDeadwood[p.id] = p.hand.reduce((s, c) => s + cardPoints(c, 15, { low5Scoring: state.houseRules.low5Scoring === true }), 0);
+      handDeadwood[p.id] = p.hand.reduce(
+        (s, c) => s + cardPoints(c, 15, { low5Scoring: state.houseRules.low5Scoring === true }),
+        0,
+      );
     }
     for (const p of state.players) {
       for (const m of p.melds) {

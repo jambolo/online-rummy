@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
 import type { HouseRules, PublicState, PrivateState } from '@online-rummy/shared';
 import { send as wsSend, type ConnStatus } from './net/ws';
+import { soundForMessage } from './audio/soundMap';
+import { playSound } from './audio/sounds';
 
 const ERROR_MESSAGES: Record<string, string> = {
   ERR_NOT_YOUR_TURN: "It's not your turn.",
@@ -23,7 +25,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_INVALID_VARIANT: 'Unknown game variation.',
   ERR_NOT_IMPLEMENTED: "That game variation isn't implemented yet.",
   ERR_MUST_USE_PILE_CARD: 'You drew a card from the discard pile — you must meld or lay it off before discarding.',
-  ERR_NO_LEGAL_DIVE: "You can't take that card from the discard pile — there's no legal meld or lay-off for it with your current hand.",
+  ERR_NO_LEGAL_DIVE:
+    "You can't take that card from the discard pile — there's no legal meld or lay-off for it with your current hand.",
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
   ERR_DISCARD_EMPTY: 'The discard pile is empty.',
   ERR_STOCK_EMPTY: 'The stock pile is empty.',
@@ -253,6 +256,21 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   setHouseRules: (hr) => wsSend({ t: 'setHouseRules', houseRules: hr }),
 
   handleMessage: (msg) => {
+    // Sound decision runs before the switch mutates the store, so the context
+    // reflects genuinely-previous state (turn changes, lobby growth, etc.).
+    const prev = _get();
+    const myName =
+      prev.publicState?.players.find((p) => p.id === prev.myPlayerId)?.name ??
+      prev.lobbyPlayers.find((p) => p.id === prev.myPlayerId)?.name ??
+      null;
+    const sound = soundForMessage(msg, {
+      prevPublic: prev.publicState,
+      myPlayerId: prev.myPlayerId,
+      myName,
+      prevLobbyCount: prev.lobbyPlayers.length,
+    });
+    if (sound !== null) playSound(sound);
+
     switch (msg.t) {
       case 'lobby':
         set((s) => {

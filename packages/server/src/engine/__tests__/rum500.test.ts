@@ -962,12 +962,14 @@ describe('rum500 chained run layoff preflight (rules.md A.4.6)', () => {
   // Register `cards` and seat a run meld owned by `ownerId`.
   function seatRun(state: ReturnType<typeof twoPlayerGame>, ownerId: string, meldId: string, cards: Card[]): void {
     cards.forEach((card) => state.cardRegistry.set(card.id, card));
-    state.players.find((p) => p.id === ownerId)!.melds.push({
-      id: meldId,
-      kind: 'run',
-      cardIds: cards.map((c) => c.id),
-      ownerId,
-    });
+    state.players
+      .find((p) => p.id === ownerId)!
+      .melds.push({
+        id: meldId,
+        kind: 'run',
+        cardIds: cards.map((c) => c.id),
+        ownerId,
+      });
   }
 
   // Stack the discard pile bottom-first and register every card.
