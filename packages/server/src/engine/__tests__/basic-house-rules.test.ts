@@ -107,6 +107,77 @@ describe('roundTheCorner house rule (rules.md A.1.4, decision D4)', () => {
   });
 });
 
+// ---- run display order: wrap and ace-high runs sort in sequence order ----
+
+describe('run cardId display order under house rules (rules.md A.1.4)', () => {
+  it('roundTheCorner: K-A-2 melds in K,A,2 order (not A,2,K)', () => {
+    const state = twoPlayerGame({ roundTheCorner: true });
+    applyDraw(state, 'p1', 'stock');
+    const cards = [c('A', 'H', 'ka22'), c('2', 'H', 'ka23'), c('K', 'H', 'ka21')];
+    cards.forEach((card) => {
+      state.players[0]!.hand.push(card);
+      state.cardRegistry.set(card.id, card);
+    });
+    applyMeld(state, 'p1', ['ka22', 'ka23', 'ka21']);
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['ka21', 'ka22', 'ka23']);
+  });
+
+  it('aceEitherEnd: Q-K-A melds in Q,K,A order (not A,Q,K)', () => {
+    const state = twoPlayerGame({ aceEitherEnd: true });
+    applyDraw(state, 'p1', 'stock');
+    const cards = [c('A', 'H', 'qka3'), c('Q', 'H', 'qka1'), c('K', 'H', 'qka2')];
+    cards.forEach((card) => {
+      state.players[0]!.hand.push(card);
+      state.cardRegistry.set(card.id, card);
+    });
+    applyMeld(state, 'p1', ['qka3', 'qka1', 'qka2']);
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['qka1', 'qka2', 'qka3']);
+  });
+
+  it('roundTheCorner: Q-K-A melds in Q,K,A order (not A,Q,K)', () => {
+    const state = twoPlayerGame({ roundTheCorner: true });
+    applyDraw(state, 'p1', 'stock');
+    const cards = [c('A', 'H', 'qka3'), c('Q', 'H', 'qka1'), c('K', 'H', 'qka2')];
+    cards.forEach((card) => {
+      state.players[0]!.hand.push(card);
+      state.cardRegistry.set(card.id, card);
+    });
+    applyMeld(state, 'p1', ['qka3', 'qka1', 'qka2']);
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['qka1', 'qka2', 'qka3']);
+  });
+
+  it('roundTheCorner: laying off Q onto K-A-2 yields Q,K,A,2 order', () => {
+    const state = twoPlayerGame({ roundTheCorner: true });
+    applyDraw(state, 'p1', 'stock');
+    const cards = [c('K', 'H', 'ka21'), c('A', 'H', 'ka22'), c('2', 'H', 'ka23')];
+    cards.forEach((card) => {
+      state.players[0]!.hand.push(card);
+      state.cardRegistry.set(card.id, card);
+    });
+    applyMeld(state, 'p1', ['ka21', 'ka22', 'ka23']);
+    const meldId = state.players[0]!.melds[0]!.id;
+
+    const q = c('Q', 'H', 'layoffQ');
+    state.players[0]!.hand.push(q);
+    state.cardRegistry.set(q.id, q);
+
+    applyLayoff(state, 'p1', meldId, 'layoffQ');
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['layoffQ', 'ka21', 'ka22', 'ka23']);
+  });
+
+  it('canonical contiguous run keeps ascending order unchanged', () => {
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const cards = [c('6', 'H', 'r6'), c('4', 'H', 'r4'), c('5', 'H', 'r5')];
+    cards.forEach((card) => {
+      state.players[0]!.hand.push(card);
+      state.cardRegistry.set(card.id, card);
+    });
+    applyMeld(state, 'p1', ['r6', 'r4', 'r5']);
+    expect(state.players[0]!.melds[0]!.cardIds).toEqual(['r4', 'r5', 'r6']);
+  });
+});
+
 // ---- layoff: house rule widens which cards may extend an existing run ----
 
 describe('layoff under house rules (rules.md A.1.6 step 3)', () => {

@@ -4,7 +4,6 @@ import { useAppStore } from '../store';
 import CardComponent from './Card';
 import Modal from './Modal';
 import LeaveButton from './LeaveButton';
-import { SCORING_HOUSE_RULE_IDS, deviations } from './HouseRuleSummary';
 import { t } from '../theme/tokens';
 import { variationAccent, variationLabel } from '../theme/variations';
 
@@ -149,16 +148,6 @@ export default function ScoreOverlay() {
       >
         {isGameOver ? `A player reached ${gameTarget} pts` : `Game target: ${gameTarget} pts`}
       </div>
-
-      {(() => {
-        const scoringDevs = deviations(publicState.variant, hr).filter((d) => SCORING_HOUSE_RULE_IDS.includes(d.id));
-        if (scoringDevs.length === 0) return null;
-        return (
-          <div style={{ textAlign: 'center', fontSize: 11, color: t.accentAttention, marginBottom: 16 }}>
-            ⚖ House rules affected scoring: {scoringDevs.map((d) => d.label).join(' · ')}
-          </div>
-        );
-      })()}
 
       {sorted.map((p, i) => {
         const prev = prevScores[p.id] ?? 0;

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
 import type { HouseRules, PublicState, PrivateState } from '@online-rummy/shared';
 import { send as wsSend, type ConnStatus } from './net/ws';
+import { soundForMessage } from './audio/soundMap';
+import { playSound } from './audio/sounds';
 
 const ERROR_MESSAGES: Record<string, string> = {
   ERR_NOT_YOUR_TURN: "It's not your turn.",
@@ -254,6 +256,21 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   setHouseRules: (hr) => wsSend({ t: 'setHouseRules', houseRules: hr }),
 
   handleMessage: (msg) => {
+    // Sound decision runs before the switch mutates the store, so the context
+    // reflects genuinely-previous state (turn changes, lobby growth, etc.).
+    const prev = _get();
+    const myName =
+      prev.publicState?.players.find((p) => p.id === prev.myPlayerId)?.name ??
+      prev.lobbyPlayers.find((p) => p.id === prev.myPlayerId)?.name ??
+      null;
+    const sound = soundForMessage(msg, {
+      prevPublic: prev.publicState,
+      myPlayerId: prev.myPlayerId,
+      myName,
+      prevLobbyCount: prev.lobbyPlayers.length,
+    });
+    if (sound !== null) playSound(sound);
+
     switch (msg.t) {
       case 'lobby':
         set((s) => {

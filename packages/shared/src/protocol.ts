@@ -25,6 +25,8 @@ export type EventKind =
   | 'melded'
   | 'laidOff'
   | 'discarded'
+  | 'knocked' // gin only — a player knocked or went gin (rules.md A.2.4)
+  | 'passedUpcard' // gin only — a player declined the initial upcard offer (rules.md A.2.2)
   | 'wonHand'
   | 'handCancelled' // gin only — stock-depletion cancelled hand (rules.md A.2.3)
   | 'playerLeft' // a player left the room via the leave button; game cancelled, all return to start page
@@ -33,6 +35,9 @@ export type EventKind =
   | 'forfeit'
   | 'gameOver'
   | 'gameStarted';
+
+// Data payload of the 'drew' event; 'pile' = 500 Rummy pile dive (rules.md A.4.4).
+export type DrewEventData = { from: 'stock' | 'discard' | 'pile' };
 
 export type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }

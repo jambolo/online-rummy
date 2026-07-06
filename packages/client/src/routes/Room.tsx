@@ -11,6 +11,7 @@ import ConnectionBanner from '../components/ConnectionBanner';
 import DisconnectWarningModal from '../components/DisconnectWarningModal';
 import OpponentStrip from '../components/OpponentStrip';
 import LeaveButton from '../components/LeaveButton';
+import SoundToggle from '../components/SoundToggle';
 import ScoreOverlay from '../components/ScoreOverlay';
 import Lobby from './Lobby';
 import { t } from '../theme/tokens';
@@ -97,6 +98,7 @@ export default function Room() {
         <div style={{ flex: 1 }}>
           <OpponentStrip />
         </div>
+        <SoundToggle />
         <button
           onClick={() => setShowHelp(true)}
           style={{

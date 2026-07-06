@@ -1,5 +1,6 @@
 import { useAppStore } from '../store';
 import LeaveButton from '../components/LeaveButton';
+import SoundToggle from '../components/SoundToggle';
 import HouseRuleConfig from '../components/HouseRuleConfig';
 import HouseRuleSummary from '../components/HouseRuleSummary';
 import { t, sectionLabel } from '../theme/tokens';
@@ -121,7 +122,8 @@ export default function Lobby({ onShowHelp }: { onShowHelp: () => void }) {
           How to Play
         </button>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, gap: 8 }}>
+          <SoundToggle />
           <LeaveButton style={{ width: '100%' }} />
         </div>
       </div>

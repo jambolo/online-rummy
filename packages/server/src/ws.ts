@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
-import type { C2S, Card, S2C, PublicState, HouseRules, Variant } from '@online-rummy/shared';
+import type { C2S, Card, DrewEventData, S2C, PublicState, HouseRules, Variant } from '@online-rummy/shared';
 import { HOUSE_RULE_DEFS, canonicalHouseRules } from '@online-rummy/shared';
 import {
   createRoom,
@@ -270,6 +270,41 @@ function maybeStartIdleTimer(room: Room): void {
 }
 
 // --- Message handlers ---
+
+// Map a successful game action to its broadcast event. Emitted before the state
+// broadcast so clients can key sounds/animations off events without diffing state
+// (see docs/client-server-protocol.md 'event').
+type GameActionC2S = Extract<
+  C2S,
+  { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' }
+>;
+function actionEvent(msg: GameActionC2S, playerId: string): S2C {
+  switch (msg.t) {
+    case 'draw':
+      // Inbound C2S is cast without runtime validation and the engines treat any
+      // non-'discard' value as a stock draw — normalize rather than echoing
+      // unvalidated client input into a room-wide broadcast.
+      return {
+        t: 'event',
+        kind: 'drew',
+        playerId,
+        data: { from: msg.from === 'discard' ? 'discard' : 'stock' } satisfies DrewEventData,
+      };
+    case 'drawFromPile':
+      return { t: 'event', kind: 'drew', playerId, data: { from: 'pile' } satisfies DrewEventData };
+    case 'meld':
+      return { t: 'event', kind: 'melded', playerId };
+    case 'layoff':
+    case 'ginLayoff':
+      return { t: 'event', kind: 'laidOff', playerId };
+    case 'discard':
+      return { t: 'event', kind: 'discarded', playerId };
+    case 'knock':
+      return { t: 'event', kind: 'knocked', playerId };
+    case 'passUpcard':
+      return { t: 'event', kind: 'passedUpcard', playerId };
+  }
+}
 
 function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
   switch (msg.t) {
@@ -564,6 +599,7 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       if (p === null) break;
       try {
         const result = applyAction(p.state, p.player.id, msg);
+        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id));
         switch (result.kind) {
           case 'state':
             broadcastState(p.room, p.state, p.player.id);

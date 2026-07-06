@@ -19,4 +19,11 @@ export default tseslint.config(
     plugins: { 'react-hooks': reactHooks },
     rules: reactHooks.configs.recommended.rules,
   },
+  {
+    // Plain Node scripts (e.g. the sound-asset generator) — not covered by tsconfig.
+    files: ['packages/*/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { Buffer: 'readonly', console: 'readonly', process: 'readonly' },
+    },
+  },
 );

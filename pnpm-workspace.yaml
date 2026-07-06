@@ -3,5 +3,10 @@ packages:
   - packages/server
   - packages/client
 
+allowBuilds:
+  # ffmpeg-static's postinstall downloads the ffmpeg binary (dev-time sound-asset
+  # processing only — see docs/sound-effects-sourced-audio-plan.md).
+  ffmpeg-static: true
+
 overrides:
   semver: "7.8.0"
