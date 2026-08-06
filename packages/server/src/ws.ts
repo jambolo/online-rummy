@@ -1,7 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'node:http';
-import type { C2S, Card, DrewEventData, S2C, PublicState, HouseRules, Variant } from '@online-rummy/shared';
+import type {
+  C2S,
+  Card,
+  DiscardedEventData,
+  DrewEventData,
+  KnockedEventData,
+  LaidOffEventData,
+  MeldedEventData,
+  S2C,
+  PublicState,
+  HouseRules,
+  Variant,
+} from '@online-rummy/shared';
 import { HOUSE_RULE_DEFS, canonicalHouseRules } from '@online-rummy/shared';
 import {
   createRoom,
@@ -278,29 +290,70 @@ type GameActionC2S = Extract<
   C2S,
   { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' }
 >;
-function actionEvent(msg: GameActionC2S, playerId: string): S2C {
+// cardRegistry holds every card for the whole game, so ids still resolve after the action
+// has moved them between hand, melds and pile.
+function resolveCards(state: GameState, ids: string[]): Card[] {
+  return ids.map((id) => state.cardRegistry.get(id)).filter((c): c is Card => c !== undefined);
+}
+
+// Card payloads name only cards that are already public — the face-up discard pile and
+// cards placed on the table. A stock draw and the Gin knock's face-down discard are never
+// named (rules.md A.2.4). `pileBefore` is the discard pile as it stood before the action:
+// a draw removes what it takes, so the post-action state can no longer name it.
+function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pileBefore: Card[]): S2C {
   switch (msg.t) {
-    case 'draw':
+    case 'draw': {
       // Inbound C2S is cast without runtime validation and the engines treat any
       // non-'discard' value as a stock draw — normalize rather than echoing
       // unvalidated client input into a room-wide broadcast.
+      const from = msg.from === 'discard' ? 'discard' : 'stock';
+      const upcard = pileBefore[pileBefore.length - 1];
+      const data: DrewEventData = from === 'discard' && upcard !== undefined ? { from, cards: [upcard] } : { from };
+      return { t: 'event', kind: 'drew', playerId, data };
+    }
+    case 'drawFromPile': {
+      // A dive takes the selected card and everything above it (rules.md A.4.4).
+      const idx = pileBefore.findIndex((c) => c.id === msg.cardId);
+      const cards = idx === -1 ? [] : pileBefore.slice(idx);
+      return { t: 'event', kind: 'drew', playerId, data: { from: 'pile', cards } satisfies DrewEventData };
+    }
+    case 'meld':
       return {
         t: 'event',
-        kind: 'drew',
+        kind: 'melded',
         playerId,
-        data: { from: msg.from === 'discard' ? 'discard' : 'stock' } satisfies DrewEventData,
+        data: { cards: resolveCards(state, msg.cardIds) } satisfies MeldedEventData,
       };
-    case 'drawFromPile':
-      return { t: 'event', kind: 'drew', playerId, data: { from: 'pile' } satisfies DrewEventData };
-    case 'meld':
-      return { t: 'event', kind: 'melded', playerId };
     case 'layoff':
-    case 'ginLayoff':
-      return { t: 'event', kind: 'laidOff', playerId };
-    case 'discard':
-      return { t: 'event', kind: 'discarded', playerId };
+      return {
+        t: 'event',
+        kind: 'laidOff',
+        playerId,
+        data: { cards: resolveCards(state, [msg.cardId]) } satisfies LaidOffEventData,
+      };
+    case 'ginLayoff': {
+      // The defender's own declared melds and their layoffs all land face-up (rules.md A.2.4).
+      const ids = [...(msg.ownMelds ?? []).flat(), ...msg.layoffs.map((l) => l.cardId)];
+      return {
+        t: 'event',
+        kind: 'laidOff',
+        playerId,
+        data: { cards: resolveCards(state, ids) } satisfies LaidOffEventData,
+      };
+    }
+    case 'discard': {
+      const card = state.cardRegistry.get(msg.cardId);
+      if (card === undefined) return { t: 'event', kind: 'discarded', playerId };
+      return { t: 'event', kind: 'discarded', playerId, data: { card } satisfies DiscardedEventData };
+    }
     case 'knock':
-      return { t: 'event', kind: 'knocked', playerId };
+      // Declared melds only — msg.discardId is the face-down knock discard (rules.md A.2.4).
+      return {
+        t: 'event',
+        kind: 'knocked',
+        playerId,
+        data: { cards: resolveCards(state, (msg.melds ?? []).flat()) } satisfies KnockedEventData,
+      };
     case 'passUpcard':
       return { t: 'event', kind: 'passedUpcard', playerId };
   }
@@ -598,8 +651,11 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
       const p = requirePlaying(ws, ctx);
       if (p === null) break;
       try {
+        // Snapshot the pile before the action so a draw event can name the cards taken.
+        const takesFromPile = msg.t === 'drawFromPile' || (msg.t === 'draw' && msg.from === 'discard');
+        const pileBefore = takesFromPile ? [...p.state.discardPile] : [];
         const result = applyAction(p.state, p.player.id, msg);
-        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id));
+        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id, p.state, pileBefore));
         switch (result.kind) {
           case 'state':
             broadcastState(p.room, p.state, p.player.id);

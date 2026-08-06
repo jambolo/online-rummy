@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Card, Suit } from '@online-rummy/shared';
 import { cardPoints, validateMeld } from '@online-rummy/shared';
-import { useAppStore } from '../store';
+import { useAppStore, type LastAction } from '../store';
 import { t } from '../theme/tokens';
 import { variationAccent } from '../theme/variations';
 import { useBreakpoint } from '../theme/useBreakpoint';
@@ -23,6 +23,38 @@ const PHASE_LABEL: Record<string, string> = {
 
 function isValidGinMeld(cards: Card[]): boolean {
   return validateMeld(cards, GIN_MELD_OPTS);
+}
+
+// Status-line prefix: the most recent action this hand, or "New hand" before any.
+function lastActionText(a: LastAction | null, name: string, wentGin: boolean): string {
+  if (a === null) return 'New hand';
+  // Empty whenever the action moved no public cards — the verb then stands alone.
+  const list = a.cards.map(cardLabel).join(' ');
+  const sfx = list === '' ? '' : ` ${list}`;
+  switch (a.kind) {
+    case 'drew':
+      return a.from === 'discard'
+        ? list === ''
+          ? `${name} took the discard`
+          : `${name} took ${list} from the discard`
+        : a.from === 'pile'
+          ? list === ''
+            ? `${name} dived the pile`
+            : `${name} dived the pile for ${list}`
+          : `${name} drew from stock`;
+    case 'melded':
+      return `${name} melded${sfx}`;
+    case 'laidOff':
+      return `${name} laid off${sfx}`;
+    case 'discarded':
+      return `${name} discarded${sfx}`;
+    case 'knocked': {
+      const verb = wentGin ? 'went gin' : 'knocked';
+      return list === '' ? `${name} ${verb}` : `${name} ${verb} with ${list}`;
+    }
+    case 'passedUpcard':
+      return `${name} passed the upcard`;
+  }
 }
 
 function cardLabel(c: Card): string {
@@ -69,6 +101,7 @@ export default function ActionBar() {
   const selectedCardIds = useAppStore((s) => s.selectedCardIds);
   const knockMelds = useAppStore((s) => s.knockMelds);
   const ginLayoffs = useAppStore((s) => s.ginLayoffs);
+  const lastAction = useAppStore((s) => s.lastAction);
   const send = useAppStore((s) => s.send);
   const clearSelect = useAppStore((s) => s.clearSelect);
   const addKnockMeld = useAppStore((s) => s.addKnockMeld);
@@ -197,6 +230,20 @@ export default function ActionBar() {
           flexBasis: isMobile ? '100%' : 'auto',
         }}
       >
+        {(() => {
+          const actorName =
+            lastAction === null
+              ? ''
+              : lastAction.playerId === myPlayerId
+                ? 'You'
+                : (publicState.players.find((p) => p.id === lastAction.playerId)?.name ?? 'Someone');
+          return (
+            <span style={{ color: t.text55, fontWeight: 'normal' }}>
+              {lastActionText(lastAction, actorName, knockerWentGin)}
+              {' · '}
+            </span>
+          );
+        })()}
         {(() => {
           // Against gin the defender's "layoff" phase is meld-grouping only — relabel.
           const lbl = phase === 'layoff' && knockerWentGin ? 'Arrange your melds' : (PHASE_LABEL[phase] ?? phase);
