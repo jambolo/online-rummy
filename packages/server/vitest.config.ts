@@ -4,7 +4,7 @@ import path from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@online-rummy/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@online-rummy/shared': path.resolve(import.meta.dirname, '../shared/src/index.ts'),
     },
   },
   test: {

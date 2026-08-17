@@ -1,5 +1,16 @@
 import { create } from 'zustand';
-import type { C2S, Card, LobbyPlayer, S2C, Variant } from '@online-rummy/shared';
+import type {
+  C2S,
+  Card,
+  DiscardedEventData,
+  DrewEventData,
+  KnockedEventData,
+  LaidOffEventData,
+  LobbyPlayer,
+  MeldedEventData,
+  S2C,
+  Variant,
+} from '@online-rummy/shared';
 import type { HouseRules, PublicState, PrivateState } from '@online-rummy/shared';
 import { send as wsSend, type ConnStatus } from './net/ws';
 import { soundForMessage } from './audio/soundMap';
@@ -57,6 +68,39 @@ function meldedCardIds(ps: PublicState): Set<string> {
 interface ChatMessage {
   from: string;
   text: string;
+}
+
+// The most recent game action taken by any player this hand, shown as a status-line
+// prefix. null ⇒ no actions yet this hand ("New hand"). `from` only for kind 'drew'.
+export interface LastAction {
+  playerId: string;
+  kind: 'drew' | 'melded' | 'laidOff' | 'discarded' | 'knocked' | 'passedUpcard';
+  from?: DrewEventData['from'];
+  // The public cards the action moved. Empty when it moved none the other players may
+  // see (a stock draw, a passed upcard, the face-down knock discard) — and for any event
+  // from a server that predates the card payloads, so the status line degrades to the
+  // bare verb.
+  cards: Card[];
+}
+
+// Cards to list in the status line for an action event, when the server sent them.
+function lastActionCards(kind: LastAction['kind'], data: unknown): Card[] {
+  switch (kind) {
+    case 'drew':
+      return (data as DrewEventData | undefined)?.cards ?? [];
+    case 'melded':
+      return (data as MeldedEventData | undefined)?.cards ?? [];
+    case 'laidOff':
+      return (data as LaidOffEventData | undefined)?.cards ?? [];
+    case 'knocked':
+      return (data as KnockedEventData | undefined)?.cards ?? [];
+    case 'discarded': {
+      const c = (data as DiscardedEventData | undefined)?.card;
+      return c === undefined ? [] : [c];
+    }
+    case 'passedUpcard':
+      return [];
+  }
 }
 
 interface AppState {
@@ -129,6 +173,8 @@ interface AppState {
   meldHighlights: string[];
   // Player whose cards are currently highlighted (for same-turn accumulation vs replace).
   meldHighlightOwnerId: string | null;
+  // Last game action this hand (status-line prefix); null until the first action.
+  lastAction: LastAction | null;
 
   setConnStatus(s: ConnStatus): void;
   send(msg: C2S): void;
@@ -188,6 +234,7 @@ const HOME_RESET = {
   handCancelled: false,
   meldHighlights: [],
   meldHighlightOwnerId: null,
+  lastAction: null,
   playerLastSeen: {},
   disconnectWarning: null,
   opponentConn: null,
@@ -233,6 +280,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
   handCancelled: false,
   meldHighlights: [],
   meldHighlightOwnerId: null,
+  lastAction: null,
 
   setConnStatus: (s) => set({ connStatus: s, connected: s === 'connected' }),
 
@@ -314,6 +362,8 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           const meldCredits = handJustStarted ? {} : s.meldCredits;
           const handDeadwood = handJustStarted ? {} : s.handDeadwood;
           const ginInfo = handJustStarted ? null : s.ginInfo;
+          // Reset the status-line prefix to "New hand" when a re-deal begins.
+          const lastAction = handJustStarted ? null : s.lastAction;
           // Clear declared knock melds and gin layoffs at the start of each turn (draw phase).
           const knockMelds = msg.public.phase === 'draw' ? [] : s.knockMelds;
           const ginDefenderMelds = msg.public.phase === 'draw' ? [] : s.ginDefenderMelds;
@@ -375,6 +425,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
               ginLayoffs,
               meldHighlights,
               meldHighlightOwnerId,
+              lastAction,
             };
           }
           const newIds = new Set(msg.private.hand.map((c) => c.id));
@@ -404,6 +455,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
             ginLayoffs,
             meldHighlights,
             meldHighlightOwnerId,
+            lastAction,
           };
         });
         break;
@@ -444,6 +496,24 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         set((s) => ({
           playerLastSeen: { ...s.playerLastSeen, [msg.playerId]: Date.now() },
         }));
+        if (
+          msg.kind === 'drew' ||
+          msg.kind === 'melded' ||
+          msg.kind === 'laidOff' ||
+          msg.kind === 'discarded' ||
+          msg.kind === 'knocked' ||
+          msg.kind === 'passedUpcard'
+        ) {
+          const from = msg.kind === 'drew' ? (msg.data as DrewEventData | undefined)?.from : undefined;
+          set({
+            lastAction: {
+              playerId: msg.playerId,
+              kind: msg.kind,
+              cards: lastActionCards(msg.kind, msg.data),
+              ...(from !== undefined ? { from } : {}),
+            },
+          });
+        }
         if (msg.kind === 'wonHand' && msg.data !== undefined) {
           const d = msg.data as {
             finalHands?: Record<string, Card[]>;
@@ -485,7 +555,7 @@ export const useAppStore = create<AppState>()((set, _get) => ({
         } else if (msg.kind === 'handCancelled') {
           set({ handCancelled: true });
         } else if (msg.kind === 'gameStarted') {
-          set({ isGameOver: false, handCancelled: false, knockMelds: [], ginDefenderMelds: [], ginLayoffs: [] });
+          set({ isGameOver: false, handCancelled: false, knockMelds: [], ginDefenderMelds: [], ginLayoffs: [], lastAction: null });
         } else if (msg.kind === 'playerLeft') {
           // Another player left → game cancelled for everyone. Resolve their name from
           // current state before we reset, then return to the start page.

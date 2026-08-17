@@ -639,14 +639,16 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `playerReconnected` | A previously-disconnected player rebound their socket within the grace window | absent |
 | `forfeit` | A player's grace window expired (or they dropped non-gracefully) and they are now out of the hand | absent |
 | `gameOver` | The game-ending score threshold has been reached, or only one active player remains after a forfeit | absent |
-| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile" }` — `pile` = 500 Rummy pile dive (`drawFromPile`) |
-| `melded` | A player placed a meld from hand | absent |
-| `laidOff` | A player laid off onto an existing meld (`layoff`, or the gin defender's `ginLayoff`) | absent |
-| `discarded` | A player discarded | absent |
-| `knocked` | Gin: a player knocked or went gin (rules.md A.2.4) | absent |
+| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile", "cards"?: [Card, ...] }` — `pile` = 500 Rummy pile dive (`drawFromPile`); `cards` = the cards taken, present for `discard` and `pile`, **absent for `stock`** |
+| `melded` | A player placed a meld from hand | `{ "cards": [Card, ...] }` — the cards placed |
+| `laidOff` | A player laid off onto an existing meld (`layoff`, or the gin defender's `ginLayoff`) | `{ "cards": [Card, ...] }` — the cards placed; for `ginLayoff` that is the defender's own declared melds **and** their layoffs |
+| `discarded` | A player discarded | `{ "card": Card }` — the card discarded |
+| `knocked` | Gin: a player knocked or went gin (rules.md A.2.4) | `{ "cards": [Card, ...] }` — the declared meld cards only; the face-down knock discard is **never** named |
 | `passedUpcard` | Gin: a player declined the initial upcard offer (rules.md A.2.2) | absent |
 
 Action events (`drew`, `melded`, `laidOff`, `discarded`, `knocked`, `passedUpcard`) are broadcast immediately **before** the `state` broadcast for the same action, so clients can key sounds or animations off events without diffing state. Unlike `state`, events are never re-sent on reconnect.
+
+Card payloads follow one rule across every game variation: **an event names a card only if that card is already public** — face-up in the discard pile, or placed on the table. Cards only the acting player has seen are never named. Concretely, `drew {from:"stock"}` carries no `cards`, and `knocked` omits the face-down knock discard (rules.md A.2.4) while still naming the declared melds.
 
 #### `wonHand` data
 

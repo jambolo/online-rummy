@@ -1,4 +1,4 @@
-import type { PlayerId, PrivateState, PublicState, Variant } from './cards.js';
+import type { Card, PlayerId, PrivateState, PublicState, Variant } from './cards.js';
 import type { HouseRules } from './houseRules.js';
 
 export type LobbyPlayer = { id: PlayerId; name: string };
@@ -36,8 +36,29 @@ export type EventKind =
   | 'gameOver'
   | 'gameStarted';
 
+// Action-event card payloads. Rule: an event names a card only if that card is already
+// public — face-up on the table or in the discard pile. Cards that only the acting player
+// has seen are never named.
+
 // Data payload of the 'drew' event; 'pile' = 500 Rummy pile dive (rules.md A.4.4).
-export type DrewEventData = { from: 'stock' | 'discard' | 'pile' };
+// `cards` = the cards taken: the upcard for `discard`, the dive's take for `pile`.
+// Absent for `stock` — that card is private to the drawer.
+export type DrewEventData = { from: 'stock' | 'discard' | 'pile'; cards?: Card[] };
+
+// Data payload of the 'melded' event — the cards placed on the table.
+export type MeldedEventData = { cards: Card[] };
+
+// Data payload of the 'laidOff' event — the cards placed on the table. For the Gin
+// defender's ginLayoff that is their own declared melds plus their layoffs onto the
+// knocker's melds (rules.md A.2.4); all of them land face-up.
+export type LaidOffEventData = { cards: Card[] };
+
+// Data payload of the 'discarded' event — the card discarded.
+export type DiscardedEventData = { card: Card };
+
+// Data payload of the 'knocked' event — the meld groups the knocker declared, which go
+// face-up on the table. The knock discard is face-down (rules.md A.2.4) and is never named.
+export type KnockedEventData = { cards: Card[] };
 
 export type S2C =
   | { t: 'state'; public: PublicState; private?: PrivateState }

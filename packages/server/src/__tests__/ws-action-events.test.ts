@@ -151,7 +151,15 @@ function setDiscard(state: GameState, specs: Spec[]): Card[] {
 
 // Assert the very next two frames on `client` are the action event then a state
 // broadcast — verifies receipt AND event-before-state ordering in one step.
-async function expectEventThenState(client: Client, kind: EventKind, playerId: string, data?: unknown): Promise<void> {
+// `absentDataKeys` names keys the payload must NOT carry — toMatchObject is a partial
+// match, so an accidental leak of a private card would otherwise slip through.
+async function expectEventThenState(
+  client: Client,
+  kind: EventKind,
+  playerId: string,
+  data?: unknown,
+  absentDataKeys: string[] = [],
+): Promise<void> {
   const e = await client.recv();
   const expected: Record<string, unknown> = { t: 'event', kind, playerId };
   if (data !== undefined) expected['data'] = data;
@@ -159,6 +167,8 @@ async function expectEventThenState(client: Client, kind: EventKind, playerId: s
   // Data-less kinds must carry NO data at all — pins that action events can never
   // leak private info (e.g. the gin knock's face-down discardId, rules.md A.2.4).
   if (data === undefined) expect(Object.hasOwn(e, 'data')).toBe(false);
+  const payload = (e as { data?: Record<string, unknown> }).data ?? {};
+  for (const k of absentDataKeys) expect(Object.hasOwn(payload, k)).toBe(false);
   const s = await client.recv();
   expect(s.t).toBe('state');
 }
@@ -168,17 +178,19 @@ describe('action events — basic', () => {
     const g = await startGame('basic');
     const actorId = g.state.turnPlayerId;
     g.clientOf(actorId).send({ t: 'draw', from: 'stock' });
-    await expectEventThenState(g.clientOf(actorId), 'drew', actorId, { from: 'stock' });
-    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, { from: 'stock' });
+    // No `cards` — the stock card is private to the drawer.
+    await expectEventThenState(g.clientOf(actorId), 'drew', actorId, { from: 'stock' }, ['cards']);
+    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, { from: 'stock' }, ['cards']);
     await g.closeAll();
   });
 
-  it('draw from discard → drew {from:discard}', async () => {
+  it('draw from discard → drew {from:discard} naming the face-up upcard', async () => {
     const g = await startGame('basic');
     const actorId = g.state.turnPlayerId;
+    const upcard = g.state.discardPile[g.state.discardPile.length - 1]!;
     g.clientOf(actorId).send({ t: 'draw', from: 'discard' });
-    await expectEventThenState(g.clientOf(actorId), 'drew', actorId, { from: 'discard' });
-    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, { from: 'discard' });
+    await expectEventThenState(g.clientOf(actorId), 'drew', actorId, { from: 'discard', cards: [upcard] });
+    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, { from: 'discard', cards: [upcard] });
     await g.closeAll();
   });
 
@@ -199,18 +211,19 @@ describe('action events — basic', () => {
     await actor.recvUntil('state');
     await other.recvUntil('state');
 
+    const melded = { cards: [rig[0], rig[1], rig[2]] };
     actor.send({ t: 'meld', cardIds: [rig[0]!.id, rig[1]!.id, rig[2]!.id] });
-    await expectEventThenState(actor, 'melded', actorId);
-    await expectEventThenState(other, 'melded', actorId);
+    await expectEventThenState(actor, 'melded', actorId, melded);
+    await expectEventThenState(other, 'melded', actorId, melded);
 
     const meldId = g.state.players.find((p) => p.id === actorId)!.melds[0]!.id;
     actor.send({ t: 'layoff', meldId, cardId: rig[3]!.id });
-    await expectEventThenState(actor, 'laidOff', actorId);
-    await expectEventThenState(other, 'laidOff', actorId);
+    await expectEventThenState(actor, 'laidOff', actorId, { cards: [rig[3]] });
+    await expectEventThenState(other, 'laidOff', actorId, { cards: [rig[3]] });
 
     actor.send({ t: 'discard', cardId: rig[4]!.id });
-    await expectEventThenState(actor, 'discarded', actorId);
-    await expectEventThenState(other, 'discarded', actorId);
+    await expectEventThenState(actor, 'discarded', actorId, { card: rig[4] });
+    await expectEventThenState(other, 'discarded', actorId, { card: rig[4] });
     await g.closeAll();
   });
 
@@ -245,7 +258,7 @@ describe('action events — gin', () => {
 
   // Decline both upcard offers, rig a legal knock hand, draw, and send the knock.
   // Callers consume the resulting 'knocked' frames themselves.
-  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string }> {
+  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string; meldCards: Card[] }> {
     const nonDealerId = g.state.turnPlayerId;
     const dealerId = g.otherId(nonDealerId);
 
@@ -273,6 +286,12 @@ describe('action events — gin', () => {
       ['6', 'S'],
       ['5', 'H'],
     ]);
+    // Force the drawn card so the leftover deadwood is a known KH — non-zero, so this is
+    // a regular knock and layoffs against it are legal (rules.md A.2.4).
+    const drawn = findCard(g.state, ['K', 'H']);
+    extractCards(g.state, [drawn]);
+    g.state.stock.unshift(drawn);
+
     const knocker = g.clientOf(knockerId);
     knocker.send({ t: 'draw', from: 'stock' });
     await knocker.recvUntil('state');
@@ -287,14 +306,17 @@ describe('action events — gin', () => {
       ],
       discardId: rig[9]!.id,
     });
-    return { knockerId, defenderId: g.otherId(knockerId) };
+    return { knockerId, defenderId: g.otherId(knockerId), meldCards: rig.slice(0, 9) };
   }
 
-  it('knock → knocked to both players', async () => {
+  it('knock → knocked to both players, naming the declared melds but not the face-down discard', async () => {
     const g = await startGame('gin');
-    const { knockerId } = await rigKnock(g);
-    await expectEventThenState(g.clientOf(knockerId), 'knocked', knockerId);
-    await expectEventThenState(g.otherOf(knockerId), 'knocked', knockerId);
+    const { knockerId, meldCards } = await rigKnock(g);
+    // Exactly the nine declared meld cards — which pins out the face-down knock discard,
+    // the tenth rigged card (rules.md A.2.4).
+    const declared = { cards: meldCards };
+    await expectEventThenState(g.clientOf(knockerId), 'knocked', knockerId, declared);
+    await expectEventThenState(g.otherOf(knockerId), 'knocked', knockerId, declared);
     await g.closeAll();
   });
 
@@ -306,17 +328,50 @@ describe('action events — gin', () => {
     await g.clientOf(defenderId).recvUntil('state');
     expect(g.state.phase).toBe('layoff');
 
-    // Empty submission is legal: no own melds declared, nothing laid off.
+    // Empty submission is legal: no own melds declared, nothing laid off — so no cards.
     g.clientOf(defenderId).send({ t: 'ginLayoff', layoffs: [] });
     for (const client of [g.clientOf(defenderId), g.clientOf(knockerId)]) {
       const e = await client.recv();
-      expect(e).toMatchObject({ t: 'event', kind: 'laidOff', playerId: defenderId });
-      expect(Object.hasOwn(e, 'data')).toBe(false);
+      expect(e).toMatchObject({ t: 'event', kind: 'laidOff', playerId: defenderId, data: { cards: [] } });
       // ginLayoff ends the hand, so the next frame is the wonHand event, then state.
       const won = await client.recv();
       expect(won).toMatchObject({ t: 'event', kind: 'wonHand', playerId: knockerId });
       const s = await client.recv();
       expect(s.t).toBe('state');
+    }
+    await g.closeAll();
+  });
+
+  it('ginLayoff → laidOff names the defender own melds and their layoffs', async () => {
+    const g = await startGame('gin');
+    const { knockerId, defenderId } = await rigKnock(g);
+    await g.clientOf(knockerId).recvUntil('state');
+    await g.clientOf(defenderId).recvUntil('state');
+
+    // Own meld of 9s, plus 2S laid off onto the knocker's set of 2s. Both land face-up.
+    const rig = setHand(g.state, defenderId, [
+      ['9', 'C'],
+      ['9', 'D'],
+      ['9', 'H'],
+      ['2', 'S'],
+    ]);
+    const knockerMelds = g.state.players.find((p) => p.id === knockerId)!.melds;
+    const twosMeld = knockerMelds.find((m) => m.cardIds.some((id) => g.state.cardRegistry.get(id)?.rank === '2'))!;
+
+    g.clientOf(defenderId).send({
+      t: 'ginLayoff',
+      ownMelds: [[rig[0]!.id, rig[1]!.id, rig[2]!.id]],
+      layoffs: [{ cardId: rig[3]!.id, meldId: twosMeld.id }],
+    });
+    for (const client of [g.clientOf(defenderId), g.clientOf(knockerId)]) {
+      const e = await client.recv();
+      expect(e).toMatchObject({
+        t: 'event',
+        kind: 'laidOff',
+        playerId: defenderId,
+        data: { cards: [rig[0], rig[1], rig[2], rig[3]] },
+      });
+      await client.recvUntil('state');
     }
     await g.closeAll();
   });
@@ -342,9 +397,11 @@ describe('action events — 500 rummy', () => {
       ['9', 'D'],
     ]);
 
+    // The dive takes the selected card and everything above it — both are named.
+    const taken = { from: 'pile', cards: [pile[1], pile[2]] };
     actor.send({ t: 'drawFromPile', cardId: pile[1]!.id });
-    await expectEventThenState(actor, 'drew', actorId, { from: 'pile' });
-    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, { from: 'pile' });
+    await expectEventThenState(actor, 'drew', actorId, taken);
+    await expectEventThenState(g.otherOf(actorId), 'drew', actorId, taken);
     await g.closeAll();
   });
 });
