@@ -482,6 +482,19 @@ describe('rum500 turn flow', () => {
     expect(() => applyMeld(state, 'p1', ['b1', 'b2', 'b3'])).toThrow('ERR_INVALID_MELD');
   });
 
+  it('meld: ERR_INVALID_MELD when one held card is repeated as a whole set', () => {
+    // Would otherwise shed one card, store a three-position meld and score it three times.
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const lone = c('9', 'C', 'lone');
+    state.players[0]!.hand.push(lone);
+    state.cardRegistry.set(lone.id, lone);
+    const before = state.players[0]!.hand.length;
+    expect(() => applyMeld(state, 'p1', ['lone', 'lone', 'lone'])).toThrow('ERR_INVALID_MELD');
+    expect(state.players[0]!.hand).toHaveLength(before);
+    expect(state.players[0]!.melds).toHaveLength(0);
+  });
+
   it('discard: ERR_WRONG_PHASE before draw', () => {
     const state = twoPlayerGame();
     const card = state.players[0]!.hand[0]!;

@@ -227,6 +227,18 @@ describe('applyMeld', () => {
     });
     expect(() => applyMeld(state, 'p1', ['b1', 'b2', 'b3'])).toThrow('ERR_INVALID_MELD');
   });
+
+  it('rejects one held card repeated as a whole set, leaving the hand untouched', () => {
+    const state = twoPlayerGame();
+    applyDraw(state, 'p1', 'stock');
+    const lone = c('9', 'C', 'lone');
+    state.players[0]!.hand.push(lone);
+    state.cardRegistry.set(lone.id, lone);
+    const before = state.players[0]!.hand.length;
+    expect(() => applyMeld(state, 'p1', ['lone', 'lone', 'lone'])).toThrow('ERR_INVALID_MELD');
+    expect(state.players[0]!.hand).toHaveLength(before);
+    expect(state.players[0]!.melds).toHaveLength(0);
+  });
 });
 
 // ---- applyLayoff ----

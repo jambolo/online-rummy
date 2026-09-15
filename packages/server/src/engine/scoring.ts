@@ -19,7 +19,7 @@ export function deadwood(player: GamePlayer, aceValue: 1 | 11 | 15 = 1): number 
 // Validate a list of declared meld groups against the player's hand.
 //
 // Throws on first failure:
-//   ERR_CARD_IN_MULTIPLE_MELDS:<id>   — card appears in two groups
+//   ERR_CARD_IN_MULTIPLE_MELDS:<id>   — card appears twice (within a group or across groups)
 //   ERR_CARD_NOT_IN_HAND:<id>         — card not in player's hand
 //   ERR_INVALID_MELD                  — group fails variant.validateMeld
 //
@@ -39,9 +39,9 @@ export function validateKnockMelds(
       if (meldedIds.has(id)) throw new Error(`ERR_CARD_IN_MULTIPLE_MELDS:${id}`);
       if (!player.hand.find((c) => c.id === id)) throw new Error(`ERR_CARD_NOT_IN_HAND:${id}`);
       cards.push(lookupCard(state, id));
+      meldedIds.add(id);
     }
     if (!validate(cards)) throw new Error('ERR_INVALID_MELD');
-    for (const id of group) meldedIds.add(id);
     const kind: MeldKind = cards.every((c) => c.rank === cards[0]!.rank) ? 'set' : 'run';
     validated.push({ kind, cardIds: [...group] });
   }

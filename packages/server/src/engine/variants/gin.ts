@@ -218,7 +218,7 @@ export function createGinGame(
     deal,
     rng,
     'firstUpcardOffer',
-    { ginKnockerId: null, cancelledHand: false },
+    { ginKnockerId: null, cancelledHand: false, knockDiscardId: null },
     firstPlayerIndex,
     houseRules,
   ) as GameState & { variant: 'gin' };
@@ -338,16 +338,18 @@ export function applyKnock(state: GameState, playerId: PlayerId, melds?: string[
   if (!player.hand.find((c) => c.id === discardId)) throw new Error(`ERR_CARD_NOT_IN_HAND:${discardId}`);
   if (!ginVariant.canDiscard(state, playerId, discardId)) throw new Error('ERR_CANNOT_DISCARD_DRAWN_CARD');
 
-  // Discard the knock card face-down.
-  const knockDiscardCard = lookupCard(state, discardId);
-  player.hand = player.hand.filter((c) => c.id !== discardId);
-  state.discardPile.push(knockDiscardCard);
-  state.drewFromDiscardId = null;
-
-  // Deadwood = unmelded cards remaining after the face-down discard. rules.md A.2.4: must be ≤10.
-  const deadwoodCards = player.hand.filter((c) => !meldedIds.has(c.id));
+  // Deadwood = unmelded cards remaining after the face-down discard. rules.md A.2.4: must be
+  // ≤10. Checked before any mutation: a rejected knock must leave the hand intact, otherwise
+  // repeated failed knocks would shed deadwood for free.
+  const deadwoodCards = player.hand.filter((c) => !meldedIds.has(c.id) && c.id !== discardId);
   const dw = deadwoodCards.reduce((s, c) => s + cardPoints(c, 1), 0);
   if (dw > 10) throw new Error(`ERR_CANNOT_KNOCK:deadwood is ${dw}, must be ≤10 to knock`);
+
+  // Discard the knock card face-down. Its id is kept so the public projection can leave it
+  // off the visible pile.
+  state.discardPile.push(lookupCard(state, discardId));
+  state.drewFromDiscardId = null;
+  gs(state).knockDiscardId = discardId;
 
   // Apply validated melds to state — move cards from hand to melds.
   for (const { kind, cardIds } of validatedMelds) {

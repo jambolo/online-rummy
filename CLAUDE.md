@@ -21,6 +21,9 @@ Package scripts cover install/build/test/typecheck. What they don't tell you:
 # Start server (after build). Required env vars:
 #   SESSION_SECRET   ≥32 chars
 #   ALLOWED_ORIGINS  comma-separated
+# Optional:
+#   TRUST_PROXY=1    behind a reverse proxy (e.g. the Cloudflare tunnel) — client IP for the
+#                    per-IP connection cap is then the last X-Forwarded-For entry
 # Example (dev):
 SESSION_SECRET="dev-secret-32-chars-minimum-here" ALLOWED_ORIGINS="http://localhost:5173" node packages/server/dist/index.js
 

@@ -40,6 +40,9 @@ export type GinState = {
   // Gin (rules.md A.2.3): set when applyDiscard reduces stock to ≤ 2 cards without a
   // knock. Signals no scoring; same dealer re-deals.
   cancelledHand: boolean;
+  // Gin (rules.md A.2.4): id of the knock discard. It sits on the pile face-down, so the
+  // public projection filters it out. Set by applyKnock; null until then.
+  knockDiscardId: string | null;
 };
 
 export type VariantStateMap = {

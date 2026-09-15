@@ -385,6 +385,16 @@ describe('applyKnock', () => {
     ).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
   });
 
+  it('throws ERR_CARD_IN_MULTIPLE_MELDS when one card is repeated within a group', () => {
+    // Three references to one held card would otherwise pass the same-rank set check and
+    // let a single card stand in for a whole meld.
+    const hand = [c('7', 'C', 'r1'), c('K', 'D', 'r2'), c('K', 'H', 'r3'), c('2', 'S', 'r_disc')];
+    const state = setupKnockState(hand);
+    expect(() => applyKnock(state, 'p1', [['r1', 'r1', 'r1']], 'r_disc')).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
+    expect(state.players[0]!.hand).toHaveLength(4);
+    expect(state.players[0]!.melds).toHaveLength(0);
+  });
+
   it('throws ERR_INVALID_MELD when declared group is not a valid meld', () => {
     const hand = [c('7', 'C', 'v1'), c('9', 'D', 'v2'), c('J', 'H', 'v3')];
     const state = setupKnockState(hand);
@@ -402,7 +412,14 @@ describe('applyKnock', () => {
       c('2', 'C', 'h_disc'),
     ];
     const state = setupKnockState(hand);
+    const pileBefore = state.discardPile.length;
     expect(() => applyKnock(state, 'p1', [['h1', 'h2', 'h3']], 'h_disc')).toThrow('ERR_CANNOT_KNOCK');
+    // Rejected → nothing moved. Otherwise repeated failed knocks would shed deadwood for free.
+    expect(state.players[0]!.hand.map((x) => x.id)).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h_disc']);
+    expect(state.players[0]!.melds).toHaveLength(0);
+    expect(state.discardPile).toHaveLength(pileBefore);
+    expect(state.phase).toBe('discard');
+    expect(state.variantState.knockDiscardId).toBeNull();
   });
 
   it('no melds declared → deadwood > 10 after discard, throws ERR_CANNOT_KNOCK', () => {
@@ -410,6 +427,15 @@ describe('applyKnock', () => {
     const hand = [c('K', 'C', 'x1'), c('K', 'D', 'x2'), c('A', 'C', 'x3')];
     const state = setupKnockState(hand);
     expect(() => applyKnock(state, 'p1', [], 'x3')).toThrow('ERR_CANNOT_KNOCK');
+  });
+
+  it('records the face-down discard id and pushes the card onto the pile', () => {
+    const hand = [c('A', 'C', 'f1'), c('2', 'C', 'f2'), c('3', 'C', 'f3'), c('5', 'D', 'f_disc')];
+    const state = setupKnockState(hand);
+    applyKnock(state, 'p1', [['f1', 'f2', 'f3']], 'f_disc');
+    expect(state.variantState.knockDiscardId).toBe('f_disc');
+    expect(state.discardPile[state.discardPile.length - 1]!.id).toBe('f_disc');
+    expect(state.players[0]!.hand).toHaveLength(0);
   });
 
   it('throws ERR_KNOCK_REQUIRES_DISCARD when discardId omitted', () => {
@@ -606,6 +632,23 @@ describe('applyGinLayoff', () => {
     expect(() => applyGinLayoff(state, 'p2', [{ cardId: 'p1', meldId }], [['p1', 'p2', 'p3']])).toThrow(
       'ERR_CARD_IN_MULTIPLE_MELDS',
     );
+  });
+
+  it('throws ERR_CARD_IN_MULTIPLE_MELDS when a card is repeated within an own-meld group', () => {
+    const state = setupLayoffState();
+    expect(() => applyGinLayoff(state, 'p2', [], [['p1', 'p1', 'p1']])).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
+    expect(state.players[1]!.hand).toHaveLength(3);
+  });
+
+  it('throws ERR_CARD_IN_MULTIPLE_MELDS when the same card is laid off twice', () => {
+    const state = setupLayoffState();
+    const meldId = state.players[0]!.melds[0]!.id;
+    expect(() =>
+      applyGinLayoff(state, 'p2', [
+        { cardId: 'p1', meldId },
+        { cardId: 'p1', meldId },
+      ]),
+    ).toThrow('ERR_CARD_IN_MULTIPLE_MELDS');
   });
 
   it('empty layoffs (pass) ends phase', () => {

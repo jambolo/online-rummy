@@ -37,6 +37,7 @@ Browser-based multiplayer rummy supporting three variants: **Classic Rummy**, **
 | `SESSION_SECRET` | Yes | HMAC signing key for session tokens (delivered in the lobby broadcast, not HTTP cookies). Minimum 32 characters. |
 | `ALLOWED_ORIGINS` | Yes | Comma-separated list of browser origins allowed to connect (e.g. `https://yourdomain.com`). |
 | `PORT` | No | Port to listen on. Defaults to `8080`. |
+| `TRUST_PROXY` | No | Set to `1` when the server runs behind a reverse proxy that appends the client address to `X-Forwarded-For` (Cloudflare, nginx, Caddy); the last entry then keys the per-IP connection limit. Leave unset for direct connections — the header is ignored, since any client can send one. |
 
 `SESSION_SECRET` and `ALLOWED_ORIGINS` must be set before starting. The server refuses to boot without them.
 
@@ -123,8 +124,11 @@ winget install --id Cloudflare.cloudflared
    ```bash
    export SESSION_SECRET="<your-secret-min-32-chars>"
    export ALLOWED_ORIGINS="https://<your-tunnel-host>.trycloudflare.com"
+   export TRUST_PROXY=1
    node packages/server/dist/index.js
    ```
+
+   `TRUST_PROXY=1` matters here: every tunneled connection reaches the server from `localhost`, so without it all visitors would share one 10-connection allowance. With it, the server reads each visitor's address from the `X-Forwarded-For` entry Cloudflare appends.
 
 4. Send your friend the tunnel URL. They open it in a browser, create a room, and share the code. The client auto-connects over `wss://` to the same origin.
 

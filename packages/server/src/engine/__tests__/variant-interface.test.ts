@@ -28,6 +28,13 @@ function register(state: GameState, cards: Card[]) {
 // ---- variant registry ----
 
 describe('variant registry', () => {
+  it('isVariant checks own properties only — inherited names are not variants', () => {
+    expect(isVariant('basic')).toBe(true);
+    expect(isVariant('toString')).toBe(false);
+    expect(isVariant('__proto__')).toBe(false);
+    expect(isVariant(7)).toBe(false);
+  });
+
   it('isVariant recognizes known variants and rejects others', () => {
     expect(isVariant('basic')).toBe(true);
     expect(isVariant('rum500')).toBe(true);

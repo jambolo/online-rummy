@@ -258,7 +258,7 @@ describe('action events — gin', () => {
 
   // Decline both upcard offers, rig a legal knock hand, draw, and send the knock.
   // Callers consume the resulting 'knocked' frames themselves.
-  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string; meldCards: Card[] }> {
+  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string; meldCards: Card[]; discardCard: Card }> {
     const nonDealerId = g.state.turnPlayerId;
     const dealerId = g.otherId(nonDealerId);
 
@@ -306,8 +306,22 @@ describe('action events — gin', () => {
       ],
       discardId: rig[9]!.id,
     });
-    return { knockerId, defenderId: g.otherId(knockerId), meldCards: rig.slice(0, 9) };
+    return { knockerId, defenderId: g.otherId(knockerId), meldCards: rig.slice(0, 9), discardCard: rig[9]! };
   }
+
+  it('after a knock the public state keeps the face-down discard off the visible pile', async () => {
+    const g = await startGame('gin');
+    const { knockerId, defenderId, discardCard } = await rigKnock(g);
+    const s = (await g.clientOf(defenderId).recvUntil('state')) as Extract<S2C, { t: 'state' }>;
+    expect(s.public.discardPile.map((c) => c.id)).not.toContain(discardCard.id);
+    expect(s.public.discardTop?.id).not.toBe(discardCard.id);
+    // The count still includes it — that a card was discarded is no secret, its face is.
+    expect(s.public.discardPileSize).toBe(s.public.discardPile.length + 1);
+    // Engine-side the card is on the pile, so card conservation holds.
+    expect(g.state.discardPile[g.state.discardPile.length - 1]!.id).toBe(discardCard.id);
+    await g.clientOf(knockerId).recvUntil('state');
+    await g.closeAll();
+  });
 
   it('knock → knocked to both players, naming the declared melds but not the face-down discard', async () => {
     const g = await startGame('gin');

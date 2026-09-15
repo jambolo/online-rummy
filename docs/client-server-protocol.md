@@ -12,7 +12,7 @@ Once connected, all communication is JSON over WebSocket frames. Every message �
 
 **Server-enforced limits:**
 
-- Max 10 simultaneous WebSocket connections per IP address. A new connection that would exceed this limit receives `ERR_TOO_MANY_CONNECTIONS` and is immediately closed.
+- Max 10 simultaneous WebSocket connections per IP address. The address is the TCP peer; when the operator runs the server with `TRUST_PROXY=1` it is instead the last `X-Forwarded-For` entry — the one the reverse proxy appended. A new connection that would exceed this limit receives `ERR_TOO_MANY_CONNECTIONS` and is immediately closed.
 - Max 20 messages per second per socket. Messages beyond this rate receive `ERR_RATE_LIMIT`; the connection stays open.
 - Rooms where no player has an active socket are deleted after 10 minutes of inactivity.
 
@@ -25,12 +25,15 @@ If the server cannot parse a message, or the message is structurally wrong, it s
 | Condition | Error code |
 | --- | --- |
 | Message is not valid JSON | `ERR_INVALID_JSON` |
-| JSON is valid but the object has no `t` field | `ERR_INVALID_MSG` |
+| JSON is valid but is not a recognized message: `t` missing or unknown, or a required field absent or of the wrong type (`msg` names the field) | `ERR_INVALID_MSG` |
 | Message rate exceeds 20/second | `ERR_RATE_LIMIT` |
+| The server failed while handling an otherwise well-formed message | `ERR_INTERNAL` |
 
-If the `t` field is present but the action is not permitted in the current state (wrong phase, wrong player, room full, etc.), the server sends a more specific `ERR_*` code documented under each action below.
+Every message shape is validated before it is acted on, so a well-typed message is the only kind that reaches game logic. If the message is well-formed but the action is not permitted in the current state (wrong phase, wrong player, room full, etc.), the server sends a more specific `ERR_*` code documented under each action below.
 
 In all error cases the connection remains open and the game state is unchanged.
+
+A frame that violates the WebSocket protocol itself (an unmasked client frame, an invalid opcode, malformed UTF-8) closes that one connection with status 1002. Other connections and rooms are unaffected.
 
 ---
 
@@ -101,6 +104,8 @@ The state visible to all players.
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
 
 `discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rummy uses this for the pile-dive picker and other game variations may ignore it.
+
+One exception: in Gin Rummy the knock discard is face-down (rules.md A.2.4). From the knock until the hand ends it is omitted from `discardPile` and never appears as `discardTop`; `discardPileSize` still counts it, so during that window `discardPileSize` is `discardPile.length + 1`.
 
 `meldedBy` maps each card id on the table to the id of the player who placed it (melded or laid off). Because layoffs append to another player's meld, the placer can differ from the meld's `ownerId`; use `meldedBy` to attribute laid-off cards to the player who laid them off — e.g. for an interim per-player meld/layoff score. Cards not on the table are absent. In Gin no cards are placed until knock time, so it is effectively empty during play.
 
@@ -688,7 +693,8 @@ Global error codes (not tied to a specific action):
 | Code | Condition |
 | --- | --- |
 | `ERR_INVALID_JSON` | Message is not valid JSON |
-| `ERR_INVALID_MSG` | JSON is valid but has no `t` field |
+| `ERR_INVALID_MSG` | JSON is valid but not a recognized message: `t` missing or unknown, or a field absent or of the wrong type |
+| `ERR_INTERNAL` | The server failed while handling the message; connection stays open |
 | `ERR_RATE_LIMIT` | Exceeded 20 messages/second |
 | `ERR_TOO_MANY_CONNECTIONS` | IP already has 10 open connections (connection is closed after this) |
 
