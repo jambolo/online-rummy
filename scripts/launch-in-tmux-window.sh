@@ -71,7 +71,7 @@ SESSION_SECRET=$(node -e "process.stdout.write(require('crypto').randomBytes(32)
 # ── 5. Start server ───────────────────────────────────────────────────────────
 echo -e "\n==> Starting server..."
 tmux send-keys -t "$PANE1" \
-  "cd '$ROOT_DIR' && bash '$PRINT_URL_SCRIPT' '$TUNNEL_URL' && SESSION_SECRET='$SESSION_SECRET' ALLOWED_ORIGINS='$TUNNEL_URL' node packages/server/dist/index.js" Enter
+  "cd '$ROOT_DIR' && bash '$PRINT_URL_SCRIPT' '$TUNNEL_URL' && SESSION_SECRET='$SESSION_SECRET' ALLOWED_ORIGINS='$TUNNEL_URL' TRUST_PROXY=1 node packages/server/dist/index.js" Enter
 
 tmux select-layout -t "$SESSION:0" even-horizontal
 

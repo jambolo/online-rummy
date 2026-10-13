@@ -216,7 +216,13 @@ export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 
     state.players.find((p) => p.id === playerId)!.hand.push(card);
     basicVariant.onDrawFromDiscard(state, playerId, card.id);
   } else {
-    if (state.stock.length === 0) throw new Error('ERR_STOCK_EMPTY');
+    if (state.stock.length === 0) {
+      if (state.discardPile.length === 0) throw new Error('ERR_STOCK_EMPTY');
+      // rules.md A.1.9: turn the whole pile over unshuffled — its bottom card becomes the
+      // new stock's top (stock[0]), so the array order carries over unchanged.
+      state.stock = state.discardPile;
+      state.discardPile = [];
+    }
     const card = state.stock.shift()!;
     state.players.find((p) => p.id === playerId)!.hand.push(card);
   }

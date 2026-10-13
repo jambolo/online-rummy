@@ -85,6 +85,9 @@ export default function Table() {
   const is500 = publicState.variant === 'rum500';
   const accent = variationAccent(publicState.variant);
   const canDraw = isMyTurn && drawPhase;
+  // rules.md A.1.9: Basic turns the discard pile over to draw from an empty stock.
+  const canDrawStock =
+    canDraw && (publicState.stockSize > 0 || (publicState.variant === 'basic' && publicState.discardPileSize > 0));
   const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
   const pileHasCards = publicState.discardPileSize > 0;
 
@@ -145,7 +148,7 @@ export default function Table() {
       <div style={{ textAlign: 'center' }}>
         <div style={{ ...sectionLabel, color: accent, marginBottom: 4 }}>Stock ({publicState.stockSize})</div>
         <div
-          onClick={canDraw ? drawStock : undefined}
+          onClick={canDrawStock ? drawStock : undefined}
           style={{
             width: 56,
             height: 80,
@@ -156,13 +159,13 @@ export default function Table() {
             backgroundSize: 'cover',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
-            cursor: canDraw ? 'pointer' : 'default',
+            cursor: canDrawStock ? 'pointer' : 'default',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: t.text40,
             fontSize: 11,
-            boxShadow: canDraw
+            boxShadow: canDrawStock
               ? '0 0 10px rgba(74,158,255,0.6)' // NS-1 one-off: focus-ring glow
               : '1px 2px 4px rgba(0,0,0,0.4)', // NS-1 one-off: pile shadow
             transition: 'box-shadow 0.15s',

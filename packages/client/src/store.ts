@@ -41,6 +41,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   ERR_CARD_NOT_IN_PILE: "That card isn't in the discard pile.",
   ERR_DISCARD_EMPTY: 'The discard pile is empty.',
   ERR_STOCK_EMPTY: 'The stock pile is empty.',
+  ERR_STOCK_NOT_EMPTY: 'You can end the hand only once the stock is empty.',
   ERR_INVALID_LAYOFF: "That card doesn't fit on the selected meld.",
   ERR_KNOCK_REQUIRES_DISCARD: 'Select a card to discard face-down when knocking.',
   ERR_CANNOT_DISCARD_MELDED_CARD: "You can't discard a card that's in one of your declared melds.",
@@ -71,11 +72,12 @@ interface ChatMessage {
 }
 
 // The most recent game action taken by any player this hand, shown as a status-line
-// prefix. null ⇒ no actions yet this hand ("New hand"). `from` only for kind 'drew'.
+// prefix. null ⇒ no actions yet this hand ("New hand"). `from` and `restocked` only for kind 'drew'.
 export interface LastAction {
   playerId: string;
-  kind: 'drew' | 'melded' | 'laidOff' | 'discarded' | 'knocked' | 'passedUpcard';
+  kind: 'drew' | 'melded' | 'laidOff' | 'discarded' | 'knocked' | 'passedUpcard' | 'endedHand';
   from?: DrewEventData['from'];
+  restocked?: true;
   // The public cards the action moved. Empty when it moved none the other players may
   // see (a stock draw, a passed upcard, the face-down knock discard) — and for any event
   // from a server that predates the card payloads, so the status line degrades to the
@@ -99,6 +101,7 @@ function lastActionCards(kind: LastAction['kind'], data: unknown): Card[] {
       return c === undefined ? [] : [c];
     }
     case 'passedUpcard':
+    case 'endedHand':
       return [];
   }
 }
@@ -502,19 +505,22 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           msg.kind === 'laidOff' ||
           msg.kind === 'discarded' ||
           msg.kind === 'knocked' ||
-          msg.kind === 'passedUpcard'
+          msg.kind === 'passedUpcard' ||
+          msg.kind === 'endedHand'
         ) {
-          const from = msg.kind === 'drew' ? (msg.data as DrewEventData | undefined)?.from : undefined;
+          const drew = msg.kind === 'drew' ? (msg.data as DrewEventData | undefined) : undefined;
           set({
             lastAction: {
               playerId: msg.playerId,
               kind: msg.kind,
               cards: lastActionCards(msg.kind, msg.data),
-              ...(from !== undefined ? { from } : {}),
+              ...(drew?.from !== undefined ? { from: drew.from } : {}),
+              ...(drew?.restocked === true ? { restocked: true } : {}),
             },
           });
         }
-        if (msg.kind === 'wonHand' && msg.data !== undefined) {
+        // endedHand (rules.md A.4.9) has no winner but carries the same hand-end breakdown.
+        if ((msg.kind === 'wonHand' || msg.kind === 'endedHand') && msg.data !== undefined) {
           const d = msg.data as {
             finalHands?: Record<string, Card[]>;
             meldCredits?: Record<string, { card: Card; pts: number }[]>;

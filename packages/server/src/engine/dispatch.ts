@@ -70,6 +70,13 @@ export function applyAction(state: GameState, playerId: string, action: C2S): Di
       engine.applyGinLayoff(state, playerId, action.layoffs, action.ownMelds);
       return { kind: 'handEnded' };
     }
+    case 'endHand': {
+      if (engine.applyEndHand === undefined) {
+        throw new Error('ERR_NOT_IMPLEMENTED:endHand');
+      }
+      engine.applyEndHand(state, playerId);
+      return { kind: 'handEnded' };
+    }
     case 'setHouseRules':
     case 'create':
     case 'join':

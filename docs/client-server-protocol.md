@@ -12,7 +12,7 @@ Once connected, all communication is JSON over WebSocket frames. Every message �
 
 **Server-enforced limits:**
 
-- Max 10 simultaneous WebSocket connections per IP address. A new connection that would exceed this limit receives `ERR_TOO_MANY_CONNECTIONS` and is immediately closed.
+- Max 10 simultaneous WebSocket connections per IP address. The address is the TCP peer; when the operator runs the server with `TRUST_PROXY=1` it is instead the last `X-Forwarded-For` entry — the one the reverse proxy appended. A new connection that would exceed this limit receives `ERR_TOO_MANY_CONNECTIONS` and is immediately closed.
 - Max 20 messages per second per socket. Messages beyond this rate receive `ERR_RATE_LIMIT`; the connection stays open.
 - Rooms where no player has an active socket are deleted after 10 minutes of inactivity.
 
@@ -25,12 +25,15 @@ If the server cannot parse a message, or the message is structurally wrong, it s
 | Condition | Error code |
 | --- | --- |
 | Message is not valid JSON | `ERR_INVALID_JSON` |
-| JSON is valid but the object has no `t` field | `ERR_INVALID_MSG` |
+| JSON is valid but is not a recognized message: `t` missing or unknown, or a required field absent or of the wrong type (`msg` names the field) | `ERR_INVALID_MSG` |
 | Message rate exceeds 20/second | `ERR_RATE_LIMIT` |
+| The server failed while handling an otherwise well-formed message | `ERR_INTERNAL` |
 
-If the `t` field is present but the action is not permitted in the current state (wrong phase, wrong player, room full, etc.), the server sends a more specific `ERR_*` code documented under each action below.
+Every message shape is validated before it is acted on, so a well-typed message is the only kind that reaches game logic. If the message is well-formed but the action is not permitted in the current state (wrong phase, wrong player, room full, etc.), the server sends a more specific `ERR_*` code documented under each action below.
 
 In all error cases the connection remains open and the game state is unchanged.
+
+A frame that violates the WebSocket protocol itself (an unmasked client frame, an invalid opcode, malformed UTF-8) closes that one connection with status 1002. Other connections and rooms are unaffected.
 
 ---
 
@@ -101,6 +104,8 @@ The state visible to all players.
 The `players` array is in turn order. `discardTop` is `null` only if the discard pile is empty (should not happen in normal play).
 
 `discardPile` is the full discard pile bottom-to-top. Discards are face-up so the entire sequence is public; 500 Rummy uses this for the pile-dive picker and other game variations may ignore it.
+
+One exception: in Gin Rummy the knock discard is face-down (rules.md A.2.4). From the knock until the hand ends it is omitted from `discardPile` and never appears as `discardTop`; `discardPileSize` still counts it, so during that window `discardPileSize` is `discardPile.length + 1`.
 
 `meldedBy` maps each card id on the table to the id of the player who placed it (melded or laid off). Because layoffs append to another player's meld, the placer can differ from the meld's `ownerId`; use `meldedBy` to attribute laid-off cards to the player who laid them off — e.g. for an interim per-player meld/layoff score. Cards not on the table are absent. In Gin no cards are placed until knock time, so it is effectively empty during play.
 
@@ -256,7 +261,7 @@ After a successful draw, `phase` advances to `"meld"`.
 
 **Game-variation rules:**
 
-- **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn.
+- **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn. If the stock is empty, `draw {from:"stock"}` first turns the whole discard pile over, unshuffled, to form a new stock (its bottom card becomes the top), then draws from it (rules.md A.1.9). The discard pile is empty until this turn's discard.
 - **500 Rummy:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
 
 **Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
@@ -271,7 +276,7 @@ After a successful draw, `phase` advances to `"meld"`.
 | `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
 | `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile (basic) |
 | `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rummy) |
-| `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
+| `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock (500 Rummy, Gin; Basic only when the discard pile is empty too) |
 | `ERR_NO_LEGAL_DIVE` | 500 Rummy only, "Unified draw obligation" house rule enabled: the top discard has no legal meld or lay-off use given your hand, so the draw is refused |
 
 ---
@@ -577,6 +582,33 @@ Gin only. Valid only during `phase = "firstUpcardOffer"` (rules.md A.2.2). The n
 
 ---
 
+### `endHand` — 500 Rummy end the hand on an empty stock
+
+```json
+{ "t": "endHand" }
+```
+
+500 Rummy only. Valid only on your turn when `phase` is `"draw"` and `stockSize` is `0` (rules.md A.4.9). Ends the hand in place of drawing; no further turns are played. Each player scores the cards they placed minus the cards left in their hand. Nobody went out, so the hand has no winner.
+
+**Response:** Three messages are sent to all connected players:
+
+1. An [`event`](#event--game-event) with `kind: "endedHand"` identifying the player who ended the hand; `data` is the same breakdown as [`wonHand` data](#wonhand-data) (`finalHands`, `meldCredits`, `handDeadwood`). No `wonHand` event is sent.
+2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
+3. A [`state`](#state--game-state) with both `public` and each player's own `private` hand (phase = `"ended"`)
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `rum500` |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
+| `ERR_STOCK_NOT_EMPTY` | The stock still has cards |
+
+---
+
 ## Server → Client Messages (S2C)
 
 ---
@@ -639,14 +671,15 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `playerReconnected` | A previously-disconnected player rebound their socket within the grace window | absent |
 | `forfeit` | A player's grace window expired (or they dropped non-gracefully) and they are now out of the hand | absent |
 | `gameOver` | The game-ending score threshold has been reached, or only one active player remains after a forfeit | absent |
-| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile", "cards"?: [Card, ...] }` — `pile` = 500 Rummy pile dive (`drawFromPile`); `cards` = the cards taken, present for `discard` and `pile`, **absent for `stock`** |
+| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile", "cards"?: [Card, ...], "restocked"?: true }` — `pile` = 500 Rummy pile dive (`drawFromPile`); `cards` = the cards taken, present for `discard` and `pile`, **absent for `stock`**; `restocked: true` = Basic only, the stock was empty so the discard pile was turned over to form a new stock before the draw (rules.md A.1.9) — the turned-over cards are face-down and never named |
 | `melded` | A player placed a meld from hand | `{ "cards": [Card, ...] }` — the cards placed |
 | `laidOff` | A player laid off onto an existing meld (`layoff`, or the gin defender's `ginLayoff`) | `{ "cards": [Card, ...] }` — the cards placed; for `ginLayoff` that is the defender's own declared melds **and** their layoffs |
 | `discarded` | A player discarded | `{ "card": Card }` — the card discarded |
 | `knocked` | Gin: a player knocked or went gin (rules.md A.2.4) | `{ "cards": [Card, ...] }` — the declared meld cards only; the face-down knock discard is **never** named |
 | `passedUpcard` | Gin: a player declined the initial upcard offer (rules.md A.2.2) | absent |
+| `endedHand` | 500 Rummy: a player ended the hand on an empty stock (`endHand`, rules.md A.4.9) | `{ finalHands, meldCredits, handDeadwood }` — same shape as `wonHand` data; the hand has no winner, so no `wonHand` follows |
 
-Action events (`drew`, `melded`, `laidOff`, `discarded`, `knocked`, `passedUpcard`) are broadcast immediately **before** the `state` broadcast for the same action, so clients can key sounds or animations off events without diffing state. Unlike `state`, events are never re-sent on reconnect.
+Action events (`drew`, `melded`, `laidOff`, `discarded`, `knocked`, `passedUpcard`, `endedHand`) are broadcast immediately **before** the `state` broadcast for the same action, so clients can key sounds or animations off events without diffing state. Unlike `state`, events are never re-sent on reconnect.
 
 Card payloads follow one rule across every game variation: **an event names a card only if that card is already public** — face-up in the discard pile, or placed on the table. Cards only the acting player has seen are never named. Concretely, `drew {from:"stock"}` carries no `cards`, and `knocked` omits the face-down knock discard (rules.md A.2.4) while still naming the declared melds.
 
@@ -688,7 +721,8 @@ Global error codes (not tied to a specific action):
 | Code | Condition |
 | --- | --- |
 | `ERR_INVALID_JSON` | Message is not valid JSON |
-| `ERR_INVALID_MSG` | JSON is valid but has no `t` field |
+| `ERR_INVALID_MSG` | JSON is valid but not a recognized message: `t` missing or unknown, or a field absent or of the wrong type |
+| `ERR_INTERNAL` | The server failed while handling the message; connection stays open |
 | `ERR_RATE_LIMIT` | Exceeded 20 messages/second |
 | `ERR_TOO_MANY_CONNECTIONS` | IP already has 10 open connections (connection is closed after this) |
 
@@ -831,6 +865,8 @@ If the grace window expires first, Bob is forfeited: the server broadcasts `forf
 ```
 
 After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
+
+**500 Rummy empty stock** (rules.md A.4.9): once `stockSize` is `0`, the player in `"draw"` either draws from the discard pile as usual or sends [`endHand`](#endhand--500-rummy-end-the-hand-on-an-empty-stock), which moves the hand straight to `"ended"` with no winner.
 
 The `"discard"` phase value exists but is not set by basic or 500 Rummy. The "maximum one meld per turn" house rule is enforced without a phase change — a second meld while the rule is enabled returns `ERR_MAX_ONE_MELD`, still from the `"meld"` phase. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
 

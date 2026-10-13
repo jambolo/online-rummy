@@ -6,6 +6,7 @@ import { t } from '../theme/tokens';
 import { variationAccent } from '../theme/variations';
 import { useBreakpoint } from '../theme/useBreakpoint';
 import Modal from './Modal';
+import ConfirmModal from './ConfirmModal';
 
 const SUIT_SYMBOL: Record<Suit, string> = { C: '♣', D: '♦', H: '♥', S: '♠' };
 
@@ -41,7 +42,9 @@ function lastActionText(a: LastAction | null, name: string, wentGin: boolean): s
           ? list === ''
             ? `${name} dived the pile`
             : `${name} dived the pile for ${list}`
-          : `${name} drew from stock`;
+          : a.restocked === true
+            ? `${name} turned over the discard pile and drew`
+            : `${name} drew from stock`;
     case 'melded':
       return `${name} melded${sfx}`;
     case 'laidOff':
@@ -54,6 +57,8 @@ function lastActionText(a: LastAction | null, name: string, wentGin: boolean): s
     }
     case 'passedUpcard':
       return `${name} passed the upcard`;
+    case 'endedHand':
+      return `${name} ended the hand`;
   }
 }
 
@@ -116,6 +121,7 @@ export default function ActionBar() {
 
   // Set when a discard is held pending confirmation because the card could be laid off.
   const [pendingDiscardId, setPendingDiscardId] = useState<string | null>(null);
+  const [confirmEndHand, setConfirmEndHand] = useState(false);
 
   const isMobile = useBreakpoint() === 'mobile';
 
@@ -139,6 +145,10 @@ export default function ActionBar() {
   // discard step can't be skipped when going out. The UI must not offer (or hint at) playing
   // it. (The Basic "Last card must be discarded" house rule sets this too, once scaffolded.)
   const lastCardMustDiscard = is500;
+  // rules.md A.4.9: once the stock is empty, the player on turn may end the hand instead of drawing.
+  const canEndHand = is500 && isMyTurn && phase === 'draw' && publicState.stockSize === 0;
+  // rules.md A.1.9: Basic draws from an empty stock by turning the discard pile over first.
+  const restocks = publicState.variant === 'basic' && publicState.stockSize === 0 && publicState.discardPileSize > 0;
 
   const turnPlayerName = publicState.players.find((p) => p.id === publicState.turnPlayerId)?.name ?? '…';
 
@@ -267,9 +277,21 @@ export default function ActionBar() {
       {/* ── Draw phase ── */}
       {isMyTurn && phase === 'draw' && (
         <>
-          <button className="primary" onClick={() => send({ t: 'draw', from: 'stock' })} disabled={publicState.stockSize === 0}>
-            {isMobile ? 'Draw' : 'Draw from stock'} ({publicState.stockSize})
-          </button>
+          {canEndHand ? (
+            <button onClick={() => setConfirmEndHand(true)}>End hand</button>
+          ) : (
+            <button
+              className="primary"
+              onClick={() => send({ t: 'draw', from: 'stock' })}
+              disabled={publicState.stockSize === 0 && !restocks}
+            >
+              {restocks
+                ? isMobile
+                  ? 'New stock'
+                  : 'Turn over discards & draw'
+                : `${isMobile ? 'Draw' : 'Draw from stock'} (${publicState.stockSize})`}
+            </button>
+          )}
           {publicState.discardTop && (
             <button onClick={() => send({ t: 'draw', from: 'discard' })}>
               {isMobile ? 'Take ' : 'Draw '}
@@ -277,6 +299,9 @@ export default function ActionBar() {
               {SUIT_SYMBOL[publicState.discardTop.suit]}
               {isMobile ? '' : ' from discard'}
             </button>
+          )}
+          {canEndHand && (
+            <span style={{ fontSize: 12, color: t.text45 }}>Stock is empty — draw from the discard pile or end the hand.</span>
           )}
         </>
       )}
@@ -490,6 +515,18 @@ export default function ActionBar() {
         <button onClick={clearSelect} style={{ marginLeft: 'auto', opacity: 0.7 }}>
           Clear {sel.length} selected
         </button>
+      )}
+
+      {confirmEndHand && canEndHand && (
+        <ConfirmModal
+          message="End the hand? Everyone scores their melds minus the cards left in their hand."
+          confirmLabel="End hand"
+          onConfirm={() => {
+            send({ t: 'endHand' });
+            setConfirmEndHand(false);
+          }}
+          onCancel={() => setConfirmEndHand(false)}
+        />
       )}
 
       {/* Confirm discard of a card that could still be laid off. */}

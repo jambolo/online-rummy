@@ -37,7 +37,8 @@ export default function BasicRules() {
         <h3 style={h3Style}>Turn flow</h3>
         <ol style={olStyle}>
           <li>
-            <strong>Draw</strong> — take the top card from the stock pile, or take the top card from the discard pile.
+            <strong>Draw</strong> — take the top card from the stock pile, or take the top card from the discard pile. If the stock
+            is empty, drawing from it first turns the discard pile over, unshuffled, to form a new stock.
           </li>
           <li>
             <strong>Meld / lay off</strong> (optional) — place as many melds as you like, and/or lay off cards onto any existing

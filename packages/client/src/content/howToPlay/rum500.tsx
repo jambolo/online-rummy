@@ -65,6 +65,11 @@ export default function Rum500Rules() {
             a discard.
           </li>
         </ol>
+        <p style={pStyle}>
+          <strong>Empty stock</strong> — once the stock runs out, you can draw only from the discard pile. On your turn you may{' '}
+          <strong>end the hand</strong> instead of drawing: nobody goes out, and everyone scores their melds minus the cards left in
+          their hand.
+        </p>
       </section>
 
       <section>

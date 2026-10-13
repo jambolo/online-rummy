@@ -202,4 +202,19 @@ describe('applyAction — not implemented for variant', () => {
     const state = basicGame();
     expect(() => applyAction(state, 'p1', { t: 'ginLayoff', layoffs: [] })).toThrow('ERR_NOT_IMPLEMENTED:ginLayoff');
   });
+
+  it('endHand on basic throws ERR_NOT_IMPLEMENTED', () => {
+    const state = basicGame();
+    state.stock = [];
+    expect(() => applyAction(state, 'p1', { t: 'endHand' })).toThrow('ERR_NOT_IMPLEMENTED:endHand');
+  });
+});
+
+describe('applyAction — 500 Rummy endHand', () => {
+  it('returns { kind: "handEnded" } on an empty stock (rules.md A.4.9)', () => {
+    const state = createRum500Game('room1', two, makeSeededRNG(1), 0);
+    state.stock = [];
+    expect(applyAction(state, 'p1', { t: 'endHand' })).toEqual({ kind: 'handEnded' });
+    expect(state.phase).toBe('ended');
+  });
 });

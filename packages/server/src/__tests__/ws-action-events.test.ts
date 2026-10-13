@@ -184,6 +184,26 @@ describe('action events — basic', () => {
     await g.closeAll();
   });
 
+  it('draw from an empty stock → drew {from:stock, restocked:true}, naming no turned-over card (rules.md A.1.9)', async () => {
+    const g = await startGame('basic');
+    const actorId = g.state.turnPlayerId;
+    // Copy the ids: setDiscard returns the live pile array, which becomes the new stock.
+    const pileIds = setDiscard(g.state, [
+      ['2', 'C'],
+      ['5', 'H'],
+    ]).map((c) => c.id);
+    g.state.stock = [];
+    g.clientOf(actorId).send({ t: 'draw', from: 'stock' });
+    for (const client of [g.clientOf(actorId), g.otherOf(actorId)]) {
+      await expectEventThenState(client, 'drew', actorId, { from: 'stock', restocked: true }, ['cards']);
+    }
+    // The pile's bottom card is the new stock's top, so it is the one drawn.
+    expect(g.state.players.find((p) => p.id === actorId)!.hand.at(-1)!.id).toBe(pileIds[0]);
+    expect(g.state.stock.map((c) => c.id)).toEqual([pileIds[1]]);
+    expect(g.state.discardPile).toHaveLength(0);
+    await g.closeAll();
+  });
+
   it('draw from discard → drew {from:discard} naming the face-up upcard', async () => {
     const g = await startGame('basic');
     const actorId = g.state.turnPlayerId;
@@ -258,7 +278,7 @@ describe('action events — gin', () => {
 
   // Decline both upcard offers, rig a legal knock hand, draw, and send the knock.
   // Callers consume the resulting 'knocked' frames themselves.
-  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string; meldCards: Card[] }> {
+  async function rigKnock(g: Game): Promise<{ knockerId: string; defenderId: string; meldCards: Card[]; discardCard: Card }> {
     const nonDealerId = g.state.turnPlayerId;
     const dealerId = g.otherId(nonDealerId);
 
@@ -306,8 +326,22 @@ describe('action events — gin', () => {
       ],
       discardId: rig[9]!.id,
     });
-    return { knockerId, defenderId: g.otherId(knockerId), meldCards: rig.slice(0, 9) };
+    return { knockerId, defenderId: g.otherId(knockerId), meldCards: rig.slice(0, 9), discardCard: rig[9]! };
   }
+
+  it('after a knock the public state keeps the face-down discard off the visible pile', async () => {
+    const g = await startGame('gin');
+    const { knockerId, defenderId, discardCard } = await rigKnock(g);
+    const s = (await g.clientOf(defenderId).recvUntil('state')) as Extract<S2C, { t: 'state' }>;
+    expect(s.public.discardPile.map((c) => c.id)).not.toContain(discardCard.id);
+    expect(s.public.discardTop?.id).not.toBe(discardCard.id);
+    // The count still includes it — that a card was discarded is no secret, its face is.
+    expect(s.public.discardPileSize).toBe(s.public.discardPile.length + 1);
+    // Engine-side the card is on the pile, so card conservation holds.
+    expect(g.state.discardPile[g.state.discardPile.length - 1]!.id).toBe(discardCard.id);
+    await g.clientOf(knockerId).recvUntil('state');
+    await g.closeAll();
+  });
 
   it('knock → knocked to both players, naming the declared melds but not the face-down discard', async () => {
     const g = await startGame('gin');
@@ -402,6 +436,43 @@ describe('action events — 500 rummy', () => {
     actor.send({ t: 'drawFromPile', cardId: pile[1]!.id });
     await expectEventThenState(actor, 'drew', actorId, taken);
     await expectEventThenState(g.otherOf(actorId), 'drew', actorId, taken);
+    await g.closeAll();
+  });
+
+  it('endHand on an empty stock → endedHand carrying the hand-end breakdown, no wonHand (rules.md A.4.9)', async () => {
+    const g = await startGame('rum500');
+    const actorId = g.state.turnPlayerId;
+    const otherId = g.otherId(actorId);
+    const actorHand = setHand(g.state, actorId, [['K', 'S']]);
+    const otherHand = setHand(g.state, otherId, [['4', 'H']]);
+    g.state.stock = [];
+
+    g.clientOf(actorId).send({ t: 'endHand' });
+    for (const client of [g.clientOf(actorId), g.otherOf(actorId)]) {
+      const e = await client.recv();
+      expect(e).toMatchObject({
+        t: 'event',
+        kind: 'endedHand',
+        playerId: actorId,
+        data: {
+          finalHands: { [actorId]: actorHand, [otherId]: otherHand },
+          handDeadwood: { [actorId]: 10, [otherId]: 4 },
+        },
+      });
+      const s = (await client.recv()) as Extract<S2C, { t: 'state' }>;
+      expect(s.t).toBe('state');
+      expect(s.public.phase).toBe('ended');
+      expect(s.public.players.find((p) => p.id === actorId)!.score).toBe(-10);
+      expect(s.public.players.find((p) => p.id === otherId)!.score).toBe(-4);
+    }
+    await g.closeAll();
+  });
+
+  it('endHand while the stock has cards is rejected with ERR_STOCK_NOT_EMPTY', async () => {
+    const g = await startGame('rum500');
+    const actor = g.clientOf(g.state.turnPlayerId);
+    actor.send({ t: 'endHand' });
+    expect(await actor.recv()).toMatchObject({ t: 'error', code: 'ERR_STOCK_NOT_EMPTY' });
     await g.closeAll();
   });
 });

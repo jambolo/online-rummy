@@ -68,6 +68,7 @@ describe('soundForMessage: other event kinds', () => {
     { kind: 'discarded', expected: 'discard' },
     { kind: 'knocked', expected: 'knock' },
     { kind: 'passedUpcard', expected: null },
+    { kind: 'endedHand', expected: 'hand-over' },
     { kind: 'gameStarted', expected: 'deal' },
     { kind: 'gameOver', expected: 'game-over' },
     { kind: 'handCancelled', expected: 'hand-cancelled' },

@@ -25,6 +25,11 @@ const allowedOrigins = new Set(
     .filter(Boolean),
 );
 
+// TRUST_PROXY=1: the server sits behind a reverse proxy that appends the client address to
+// X-Forwarded-For (Cloudflare, nginx, Caddy). Unset = clients connect directly, and the
+// header is ignored because anyone can send one.
+const trustProxy = process.env['TRUST_PROXY'] === '1';
+
 const portStr = process.env['PORT'] ?? '8080';
 const port = parseInt(portStr, 10);
 if (isNaN(port) || port < 1 || port > 65535) {
@@ -92,11 +97,12 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
 const server = createServer(handleRequest);
 
-initWS(server, secret, allowedOrigins);
+initWS(server, secret, allowedOrigins, { trustProxy });
 
 server.listen(port, () => {
   console.log(`[online-rummy] Listening on :${port}`);
   console.log(`[online-rummy] Allowed origins: ${[...allowedOrigins].join(', ')}`);
+  console.log(`[online-rummy] Client IP source: ${trustProxy ? 'X-Forwarded-For (TRUST_PROXY=1)' : 'TCP peer'}`);
   console.log(
     staticReady
       ? `[online-rummy] Serving static files from ${staticDir}`

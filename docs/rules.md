@@ -109,6 +109,14 @@ Winner score = sum of opponents' unmelded card point values.
 
 **End-of-game**: first player to reach a cumulative score of **100 points** wins the game.
 
+### A.1.9 Stock exhausted `[BIC-R]`
+
+If the last card of the stock has been drawn and no player has gone out, the next player in turn may either take the top card of the discard pile, or turn the **whole** discard pile over **without shuffling** to form a new stock and draw its top card. Play then proceeds as before; that player's discard starts a new discard pile. There is no limit on how many times the stock is re-formed.
+
+`[PG-R]` gives the same main rule and lists this house rule:
+
+**Shuffled reuse** *(house rule)* `[PG-R]`: when enabled, the discard pile is shuffled before it becomes the new stock. Pagat notes most books now give this, since an unshuffled pile rewards memorizing the discards.
+
 ---
 
 ## A.2 Gin Rummy
@@ -353,6 +361,16 @@ A player goes out when their hand is empty. **A player may not play their last c
 
 **Last card may be played** *(house rule)*: when enabled, the final card may be melded or laid off instead of discarded. The player goes out the moment their hand becomes empty, whether through melding, laying off, or discarding.
 
+### A.4.9 Stock exhausted `[PG-5, WP]`
+
+An empty stock does not end the hand by itself. Play continues with draws from the discard pile only — the top card or a pile dive, per A.4.4. Every other turn rule is unchanged, so each turn still ends with a discard and the discard pile is never empty at the start of a turn.
+
+The hand ends when the player whose turn it is **cannot, or chooses not to**, draw from the discard pile. That player ends the hand in place of drawing; no further turns are played.
+
+Scoring is A.4.7 unchanged: each player scores the cards they placed minus the cards remaining in their hand. Cards in hand count against the holder even if they could have been melded. Nobody went out, so the hand has no winner.
+
+`[BIC-5]` is silent on stock exhaustion. Neither primary limits how long play may cycle through the discard pile.
+
 ---
 
 ## A.5 Continental Rummy
@@ -569,6 +587,7 @@ if game == basic_rummy:
     melds: set(3-4 same rank) | run(3+ same suit sequential)
     turn: draw(stock|top_discard) -> meld(*) -> lay_off? -> discard
     constraint: if drew top_discard, cannot discard same card same turn
+    stock_empty: draw(stock) turns whole discard pile over (unshuffled) as new stock, then draws its top
     going_rummy_bonus: score *= 2  (or +10 house rule per PG-R)
     score: opp_unmelded; A=1 (15 when ace-either-end/round-the-corner enabled), 2-10=pip, JQK=10
 elif game == gin:
@@ -605,6 +624,7 @@ elif game == 500_rum:
     top-discard draw: cannot re-discard same turn (no must-meld obligation)
     pile dive (below top): must take all above; selected card must meld/layoff before discard
     lay_off others' melds -> points credit yourself
+    stock_empty: draw from discard pile only; player on turn may end hand instead of drawing -> score, no winner
     score = melded_value - hand_value; target >= 500
 elif game == continental:
     deck = 2*52 + 2 jokers = 106

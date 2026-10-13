@@ -21,6 +21,9 @@ export type MeldOptions = {
 // rules.md A.1.5
 export function validateMeld(cards: Card[], opts: MeldOptions): boolean {
   if (cards.length < 3) return false;
+  // A physical card may appear only once. Without this, three references to one held
+  // card pass the same-rank set check and a single card stands in for a whole meld.
+  if (new Set(cards.map((c) => c.id)).size !== cards.length) return false;
   return isSet(cards, opts) || isRun(cards, opts);
 }
 

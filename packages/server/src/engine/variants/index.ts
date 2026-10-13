@@ -17,7 +17,8 @@ export const VARIANTS: Record<Variant, VariantEngine> = {
 };
 
 export function isVariant(v: unknown): v is Variant {
-  return typeof v === 'string' && v in VARIANTS;
+  // hasOwn, not `in`: `in` walks the prototype chain, so 'toString' would pass.
+  return typeof v === 'string' && Object.hasOwn(VARIANTS, v);
 }
 
 export function getVariant(v: Variant): VariantEngine {

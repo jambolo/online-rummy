@@ -57,6 +57,8 @@ function soundForEvent(msg: Extract<S2C, { t: 'event' }>, ctx: SoundContext): So
       return 'knock';
     case 'passedUpcard':
       return null; // deliberately silent
+    case 'endedHand':
+      return 'hand-over'; // nobody went out (rules.md A.4.9)
     case 'gameStarted':
       return 'deal';
     case 'gameOver':

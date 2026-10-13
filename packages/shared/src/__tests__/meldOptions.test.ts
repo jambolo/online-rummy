@@ -29,6 +29,20 @@ describe('validateMeld runs (house rule options)', () => {
   });
 });
 
+describe('validateMeld physical-card identity', () => {
+  const opts = { aceHigh: false, roundTheCorner: false };
+
+  it('rejects the same card id repeated to fake a set', () => {
+    const seven = c('7', 'H', 'only');
+    expect(validateMeld([seven, seven, seven], opts)).toBe(false);
+    expect(validateMeld([seven, seven, c('7', 'D')], opts)).toBe(false);
+  });
+
+  it('still accepts same rank+suit cards with distinct ids (two-deck play)', () => {
+    expect(validateMeld([c('7', 'H', 'd1'), c('7', 'H', 'd2'), c('7', 'D')], opts)).toBe(true);
+  });
+});
+
 describe('validateMeld sets (house rule options)', () => {
   const opts = { aceHigh: false, roundTheCorner: false };
 

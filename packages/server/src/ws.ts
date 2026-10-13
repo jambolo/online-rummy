@@ -30,6 +30,7 @@ import {
 } from './room.js';
 import { makeSessionId, signSessionId, verifySessionId } from './session.js';
 import { cryptoRNG } from './rng.js';
+import { validateC2S } from './validate.js';
 import { getVariant, isVariant } from './engine/variants/index.js';
 import { applyAction } from './engine/dispatch.js';
 import type { GameState, GamePlayer } from './engine/types.js';
@@ -133,6 +134,9 @@ function requirePlaying(ws: WebSocket, ctx: SocketContext): PlayingCtx | null {
 }
 
 function buildPublicState(room: Room, state: GameState): PublicState {
+  // rules.md A.2.4: the Gin knock discard sits on the pile face-down — never in the projection.
+  const hiddenId = state.variant === 'gin' ? state.variantState.knockDiscardId : null;
+  const pile = hiddenId === null ? state.discardPile : state.discardPile.filter((c) => c.id !== hiddenId);
   return {
     roomId: room.code,
     variant: state.variant,
@@ -149,9 +153,9 @@ function buildPublicState(room: Room, state: GameState): PublicState {
     })),
     turnPlayerId: state.turnPlayerId,
     phase: state.phase,
-    discardTop: state.discardPile[state.discardPile.length - 1] ?? null,
+    discardTop: pile[pile.length - 1] ?? null,
     discardPileSize: state.discardPile.length,
-    discardPile: [...state.discardPile],
+    discardPile: [...pile],
     stockSize: state.stock.length,
     meldedBy: Object.fromEntries(state.meldedBy),
     variantPublic: buildVariantPublic(state),
@@ -250,10 +254,16 @@ function handleHandEnd(room: Room, state: GameState): void {
   broadcastStateAll(room, state);
 }
 
-function getIp(req: IncomingMessage): string {
-  const fwd = req.headers['x-forwarded-for'];
-  const first = Array.isArray(fwd) ? fwd[0] : fwd;
-  return first?.split(',')[0]?.trim() ?? req.socket.remoteAddress ?? '0.0.0.0';
+// Behind a trusted reverse proxy the client address is the LAST X-Forwarded-For entry —
+// the one that proxy appended. Anything earlier came from the client and proves nothing,
+// which is also why the header is ignored entirely unless the operator opts in.
+function getIp(req: IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const fwd = req.headers['x-forwarded-for'];
+    const last = (Array.isArray(fwd) ? fwd.join(',') : (fwd ?? '')).split(',').pop()?.trim();
+    if (last !== undefined && last.length > 0) return last;
+  }
+  return req.socket.remoteAddress ?? '0.0.0.0';
 }
 
 // --- Idle timer ---
@@ -288,7 +298,7 @@ function maybeStartIdleTimer(room: Room): void {
 // (see docs/client-server-protocol.md 'event').
 type GameActionC2S = Extract<
   C2S,
-  { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' }
+  { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' | 'endHand' }
 >;
 // cardRegistry holds every card for the whole game, so ids still resolve after the action
 // has moved them between hand, melds and pile.
@@ -300,7 +310,8 @@ function resolveCards(state: GameState, ids: string[]): Card[] {
 // cards placed on the table. A stock draw and the Gin knock's face-down discard are never
 // named (rules.md A.2.4). `pileBefore` is the discard pile as it stood before the action:
 // a draw removes what it takes, so the post-action state can no longer name it.
-function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pileBefore: Card[]): S2C {
+// `stockBefore` is the pre-action stock size: a stock draw that succeeded from 0 restocked.
+function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pileBefore: Card[], stockBefore: number): S2C {
   switch (msg.t) {
     case 'draw': {
       // Inbound C2S is cast without runtime validation and the engines treat any
@@ -308,7 +319,13 @@ function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pil
       // unvalidated client input into a room-wide broadcast.
       const from = msg.from === 'discard' ? 'discard' : 'stock';
       const upcard = pileBefore[pileBefore.length - 1];
-      const data: DrewEventData = from === 'discard' && upcard !== undefined ? { from, cards: [upcard] } : { from };
+      // rules.md A.1.9: the turned-over pile is face-down, so its cards are never named.
+      const data: DrewEventData =
+        from === 'discard' && upcard !== undefined
+          ? { from, cards: [upcard] }
+          : from === 'stock' && stockBefore === 0
+            ? { from, restocked: true }
+            : { from };
       return { t: 'event', kind: 'drew', playerId, data };
     }
     case 'drawFromPile': {
@@ -356,6 +373,12 @@ function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pil
       };
     case 'passUpcard':
       return { t: 'event', kind: 'passedUpcard', playerId };
+    case 'endHand': {
+      // rules.md A.4.9: the hand has no winner, so handleHandEnd sends no wonHand — this
+      // event carries the same breakdown. Every hand is revealed at hand end anyway.
+      const engine = getVariant(state.variant);
+      return { t: 'event', kind: 'endedHand', playerId, data: engine.handEndPayload(state, engine.scoreHand(state)) };
+    }
   }
 }
 
@@ -647,15 +670,17 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
     case 'discard':
     case 'passUpcard':
     case 'knock':
-    case 'ginLayoff': {
+    case 'ginLayoff':
+    case 'endHand': {
       const p = requirePlaying(ws, ctx);
       if (p === null) break;
       try {
         // Snapshot the pile before the action so a draw event can name the cards taken.
         const takesFromPile = msg.t === 'drawFromPile' || (msg.t === 'draw' && msg.from === 'discard');
         const pileBefore = takesFromPile ? [...p.state.discardPile] : [];
+        const stockBefore = p.state.stock.length;
         const result = applyAction(p.state, p.player.id, msg);
-        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id, p.state, pileBefore));
+        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id, p.state, pileBefore, stockBefore));
         switch (result.kind) {
           case 'state':
             broadcastState(p.room, p.state, p.player.id);
@@ -749,7 +774,6 @@ function handleDisconnect(ws: WebSocket): void {
       maybeStartIdleTimer(room);
     }, LOBBY_RECONNECT_MS);
     reconnectTimers.set(player.id, timer);
-    maybeStartIdleTimer(room);
   } else if (room.status === 'playing' && player.status === 'active') {
     // Don't forfeit immediately — open a grace window so a flaky connection / reloaded
     // tab can rebind via join+sessionId and resume the same hand. Tell the opponent so
@@ -760,15 +784,22 @@ function handleDisconnect(ws: WebSocket): void {
       forfeitPlayer(room, player);
     }, GAME_RECONNECT_MS);
     reconnectTimers.set(player.id, timer);
-    maybeStartIdleTimer(room);
   }
+
+  // Unconditional: an 'ended' room (or one whose forfeited player just dropped) matches
+  // neither branch, and nothing else would ever reclaim it once its last socket is gone.
+  maybeStartIdleTimer(room);
 }
 
 // --- Entry point ---
 
-export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<string>): void {
+export type WSOptions = { trustProxy?: boolean };
+
+export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<string>, opts: WSOptions = {}): void {
   _secret = secret;
+  const trustProxy = opts.trustProxy === true;
   const wss = new WebSocketServer({ noServer: true });
+  wss.on('error', (err) => console.error('[ws] server error', err));
 
   httpServer.on('upgrade', (req, socket, head) => {
     const origin = req.headers.origin ?? '';
@@ -783,8 +814,16 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
   });
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    // First thing, before the cap check can return early: a protocol error (unmasked
+    // frame, bad opcode, invalid UTF-8) emits 'error' on this socket, and an emitter with
+    // no listener throws — which would take the whole process down.
+    ws.on('error', (err) => {
+      console.error(`[ws] socket error  ${err.message}`);
+      ws.terminate();
+    });
+
     const socketId = randomUUID();
-    const ip = getIp(req);
+    const ip = getIp(req, trustProxy);
 
     // Per-IP connection cap
     let ipSet = ipConnections.get(ip);
@@ -818,19 +857,25 @@ export function initWS(httpServer: Server, secret: string, allowedOrigins: Set<s
         : Array.isArray(data)
           ? Buffer.concat(data as Buffer[]).toString('utf8')
           : Buffer.from(data as ArrayBuffer).toString('utf8');
-      let msg: C2S;
+      let parsed: unknown;
       try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed !== 'object' || parsed === null || !('t' in parsed)) {
-          sendError(ws, 'ERR_INVALID_MSG', 'Message must be an object with field t');
-          return;
-        }
-        msg = parsed as C2S;
+        parsed = JSON.parse(raw);
       } catch {
         sendError(ws, 'ERR_INVALID_JSON', 'Invalid JSON');
         return;
       }
-      handleMessage(ws, ctx, msg);
+      const checked = validateC2S(parsed);
+      if (!checked.ok) {
+        sendError(ws, 'ERR_INVALID_MSG', checked.reason);
+        return;
+      }
+      try {
+        handleMessage(ws, ctx, checked.msg);
+      } catch (err) {
+        // Backstop for handler bugs: cost one error reply, never the process.
+        console.error('[ws] handler threw', err);
+        sendError(ws, 'ERR_INTERNAL', 'Internal server error');
+      }
     });
 
     ws.on('close', () => {
