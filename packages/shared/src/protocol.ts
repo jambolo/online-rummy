@@ -16,6 +16,7 @@ export type C2S =
   | { t: 'knock'; melds?: string[][]; discardId: string } // gin only — melds declared at knock; discardId = face-down discard (rules.md A.2.4)
   | { t: 'ginLayoff'; ownMelds?: string[][]; layoffs: Array<{ cardId: string; meldId: string }> } // gin only — defender declares own melds + lays off onto knocker's melds (rules.md A.2.4)
   | { t: 'passUpcard' } // gin only — decline initial upcard offer (rules.md A.2.2)
+  | { t: 'endHand' } // 500 Rummy only — end the hand instead of drawing once the stock is empty (rules.md A.4.9)
   | { t: 'keepalive' } // idle keep-alive; server relays to other room players (Cloudflare drops idle WS)
   | { t: 'leave' } // leave the room; cancels the game and returns all players to the start page
   | { t: 'chat'; text: string };
@@ -27,6 +28,7 @@ export type EventKind =
   | 'discarded'
   | 'knocked' // gin only — a player knocked or went gin (rules.md A.2.4)
   | 'passedUpcard' // gin only — a player declined the initial upcard offer (rules.md A.2.2)
+  | 'endedHand' // 500 Rummy only — a player ended the hand on an empty stock (rules.md A.4.9)
   | 'wonHand'
   | 'handCancelled' // gin only — stock-depletion cancelled hand (rules.md A.2.3)
   | 'playerLeft' // a player left the room via the leave button; game cancelled, all return to start page

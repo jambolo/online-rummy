@@ -164,6 +164,7 @@ export const rum500Variant: VariantEngine = {
   },
   applyDiscard: (state, playerId, cardId) => applyDiscard(state, playerId, cardId),
   applyDrawFromPile: (state, playerId, cardId) => applyDrawFromPile(state, playerId, cardId),
+  applyEndHand: (state, playerId) => applyEndHand(state, playerId),
 
   // Re-deal: clockwise rotation from previous first player. Same as basic.
   nextFirstPlayerIndex(oldState, newPlayers) {
@@ -173,7 +174,8 @@ export const rum500Variant: VariantEngine = {
     return (prevIdx + 1) % newPlayers.length;
   },
 
-  // Winner = the active player who emptied their hand.
+  // Winner = the active player who emptied their hand. A hand ended on an empty stock
+  // (rules.md A.4.9) has none.
   winnerForHand(state, _scores) {
     return state.players.find((p) => p.hand.length === 0 && p.status === 'active')?.id ?? null;
   },
@@ -271,6 +273,15 @@ export function applyDraw(state: GameState, playerId: PlayerId, from: 'stock' | 
     state.players.find((p) => p.id === playerId)!.hand.push(card);
   }
   state.phase = 'meld';
+}
+
+// rules.md A.4.9: with the stock empty, the player on turn may end the hand instead of
+// drawing from the discard pile. Scored per A.4.7 by the WS layer's hand-end path.
+export function applyEndHand(state: GameState, playerId: PlayerId): void {
+  requireTurn(state, playerId);
+  if (state.phase !== 'draw') throw new Error('ERR_WRONG_PHASE');
+  if (state.stock.length > 0) throw new Error('ERR_STOCK_NOT_EMPTY');
+  state.phase = 'ended';
 }
 
 // rules.md A.4.4: pile dive — take selected card + everything above it, must use selected card.

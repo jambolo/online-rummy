@@ -298,7 +298,7 @@ function maybeStartIdleTimer(room: Room): void {
 // (see docs/client-server-protocol.md 'event').
 type GameActionC2S = Extract<
   C2S,
-  { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' }
+  { t: 'draw' | 'drawFromPile' | 'meld' | 'layoff' | 'discard' | 'passUpcard' | 'knock' | 'ginLayoff' | 'endHand' }
 >;
 // cardRegistry holds every card for the whole game, so ids still resolve after the action
 // has moved them between hand, melds and pile.
@@ -366,6 +366,12 @@ function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pil
       };
     case 'passUpcard':
       return { t: 'event', kind: 'passedUpcard', playerId };
+    case 'endHand': {
+      // rules.md A.4.9: the hand has no winner, so handleHandEnd sends no wonHand — this
+      // event carries the same breakdown. Every hand is revealed at hand end anyway.
+      const engine = getVariant(state.variant);
+      return { t: 'event', kind: 'endedHand', playerId, data: engine.handEndPayload(state, engine.scoreHand(state)) };
+    }
   }
 }
 
@@ -657,7 +663,8 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
     case 'discard':
     case 'passUpcard':
     case 'knock':
-    case 'ginLayoff': {
+    case 'ginLayoff':
+    case 'endHand': {
       const p = requirePlaying(ws, ctx);
       if (p === null) break;
       try {

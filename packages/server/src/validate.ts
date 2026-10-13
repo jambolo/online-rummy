@@ -38,6 +38,7 @@ const SHAPES: { [T in C2S['t']]: Record<string, Check> } = {
     layoffs: (v) => Array.isArray(v) && v.every((l) => isObj(l) && isStr(l['cardId']) && isStr(l['meldId'])),
   },
   passUpcard: {},
+  endHand: {},
   keepalive: {},
   leave: {},
   chat: { text: isStr },

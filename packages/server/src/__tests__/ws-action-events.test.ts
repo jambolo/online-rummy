@@ -418,4 +418,41 @@ describe('action events — 500 rummy', () => {
     await expectEventThenState(g.otherOf(actorId), 'drew', actorId, taken);
     await g.closeAll();
   });
+
+  it('endHand on an empty stock → endedHand carrying the hand-end breakdown, no wonHand (rules.md A.4.9)', async () => {
+    const g = await startGame('rum500');
+    const actorId = g.state.turnPlayerId;
+    const otherId = g.otherId(actorId);
+    const actorHand = setHand(g.state, actorId, [['K', 'S']]);
+    const otherHand = setHand(g.state, otherId, [['4', 'H']]);
+    g.state.stock = [];
+
+    g.clientOf(actorId).send({ t: 'endHand' });
+    for (const client of [g.clientOf(actorId), g.otherOf(actorId)]) {
+      const e = await client.recv();
+      expect(e).toMatchObject({
+        t: 'event',
+        kind: 'endedHand',
+        playerId: actorId,
+        data: {
+          finalHands: { [actorId]: actorHand, [otherId]: otherHand },
+          handDeadwood: { [actorId]: 10, [otherId]: 4 },
+        },
+      });
+      const s = (await client.recv()) as Extract<S2C, { t: 'state' }>;
+      expect(s.t).toBe('state');
+      expect(s.public.phase).toBe('ended');
+      expect(s.public.players.find((p) => p.id === actorId)!.score).toBe(-10);
+      expect(s.public.players.find((p) => p.id === otherId)!.score).toBe(-4);
+    }
+    await g.closeAll();
+  });
+
+  it('endHand while the stock has cards is rejected with ERR_STOCK_NOT_EMPTY', async () => {
+    const g = await startGame('rum500');
+    const actor = g.clientOf(g.state.turnPlayerId);
+    actor.send({ t: 'endHand' });
+    expect(await actor.recv()).toMatchObject({ t: 'error', code: 'ERR_STOCK_NOT_EMPTY' });
+    await g.closeAll();
+  });
 });

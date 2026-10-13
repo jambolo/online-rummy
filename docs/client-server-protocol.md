@@ -582,6 +582,33 @@ Gin only. Valid only during `phase = "firstUpcardOffer"` (rules.md A.2.2). The n
 
 ---
 
+### `endHand` — 500 Rummy end the hand on an empty stock
+
+```json
+{ "t": "endHand" }
+```
+
+500 Rummy only. Valid only on your turn when `phase` is `"draw"` and `stockSize` is `0` (rules.md A.4.9). Ends the hand in place of drawing; no further turns are played. Each player scores the cards they placed minus the cards left in their hand. Nobody went out, so the hand has no winner.
+
+**Response:** Three messages are sent to all connected players:
+
+1. An [`event`](#event--game-event) with `kind: "endedHand"` identifying the player who ended the hand; `data` is the same breakdown as [`wonHand` data](#wonhand-data) (`finalHands`, `meldCredits`, `handDeadwood`). No `wonHand` event is sent.
+2. If the game is now over: an [`event`](#event--game-event) with `kind: "gameOver"` identifying the overall winner
+3. A [`state`](#state--game-state) with both `public` and each player's own `private` hand (phase = `"ended"`)
+
+**Errors:**
+
+| Code | Condition |
+| --- | --- |
+| `ERR_NOT_IN_ROOM` | This socket is not associated with any room |
+| `ERR_WRONG_STATE` | Game is not in progress |
+| `ERR_NOT_IMPLEMENTED` | Game variation is not `rum500` |
+| `ERR_NOT_YOUR_TURN` | It is not this player's turn |
+| `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
+| `ERR_STOCK_NOT_EMPTY` | The stock still has cards |
+
+---
+
 ## Server → Client Messages (S2C)
 
 ---
@@ -650,8 +677,9 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `discarded` | A player discarded | `{ "card": Card }` — the card discarded |
 | `knocked` | Gin: a player knocked or went gin (rules.md A.2.4) | `{ "cards": [Card, ...] }` — the declared meld cards only; the face-down knock discard is **never** named |
 | `passedUpcard` | Gin: a player declined the initial upcard offer (rules.md A.2.2) | absent |
+| `endedHand` | 500 Rummy: a player ended the hand on an empty stock (`endHand`, rules.md A.4.9) | `{ finalHands, meldCredits, handDeadwood }` — same shape as `wonHand` data; the hand has no winner, so no `wonHand` follows |
 
-Action events (`drew`, `melded`, `laidOff`, `discarded`, `knocked`, `passedUpcard`) are broadcast immediately **before** the `state` broadcast for the same action, so clients can key sounds or animations off events without diffing state. Unlike `state`, events are never re-sent on reconnect.
+Action events (`drew`, `melded`, `laidOff`, `discarded`, `knocked`, `passedUpcard`, `endedHand`) are broadcast immediately **before** the `state` broadcast for the same action, so clients can key sounds or animations off events without diffing state. Unlike `state`, events are never re-sent on reconnect.
 
 Card payloads follow one rule across every game variation: **an event names a card only if that card is already public** — face-up in the discard pile, or placed on the table. Cards only the acting player has seen are never named. Concretely, `drew {from:"stock"}` carries no `cards`, and `knocked` omits the face-down knock discard (rules.md A.2.4) while still naming the declared melds.
 
@@ -837,6 +865,8 @@ If the grace window expires first, Bob is forfeited: the server broadcasts `forf
 ```
 
 After drawing, the player may meld and lay off any number of times, then must discard to end their turn. Melding and laying off may be skipped entirely. Discard is legal from `"meld"` phase — the player does not need to meld before discarding.
+
+**500 Rummy empty stock** (rules.md A.4.9): once `stockSize` is `0`, the player in `"draw"` either draws from the discard pile as usual or sends [`endHand`](#endhand--500-rummy-end-the-hand-on-an-empty-stock), which moves the hand straight to `"ended"` with no winner.
 
 The `"discard"` phase value exists but is not set by basic or 500 Rummy. The "maximum one meld per turn" house rule is enforced without a phase change — a second meld while the rule is enabled returns `ERR_MAX_ONE_MELD`, still from the `"meld"` phase. Clients should treat `"discard"` the same as `"meld"` for action legality purposes.
 

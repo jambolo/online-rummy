@@ -136,6 +136,7 @@ export interface VariantEngine {
     ownMelds: string[][] | undefined,
   ): void;
   applyPassUpcard?(state: GameState, playerId: PlayerId): void;
+  applyEndHand?(state: GameState, playerId: PlayerId): void;
 
   // Lifecycle hooks
   nextFirstPlayerIndex(oldState: GameState | null, newPlayers: Array<{ id: string; name: string }>): number;

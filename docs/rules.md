@@ -353,6 +353,16 @@ A player goes out when their hand is empty. **A player may not play their last c
 
 **Last card may be played** *(house rule)*: when enabled, the final card may be melded or laid off instead of discarded. The player goes out the moment their hand becomes empty, whether through melding, laying off, or discarding.
 
+### A.4.9 Stock exhausted `[PG-5, WP]`
+
+An empty stock does not end the hand by itself. Play continues with draws from the discard pile only — the top card or a pile dive, per A.4.4. Every other turn rule is unchanged, so each turn still ends with a discard and the discard pile is never empty at the start of a turn.
+
+The hand ends when the player whose turn it is **cannot, or chooses not to**, draw from the discard pile. That player ends the hand in place of drawing; no further turns are played.
+
+Scoring is A.4.7 unchanged: each player scores the cards they placed minus the cards remaining in their hand. Cards in hand count against the holder even if they could have been melded. Nobody went out, so the hand has no winner.
+
+`[BIC-5]` is silent on stock exhaustion. Neither primary limits how long play may cycle through the discard pile.
+
 ---
 
 ## A.5 Continental Rummy
@@ -605,6 +615,7 @@ elif game == 500_rum:
     top-discard draw: cannot re-discard same turn (no must-meld obligation)
     pile dive (below top): must take all above; selected card must meld/layoff before discard
     lay_off others' melds -> points credit yourself
+    stock_empty: draw from discard pile only; player on turn may end hand instead of drawing -> score, no winner
     score = melded_value - hand_value; target >= 500
 elif game == continental:
     deck = 2*52 + 2 jokers = 106

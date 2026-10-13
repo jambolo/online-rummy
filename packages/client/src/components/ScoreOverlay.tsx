@@ -42,6 +42,7 @@ export default function ScoreOverlay() {
   const ginInfo = useAppStore((s) => s.ginInfo);
   const isGameOver = useAppStore((s) => s.isGameOver);
   const handCancelled = useAppStore((s) => s.handCancelled);
+  const lastAction = useAppStore((s) => s.lastAction);
   const send = useAppStore((s) => s.send);
 
   if (!publicState || publicState.phase !== 'ended') return null;
@@ -53,6 +54,13 @@ export default function ScoreOverlay() {
   const hr = publicState.houseRules;
   const cardPts = (c: Card) => (is500 ? cardPts500(c, hr) : cardPtsBasic(c, hr));
   const gameTarget = is500 ? 500 : 100;
+  // rules.md A.4.9: a hand ended on an empty stock has no winner — say who ended it.
+  const endedBy =
+    lastAction?.kind === 'endedHand'
+      ? lastAction.playerId === myPlayerId
+        ? 'You'
+        : (publicState.players.find((p) => p.id === lastAction.playerId)?.name ?? 'A player')
+      : null;
 
   // rules.md A.2.3 stock-depletion cancel: no scoring; show simple banner + Re-deal.
   if (handCancelled) {
@@ -138,6 +146,11 @@ export default function ScoreOverlay() {
       >
         {variationLabel(publicState.variant)}
       </div>
+      {endedBy !== null && (
+        <div style={{ textAlign: 'center', fontSize: 12, color: t.text70, marginBottom: 2 }}>
+          Stock ran out — {endedBy} ended the hand.
+        </div>
+      )}
       <div
         style={{
           textAlign: 'center',

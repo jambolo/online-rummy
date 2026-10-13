@@ -5,6 +5,7 @@ import {
   applyDiscard,
   applyDraw,
   applyDrawFromPile,
+  applyEndHand,
   applyLayoff,
   applyMeld,
   createRum500Game,
@@ -1084,6 +1085,63 @@ describe('rum500 chained run layoff preflight (rules.md A.4.6)', () => {
     applyLayoff(state, 'p1', 'mExec', 'execDive9'); // then the dived card
     expect(state.variantState.mustMeldCardId).toBeNull();
     expect(state.players[0]!.melds[0]!.cardIds).toEqual(['e5', 'e6', 'e7', 'eh8', 'execDive9']);
+  });
+});
+
+// ---- Stock exhausted (rules.md A.4.9) ----
+
+describe('rum500 applyEndHand (rules.md A.4.9)', () => {
+  it('ends the hand on an empty stock with no winner, scoring melds minus hand', () => {
+    const state = twoPlayerGame();
+    state.stock = [];
+    const set = [c('7', 'C', 's1'), c('7', 'D', 's2'), c('7', 'H', 's3')];
+    set.forEach((card) => state.cardRegistry.set(card.id, card));
+    state.players[0]!.melds.push({ id: 'M1', kind: 'set', cardIds: ['s1', 's2', 's3'], ownerId: 'p1' });
+    ['s1', 's2', 's3'].forEach((id) => state.meldedBy.set(id, 'p1'));
+    state.players[0]!.hand = [c('K', 'S', 'h1')];
+    state.players[1]!.hand = [c('A', 'S', 'h2'), c('4', 'S', 'h3')];
+
+    applyEndHand(state, 'p1');
+
+    expect(state.phase).toBe('ended');
+    const scores = rum500Variant.scoreHand(state);
+    expect(scores.get('p1')).toBe(21 - 10);
+    expect(scores.get('p2')).toBe(-(15 + 4));
+    expect(rum500Variant.winnerForHand(state, scores)).toBeNull();
+  });
+
+  it('rejects while the stock still has cards', () => {
+    const state = twoPlayerGame();
+    expect(() => applyEndHand(state, 'p1')).toThrow('ERR_STOCK_NOT_EMPTY');
+    expect(state.phase).toBe('draw');
+  });
+
+  it('rejects outside the draw phase', () => {
+    const state = twoPlayerGame();
+    state.stock = [];
+    applyDraw(state, 'p1', 'discard');
+    expect(() => applyEndHand(state, 'p1')).toThrow('ERR_WRONG_PHASE');
+    expect(state.phase).toBe('meld');
+  });
+
+  it('rejects an off-turn player', () => {
+    const state = twoPlayerGame();
+    state.stock = [];
+    expect(() => applyEndHand(state, 'p2')).toThrow('ERR_NOT_YOUR_TURN');
+  });
+
+  it('play continues from the discard pile until a player ends the hand', () => {
+    const state = twoPlayerGame();
+    state.stock = [];
+    expect(() => applyDraw(state, 'p1', 'stock')).toThrow('ERR_STOCK_EMPTY');
+    applyDraw(state, 'p1', 'discard');
+    const keep = state.drewFromDiscardId;
+    const discard = state.players[0]!.hand.find((h) => h.id !== keep)!;
+    applyDiscard(state, 'p1', discard.id);
+    expect(state.turnPlayerId).toBe('p2');
+    expect(state.phase).toBe('draw');
+    applyEndHand(state, 'p2');
+    expect(state.phase).toBe('ended');
   });
 });
 
