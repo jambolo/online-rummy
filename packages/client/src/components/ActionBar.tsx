@@ -42,7 +42,9 @@ function lastActionText(a: LastAction | null, name: string, wentGin: boolean): s
           ? list === ''
             ? `${name} dived the pile`
             : `${name} dived the pile for ${list}`
-          : `${name} drew from stock`;
+          : a.restocked === true
+            ? `${name} turned over the discard pile and drew`
+            : `${name} drew from stock`;
     case 'melded':
       return `${name} melded${sfx}`;
     case 'laidOff':
@@ -145,6 +147,8 @@ export default function ActionBar() {
   const lastCardMustDiscard = is500;
   // rules.md A.4.9: once the stock is empty, the player on turn may end the hand instead of drawing.
   const canEndHand = is500 && isMyTurn && phase === 'draw' && publicState.stockSize === 0;
+  // rules.md A.1.9: Basic draws from an empty stock by turning the discard pile over first.
+  const restocks = publicState.variant === 'basic' && publicState.stockSize === 0 && publicState.discardPileSize > 0;
 
   const turnPlayerName = publicState.players.find((p) => p.id === publicState.turnPlayerId)?.name ?? '…';
 
@@ -276,8 +280,16 @@ export default function ActionBar() {
           {canEndHand ? (
             <button onClick={() => setConfirmEndHand(true)}>End hand</button>
           ) : (
-            <button className="primary" onClick={() => send({ t: 'draw', from: 'stock' })} disabled={publicState.stockSize === 0}>
-              {isMobile ? 'Draw' : 'Draw from stock'} ({publicState.stockSize})
+            <button
+              className="primary"
+              onClick={() => send({ t: 'draw', from: 'stock' })}
+              disabled={publicState.stockSize === 0 && !restocks}
+            >
+              {restocks
+                ? isMobile
+                  ? 'New stock'
+                  : 'Turn over discards & draw'
+                : `${isMobile ? 'Draw' : 'Draw from stock'} (${publicState.stockSize})`}
             </button>
           )}
           {publicState.discardTop && (

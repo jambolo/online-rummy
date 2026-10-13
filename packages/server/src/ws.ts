@@ -310,7 +310,8 @@ function resolveCards(state: GameState, ids: string[]): Card[] {
 // cards placed on the table. A stock draw and the Gin knock's face-down discard are never
 // named (rules.md A.2.4). `pileBefore` is the discard pile as it stood before the action:
 // a draw removes what it takes, so the post-action state can no longer name it.
-function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pileBefore: Card[]): S2C {
+// `stockBefore` is the pre-action stock size: a stock draw that succeeded from 0 restocked.
+function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pileBefore: Card[], stockBefore: number): S2C {
   switch (msg.t) {
     case 'draw': {
       // Inbound C2S is cast without runtime validation and the engines treat any
@@ -318,7 +319,13 @@ function actionEvent(msg: GameActionC2S, playerId: string, state: GameState, pil
       // unvalidated client input into a room-wide broadcast.
       const from = msg.from === 'discard' ? 'discard' : 'stock';
       const upcard = pileBefore[pileBefore.length - 1];
-      const data: DrewEventData = from === 'discard' && upcard !== undefined ? { from, cards: [upcard] } : { from };
+      // rules.md A.1.9: the turned-over pile is face-down, so its cards are never named.
+      const data: DrewEventData =
+        from === 'discard' && upcard !== undefined
+          ? { from, cards: [upcard] }
+          : from === 'stock' && stockBefore === 0
+            ? { from, restocked: true }
+            : { from };
       return { t: 'event', kind: 'drew', playerId, data };
     }
     case 'drawFromPile': {
@@ -671,8 +678,9 @@ function handleMessage(ws: WebSocket, ctx: SocketContext, msg: C2S): void {
         // Snapshot the pile before the action so a draw event can name the cards taken.
         const takesFromPile = msg.t === 'drawFromPile' || (msg.t === 'draw' && msg.from === 'discard');
         const pileBefore = takesFromPile ? [...p.state.discardPile] : [];
+        const stockBefore = p.state.stock.length;
         const result = applyAction(p.state, p.player.id, msg);
-        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id, p.state, pileBefore));
+        if (result.kind !== 'noop') broadcast(p.room, actionEvent(msg, p.player.id, p.state, pileBefore, stockBefore));
         switch (result.kind) {
           case 'state':
             broadcastState(p.room, p.state, p.player.id);

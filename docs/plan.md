@@ -194,7 +194,7 @@ either caller.
 
 | Game variation | rules.md sec | Key constraints |
 | --- | --- | --- |
-| Basic | A.1 | 2-7P (1 deck for 2-6P, 2 decks combined for 7P), deals {2:10,3:7,4:7,5:6,6:6,7:10}, ace low only, draw stock\|top-discard, multiple melds per turn allowed, drew-discard cannot re-discard same turn, layoff unrestricted (no prior-meld requirement), going-rummy = score×2 |
+| Basic | A.1 | 2-7P (1 deck for 2-6P, 2 decks combined for 7P), deals {2:10,3:7,4:7,5:6,6:6,7:10}, ace low only, draw stock\|top-discard, multiple melds per turn allowed, drew-discard cannot re-discard same turn, layoff unrestricted (no prior-meld requirement), going-rummy = score×2; empty stock → stock draw turns the discard pile over unshuffled as a new stock (A.1.9) |
 | Gin | A.2 | 2P, 10 cards, ace low; first-upcard offered non-dealer→dealer→stock (A.2.2); no mid-turn melding (melds revealed only at knock/gin); knock at deadwood ≤10; gin = +20 + opp deadwood (no layoff vs gin); non-gin knock = opp lays off onto knocker's melds, knocker scores `opp_dw − knocker_dw`; undercut (opp_dw ≤ knocker_dw after layoff) = opp +10 + diff; stock-depletion (stock ≤ 2 after a no-knock discard) = hand cancelled, same dealer re-deals (A.2.3); box +20 per hand won, game ≥100, shutout +100 (`[BIC-G]`); winner deals next hand (A.2.2) |
 | 500 Rummy | A.4 | 2-8P (1 deck ≤4P, else 2 decks), deal 13 (2P) else 7, ace high or low not both, A=15 (1 in A-2-3), pile dive (take all above selected, must use selected), lay off others' melds → self credit, score=melds−hand, target ≥500 |
 

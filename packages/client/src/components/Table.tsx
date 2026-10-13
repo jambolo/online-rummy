@@ -85,7 +85,9 @@ export default function Table() {
   const is500 = publicState.variant === 'rum500';
   const accent = variationAccent(publicState.variant);
   const canDraw = isMyTurn && drawPhase;
-  const canDrawStock = canDraw && publicState.stockSize > 0;
+  // rules.md A.1.9: Basic turns the discard pile over to draw from an empty stock.
+  const canDrawStock =
+    canDraw && (publicState.stockSize > 0 || (publicState.variant === 'basic' && publicState.discardPileSize > 0));
   const canDrawDiscard = isMyTurn && (drawPhase || upcardOfferPhase);
   const pileHasCards = publicState.discardPileSize > 0;
 

@@ -44,8 +44,9 @@ export type EventKind =
 
 // Data payload of the 'drew' event; 'pile' = 500 Rummy pile dive (rules.md A.4.4).
 // `cards` = the cards taken: the upcard for `discard`, the dive's take for `pile`.
-// Absent for `stock` — that card is private to the drawer.
-export type DrewEventData = { from: 'stock' | 'discard' | 'pile'; cards?: Card[] };
+// Absent for `stock` — that card is private to the drawer. `restocked` = the stock was
+// empty, so the discard pile was turned over to form a new stock first (Basic, rules.md A.1.9).
+export type DrewEventData = { from: 'stock' | 'discard' | 'pile'; cards?: Card[]; restocked?: true };
 
 // Data payload of the 'melded' event — the cards placed on the table.
 export type MeldedEventData = { cards: Card[] };

@@ -150,9 +150,24 @@ describe('applyDraw', () => {
     expect(() => applyDraw(state, 'p1', 'discard')).toThrow('ERR_CANNOT_DRAW_DISCARD');
   });
 
-  it('throws ERR_STOCK_EMPTY when stock empty', () => {
+  it('turns the discard pile over unshuffled as a new stock when the stock is empty (rules.md A.1.9)', () => {
+    const state = twoPlayerGame();
+    // Bottom → top.
+    state.discardPile = [c('2', 'C', 'd0'), c('5', 'H', 'd1'), c('9', 'S', 'd2')];
+    state.stock = [];
+    applyDraw(state, 'p1', 'stock');
+    // The pile's bottom card is the new stock's top, so it is the one drawn.
+    expect(state.players[0]!.hand.at(-1)!.id).toBe('d0');
+    expect(state.stock.map((x) => x.id)).toEqual(['d1', 'd2']);
+    expect(state.discardPile).toHaveLength(0);
+    expect(state.drewFromDiscardId).toBeNull();
+    expect(state.phase).toBe('meld');
+  });
+
+  it('throws ERR_STOCK_EMPTY when stock and discard pile are both empty', () => {
     const state = twoPlayerGame();
     state.stock = [];
+    state.discardPile = [];
     expect(() => applyDraw(state, 'p1', 'stock')).toThrow('ERR_STOCK_EMPTY');
   });
 });

@@ -109,6 +109,14 @@ Winner score = sum of opponents' unmelded card point values.
 
 **End-of-game**: first player to reach a cumulative score of **100 points** wins the game.
 
+### A.1.9 Stock exhausted `[BIC-R]`
+
+If the last card of the stock has been drawn and no player has gone out, the next player in turn may either take the top card of the discard pile, or turn the **whole** discard pile over **without shuffling** to form a new stock and draw its top card. Play then proceeds as before; that player's discard starts a new discard pile. There is no limit on how many times the stock is re-formed.
+
+`[PG-R]` gives the same main rule and lists this house rule:
+
+**Shuffled reuse** *(house rule)* `[PG-R]`: when enabled, the discard pile is shuffled before it becomes the new stock. Pagat notes most books now give this, since an unshuffled pile rewards memorizing the discards.
+
 ---
 
 ## A.2 Gin Rummy
@@ -579,6 +587,7 @@ if game == basic_rummy:
     melds: set(3-4 same rank) | run(3+ same suit sequential)
     turn: draw(stock|top_discard) -> meld(*) -> lay_off? -> discard
     constraint: if drew top_discard, cannot discard same card same turn
+    stock_empty: draw(stock) turns whole discard pile over (unshuffled) as new stock, then draws its top
     going_rummy_bonus: score *= 2  (or +10 house rule per PG-R)
     score: opp_unmelded; A=1 (15 when ace-either-end/round-the-corner enabled), 2-10=pip, JQK=10
 elif game == gin:

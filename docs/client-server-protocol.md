@@ -261,7 +261,7 @@ After a successful draw, `phase` advances to `"meld"`.
 
 **Game-variation rules:**
 
-- **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn.
+- **Basic:** if you draw from the discard pile, you cannot discard that same card on the same turn. If the stock is empty, `draw {from:"stock"}` first turns the whole discard pile over, unshuffled, to form a new stock (its bottom card becomes the top), then draws from it (rules.md A.1.9). The discard pile is empty until this turn's discard.
 - **500 Rummy:** drawing from the discard pile via `draw {from:"discard"}` takes only the top card. You cannot re-discard that same card on the same turn, but there is **no must-meld obligation** — `mustMeldCardId` is **not** set. A multi-card pile dive (which does set `mustMeldCardId`) is a separate action; see [`drawFromPile`](#drawfrompile--500-rum-pile-dive).
 
 **Response:** A [`state`](#state--game-state) message is sent. The acting player receives both `public` and `private` (their updated hand). All other players receive `public` only.
@@ -276,7 +276,7 @@ After a successful draw, `phase` advances to `"meld"`.
 | `ERR_WRONG_PHASE` | Current phase is not `"draw"` |
 | `ERR_CANNOT_DRAW_DISCARD` | Attempted to draw from an empty discard pile (basic) |
 | `ERR_DISCARD_EMPTY` | Attempted to draw from an empty discard pile (500 Rummy) |
-| `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock |
+| `ERR_STOCK_EMPTY` | Attempted to draw from an empty stock (500 Rummy, Gin; Basic only when the discard pile is empty too) |
 | `ERR_NO_LEGAL_DIVE` | 500 Rummy only, "Unified draw obligation" house rule enabled: the top discard has no legal meld or lay-off use given your hand, so the draw is refused |
 
 ---
@@ -671,7 +671,7 @@ Broadcast to all players when a notable game event occurs. `playerId` identifies
 | `playerReconnected` | A previously-disconnected player rebound their socket within the grace window | absent |
 | `forfeit` | A player's grace window expired (or they dropped non-gracefully) and they are now out of the hand | absent |
 | `gameOver` | The game-ending score threshold has been reached, or only one active player remains after a forfeit | absent |
-| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile", "cards"?: [Card, ...] }` — `pile` = 500 Rummy pile dive (`drawFromPile`); `cards` = the cards taken, present for `discard` and `pile`, **absent for `stock`** |
+| `drew` | A player completed a draw | `{ "from": "stock" \| "discard" \| "pile", "cards"?: [Card, ...], "restocked"?: true }` — `pile` = 500 Rummy pile dive (`drawFromPile`); `cards` = the cards taken, present for `discard` and `pile`, **absent for `stock`**; `restocked: true` = Basic only, the stock was empty so the discard pile was turned over to form a new stock before the draw (rules.md A.1.9) — the turned-over cards are face-down and never named |
 | `melded` | A player placed a meld from hand | `{ "cards": [Card, ...] }` — the cards placed |
 | `laidOff` | A player laid off onto an existing meld (`layoff`, or the gin defender's `ginLayoff`) | `{ "cards": [Card, ...] }` — the cards placed; for `ginLayoff` that is the defender's own declared melds **and** their layoffs |
 | `discarded` | A player discarded | `{ "card": Card }` — the card discarded |

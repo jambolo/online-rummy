@@ -72,11 +72,12 @@ interface ChatMessage {
 }
 
 // The most recent game action taken by any player this hand, shown as a status-line
-// prefix. null ⇒ no actions yet this hand ("New hand"). `from` only for kind 'drew'.
+// prefix. null ⇒ no actions yet this hand ("New hand"). `from` and `restocked` only for kind 'drew'.
 export interface LastAction {
   playerId: string;
   kind: 'drew' | 'melded' | 'laidOff' | 'discarded' | 'knocked' | 'passedUpcard' | 'endedHand';
   from?: DrewEventData['from'];
+  restocked?: true;
   // The public cards the action moved. Empty when it moved none the other players may
   // see (a stock draw, a passed upcard, the face-down knock discard) — and for any event
   // from a server that predates the card payloads, so the status line degrades to the
@@ -507,13 +508,14 @@ export const useAppStore = create<AppState>()((set, _get) => ({
           msg.kind === 'passedUpcard' ||
           msg.kind === 'endedHand'
         ) {
-          const from = msg.kind === 'drew' ? (msg.data as DrewEventData | undefined)?.from : undefined;
+          const drew = msg.kind === 'drew' ? (msg.data as DrewEventData | undefined) : undefined;
           set({
             lastAction: {
               playerId: msg.playerId,
               kind: msg.kind,
               cards: lastActionCards(msg.kind, msg.data),
-              ...(from !== undefined ? { from } : {}),
+              ...(drew?.from !== undefined ? { from: drew.from } : {}),
+              ...(drew?.restocked === true ? { restocked: true } : {}),
             },
           });
         }

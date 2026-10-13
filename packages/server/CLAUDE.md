@@ -36,6 +36,7 @@ Pre-existing tests that closed a socket mid-game and expected an immediate `forf
 **Basic** (rules.md A.1)
 
 - `GameState.drewFromDiscardId` enforces "no re-discard of the drawn discard card" (rules.md A.1.6 step 4). 500 Rummy behavior differs — see below.
+- **Empty stock** (rules.md A.1.9): `applyDraw {from:'stock'}` on an empty stock moves the whole discard pile into `stock` unchanged in order (bottom card = new top), then draws. `ERR_STOCK_EMPTY` only when the pile is empty too. `ws.ts` flags the `drew` event `restocked: true` from the pre-action stock size.
 - **Going Rummy detection** (rules.md A.1.7) uses `state.meldedBy` — if no entry maps to the winner's id, the winner placed no card all hand → score × 2. The previous `hasMeldedEver` flag was removed in the Phase 0 refactor. The bonus is a doubled per-opponent contribution; under the `goingRummyFlat10` house rule the winner instead gets `earned + 10`.
 - The layoff-requires-prior-meld house rule (rules.md A.1.6 step 3) throws `ERR_LAYOFF_REQUIRES_MELD`.
 - An unmelded ace counts 15 under either ace flag (`scoreHand` + `handDeadwood`).

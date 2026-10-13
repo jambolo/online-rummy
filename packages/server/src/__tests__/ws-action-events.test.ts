@@ -184,6 +184,26 @@ describe('action events — basic', () => {
     await g.closeAll();
   });
 
+  it('draw from an empty stock → drew {from:stock, restocked:true}, naming no turned-over card (rules.md A.1.9)', async () => {
+    const g = await startGame('basic');
+    const actorId = g.state.turnPlayerId;
+    // Copy the ids: setDiscard returns the live pile array, which becomes the new stock.
+    const pileIds = setDiscard(g.state, [
+      ['2', 'C'],
+      ['5', 'H'],
+    ]).map((c) => c.id);
+    g.state.stock = [];
+    g.clientOf(actorId).send({ t: 'draw', from: 'stock' });
+    for (const client of [g.clientOf(actorId), g.otherOf(actorId)]) {
+      await expectEventThenState(client, 'drew', actorId, { from: 'stock', restocked: true }, ['cards']);
+    }
+    // The pile's bottom card is the new stock's top, so it is the one drawn.
+    expect(g.state.players.find((p) => p.id === actorId)!.hand.at(-1)!.id).toBe(pileIds[0]);
+    expect(g.state.stock.map((c) => c.id)).toEqual([pileIds[1]]);
+    expect(g.state.discardPile).toHaveLength(0);
+    await g.closeAll();
+  });
+
   it('draw from discard → drew {from:discard} naming the face-up upcard', async () => {
     const g = await startGame('basic');
     const actorId = g.state.turnPlayerId;
